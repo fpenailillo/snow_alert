@@ -1,10 +1,16 @@
 """
-Extractor de Datos Climáticos - Google Weather API
+Snow Alert - Extractor de Condiciones de Nieve y Clima de Montaña
 
 Cloud Function HTTP que extrae datos climáticos de la Google Weather API
-para ubicaciones configuradas en Chile y publica los datos a Pub/Sub.
+para centros de esquí, pueblos de montaña y destinos de montañismo a nivel mundial.
+Publica los datos a Pub/Sub para su procesamiento.
 
 Arquitectura: Cloud Scheduler → Cloud Function (Extractor) → Pub/Sub Topic
+
+Cobertura:
+- Centros de Esquí (Chile, Argentina, Europa, Norteamérica, Oceanía)
+- Pueblos de Montaña
+- Bases de Montañas Populares para Montañismo
 """
 
 import json
@@ -34,139 +40,293 @@ NOMBRE_TOPIC = 'clima-datos-crudos'
 URL_BASE_API = 'https://weather.googleapis.com/v1/currentConditions:lookup'
 NOMBRE_SECRET_API_KEY = 'weather-api-key'
 
-# Ubicaciones a monitorear en Chile
-# Cobertura de norte a sur del país, incluyendo principales ciudades y destinos turísticos
+# Ubicaciones a monitorear: Centros de Esquí, Pueblos de Montaña y Destinos de Montañismo
+# Cobertura mundial de destinos con nieve y alta montaña
 UBICACIONES_MONITOREO = [
-    # ZONA NORTE GRANDE
+    # ========================================================================
+    # CENTROS DE ESQUÍ - CHILE
+    # ========================================================================
     {
-        'nombre': 'Arica',
-        'latitud': -18.4746,
-        'longitud': -70.2979,
-        'descripcion': 'Arica, Chile - Ciudad de la Eterna Primavera'
+        'nombre': 'Portillo',
+        'latitud': -32.8375,
+        'longitud': -70.1267,
+        'descripcion': 'Portillo, Chile - Centro de Esquí Legendario, Cordillera de Los Andes (2880m)'
     },
     {
-        'nombre': 'Iquique',
-        'latitud': -20.2307,
-        'longitud': -70.1355,
-        'descripcion': 'Iquique, Chile - Playas y Zona Franca'
-    },
-    {
-        'nombre': 'San Pedro de Atacama',
-        'latitud': -22.9098,
-        'longitud': -68.1995,
-        'descripcion': 'San Pedro de Atacama, Chile - Desierto y Turismo Astronómico'
-    },
-
-    # ZONA NORTE CHICO
-    {
-        'nombre': 'La Serena',
-        'latitud': -29.9027,
-        'longitud': -71.2519,
-        'descripcion': 'La Serena, Chile - Playas y Valle del Elqui'
-    },
-
-    # ZONA CENTRAL
-    {
-        'nombre': 'Viña del Mar',
-        'latitud': -33.0246,
-        'longitud': -71.5516,
-        'descripcion': 'Viña del Mar, Chile - Ciudad Jardín'
-    },
-    {
-        'nombre': 'Valparaíso',
-        'latitud': -33.0472,
-        'longitud': -71.6127,
-        'descripcion': 'Valparaíso, Chile - Puerto Principal y Patrimonio UNESCO'
-    },
-    {
-        'nombre': 'Santiago',
-        'latitud': -33.4489,
-        'longitud': -70.6693,
-        'descripcion': 'Santiago, Chile - Capital y Región Metropolitana'
-    },
-    {
-        'nombre': 'Farellones',
+        'nombre': 'Valle Nevado',
         'latitud': -33.3558,
-        'longitud': -70.2989,
-        'descripcion': 'Farellones, Chile - Centro de Esquí Cordillera de Los Andes'
+        'longitud': -70.2514,
+        'descripcion': 'Valle Nevado, Chile - Centro de Esquí más Grande de Sudamérica (3025m)'
     },
     {
-        'nombre': 'Pichilemu',
-        'latitud': -34.3870,
-        'longitud': -72.0033,
-        'descripcion': 'Pichilemu, Chile - Capital del Surf'
+        'nombre': 'La Parva',
+        'latitud': -33.3319,
+        'longitud': -70.2856,
+        'descripcion': 'La Parva, Chile - Centro de Esquí Familiar Cordillera Central (2750m)'
+    },
+    {
+        'nombre': 'El Colorado',
+        'latitud': -33.3500,
+        'longitud': -70.2833,
+        'descripcion': 'El Colorado-Farellones, Chile - Centro de Esquí Cercano a Santiago (2430m)'
+    },
+    {
+        'nombre': 'Nevados de Chillán',
+        'latitud': -36.9063,
+        'longitud': -71.4160,
+        'descripcion': 'Nevados de Chillán, Chile - Esquí y Termas en el Sur (1650m)'
+    },
+    {
+        'nombre': 'Corralco',
+        'latitud': -38.4833,
+        'longitud': -71.5667,
+        'descripcion': 'Corralco, Chile - Esquí en el Volcán Lonquimay, La Araucanía (1500m)'
+    },
+    {
+        'nombre': 'Antillanca',
+        'latitud': -40.7667,
+        'longitud': -72.2000,
+        'descripcion': 'Antillanca, Chile - Centro de Esquí Volcán Casablanca, Los Lagos (1350m)'
     },
 
-    # ZONA SUR
+    # ========================================================================
+    # CENTROS DE ESQUÍ - ARGENTINA
+    # ========================================================================
     {
-        'nombre': 'Concepción',
-        'latitud': -36.8270,
-        'longitud': -73.0498,
-        'descripcion': 'Concepción, Chile - Capital del Biobío'
+        'nombre': 'Cerro Catedral',
+        'latitud': -41.1667,
+        'longitud': -71.4500,
+        'descripcion': 'Cerro Catedral, Bariloche, Argentina - Mayor Centro de Esquí de Sudamérica (2100m)'
     },
     {
-        'nombre': 'Temuco',
-        'latitud': -38.7359,
-        'longitud': -72.5904,
-        'descripcion': 'Temuco, Chile - Puerta de La Araucanía'
+        'nombre': 'Las Leñas',
+        'latitud': -35.1500,
+        'longitud': -70.0833,
+        'descripcion': 'Las Leñas, Mendoza, Argentina - Esquí de Alta Montaña y Freeride (3430m)'
     },
     {
-        'nombre': 'Pucón',
+        'nombre': 'Chapelco',
+        'latitud': -40.1500,
+        'longitud': -71.2500,
+        'descripcion': 'Chapelco, San Martín de los Andes, Argentina - Esquí Patagónico (1980m)'
+    },
+    {
+        'nombre': 'Cerro Castor',
+        'latitud': -54.7500,
+        'longitud': -68.3333,
+        'descripcion': 'Cerro Castor, Ushuaia, Argentina - Centro de Esquí más Austral del Mundo (1057m)'
+    },
+    {
+        'nombre': 'Cerro Bayo',
+        'latitud': -40.7167,
+        'longitud': -71.5167,
+        'descripcion': 'Cerro Bayo, Villa La Angostura, Argentina - Esquí Boutique Patagonia (1780m)'
+    },
+
+    # ========================================================================
+    # CENTROS DE ESQUÍ - EUROPA (ALPES)
+    # ========================================================================
+    {
+        'nombre': 'Chamonix',
+        'latitud': 45.9237,
+        'longitud': 6.8694,
+        'descripcion': 'Chamonix-Mont-Blanc, Francia - Capital Mundial del Alpinismo (1035m)'
+    },
+    {
+        'nombre': 'Zermatt',
+        'latitud': 46.0207,
+        'longitud': 7.7491,
+        'descripcion': 'Zermatt, Suiza - Esquí con Vista al Matterhorn (1608m)'
+    },
+    {
+        'nombre': 'St Moritz',
+        'latitud': 46.4908,
+        'longitud': 9.8355,
+        'descripcion': 'St. Moritz, Suiza - Cuna del Turismo de Invierno de Lujo (1822m)'
+    },
+    {
+        'nombre': 'Verbier',
+        'latitud': 46.0964,
+        'longitud': 7.2286,
+        'descripcion': 'Verbier, Suiza - Freeride y Esquí de Alta Montaña (1500m)'
+    },
+    {
+        'nombre': 'Courchevel',
+        'latitud': 45.4154,
+        'longitud': 6.6347,
+        'descripcion': 'Courchevel, Francia - Parte de Les 3 Vallées, Mayor Dominio Esquiable (1850m)'
+    },
+    {
+        'nombre': 'Val Thorens',
+        'latitud': 45.2981,
+        'longitud': 6.5797,
+        'descripcion': 'Val Thorens, Francia - Estación de Esquí más Alta de Europa (2300m)'
+    },
+    {
+        'nombre': 'Cortina dAmpezzo',
+        'latitud': 46.5369,
+        'longitud': 12.1356,
+        'descripcion': 'Cortina d\'Ampezzo, Italia - Reina de las Dolomitas (1224m)'
+    },
+
+    # ========================================================================
+    # CENTROS DE ESQUÍ - NORTEAMÉRICA
+    # ========================================================================
+    {
+        'nombre': 'Vail',
+        'latitud': 39.6403,
+        'longitud': -106.3742,
+        'descripcion': 'Vail, Colorado, USA - Legendario Resort de Esquí Rockies (2476m)'
+    },
+    {
+        'nombre': 'Aspen',
+        'latitud': 39.1911,
+        'longitud': -106.8175,
+        'descripcion': 'Aspen, Colorado, USA - Icono del Esquí de Lujo (2438m)'
+    },
+    {
+        'nombre': 'Jackson Hole',
+        'latitud': 43.5875,
+        'longitud': -110.8278,
+        'descripcion': 'Jackson Hole, Wyoming, USA - Esquí Extremo y Vida Salvaje (1924m)'
+    },
+    {
+        'nombre': 'Whistler',
+        'latitud': 50.1163,
+        'longitud': -122.9574,
+        'descripcion': 'Whistler Blackcomb, BC, Canadá - Mayor Resort de Esquí de Norteamérica (675m)'
+    },
+    {
+        'nombre': 'Park City',
+        'latitud': 40.6461,
+        'longitud': -111.4980,
+        'descripcion': 'Park City, Utah, USA - Mayor Resort de Esquí de USA (2103m)'
+    },
+    {
+        'nombre': 'Mammoth Mountain',
+        'latitud': 37.6308,
+        'longitud': -119.0326,
+        'descripcion': 'Mammoth Mountain, California, USA - Esquí en Sierra Nevada (2424m)'
+    },
+
+    # ========================================================================
+    # CENTROS DE ESQUÍ - OCEANÍA Y ASIA
+    # ========================================================================
+    {
+        'nombre': 'Queenstown',
+        'latitud': -45.0312,
+        'longitud': 168.6626,
+        'descripcion': 'Queenstown, Nueva Zelanda - Capital de la Aventura, Remarkables y Coronet Peak'
+    },
+    {
+        'nombre': 'Niseko',
+        'latitud': 42.8048,
+        'longitud': 140.6874,
+        'descripcion': 'Niseko, Hokkaido, Japón - Mejor Nieve Polvo del Mundo (400m)'
+    },
+    {
+        'nombre': 'Hakuba',
+        'latitud': 36.6983,
+        'longitud': 137.8619,
+        'descripcion': 'Hakuba Valley, Japón - Sede Olímpica Nagano 1998, Alpes Japoneses (760m)'
+    },
+
+    # ========================================================================
+    # PUEBLOS DE MONTAÑA
+    # ========================================================================
+    {
+        'nombre': 'Bariloche',
+        'latitud': -41.1335,
+        'longitud': -71.3103,
+        'descripcion': 'San Carlos de Bariloche, Argentina - Suiza de Sudamérica, Patagonia'
+    },
+    {
+        'nombre': 'Ushuaia',
+        'latitud': -54.8019,
+        'longitud': -68.3030,
+        'descripcion': 'Ushuaia, Argentina - Fin del Mundo, Base para Antártida'
+    },
+    {
+        'nombre': 'Pucon',
         'latitud': -39.2819,
         'longitud': -71.9755,
         'descripcion': 'Pucón, Chile - Turismo Aventura y Volcán Villarrica'
     },
     {
-        'nombre': 'Valdivia',
-        'latitud': -39.8142,
-        'longitud': -73.2459,
-        'descripcion': 'Valdivia, Chile - Ciudad de los Ríos'
+        'nombre': 'San Martin de los Andes',
+        'latitud': -40.1575,
+        'longitud': -71.3522,
+        'descripcion': 'San Martín de los Andes, Argentina - Pueblo Patagónico de Montaña'
     },
     {
-        'nombre': 'Puerto Varas',
-        'latitud': -41.3194,
-        'longitud': -72.9833,
-        'descripcion': 'Puerto Varas, Chile - Región de los Lagos'
+        'nombre': 'Innsbruck',
+        'latitud': 47.2692,
+        'longitud': 11.4041,
+        'descripcion': 'Innsbruck, Austria - Capital del Tirol, Doble Sede Olímpica de Invierno'
     },
     {
-        'nombre': 'Puerto Montt',
-        'latitud': -41.4693,
-        'longitud': -72.9424,
-        'descripcion': 'Puerto Montt, Chile - Puerta de la Patagonia'
+        'nombre': 'Interlaken',
+        'latitud': 46.6863,
+        'longitud': 7.8632,
+        'descripcion': 'Interlaken, Suiza - Portal a Jungfrau y Alpes Berneses'
     },
     {
-        'nombre': 'Castro',
-        'latitud': -42.4827,
-        'longitud': -73.7622,
-        'descripcion': 'Castro, Chiloé - Palafitos y Cultura Chilota'
-    },
-
-    # ZONA AUSTRAL
-    {
-        'nombre': 'Coyhaique',
-        'latitud': -45.5752,
-        'longitud': -72.0662,
-        'descripcion': 'Coyhaique, Chile - Capital de Aysén'
-    },
-    {
-        'nombre': 'Puerto Natales',
-        'latitud': -51.7283,
-        'longitud': -72.5085,
-        'descripcion': 'Puerto Natales, Chile - Acceso Torres del Paine'
-    },
-    {
-        'nombre': 'Punta Arenas',
-        'latitud': -53.1638,
-        'longitud': -70.9171,
-        'descripcion': 'Punta Arenas, Chile - Ciudad Austral del Estrecho'
+        'nombre': 'Banff',
+        'latitud': 51.1784,
+        'longitud': -115.5708,
+        'descripcion': 'Banff, Alberta, Canadá - Pueblo de Montaña en Parque Nacional Rockies'
     },
 
-    # TERRITORIO INSULAR
+    # ========================================================================
+    # BASES DE MONTAÑISMO - ALTA MONTAÑA
+    # ========================================================================
     {
-        'nombre': 'Isla de Pascua',
-        'latitud': -27.1127,
-        'longitud': -109.3497,
-        'descripcion': 'Isla de Pascua (Rapa Nui), Chile - Patrimonio UNESCO'
+        'nombre': 'Plaza de Mulas - Aconcagua',
+        'latitud': -32.6500,
+        'longitud': -70.0167,
+        'descripcion': 'Plaza de Mulas, Argentina - Campo Base Aconcagua, Techo de América (4370m)'
+    },
+    {
+        'nombre': 'Everest Base Camp Nepal',
+        'latitud': 28.0025,
+        'longitud': 86.8528,
+        'descripcion': 'Campo Base Everest Sur, Nepal - Base para Techo del Mundo (5364m)'
+    },
+    {
+        'nombre': 'Chamonix Mont Blanc',
+        'latitud': 45.8326,
+        'longitud': 6.8652,
+        'descripcion': 'Refuge du Goûter Area, Francia - Ruta al Mont Blanc (3817m)'
+    },
+    {
+        'nombre': 'Denali Base',
+        'latitud': 63.0692,
+        'longitud': -151.0070,
+        'descripcion': 'Denali Base Camp, Alaska, USA - Campo Base McKinley, Montaña más Alta de Norteamérica'
+    },
+    {
+        'nombre': 'Torres del Paine Base',
+        'latitud': -50.9423,
+        'longitud': -72.9682,
+        'descripcion': 'Torres del Paine, Chile - Base W Trek y Circuito, Patagonia'
+    },
+    {
+        'nombre': 'Kilimanjaro Gate',
+        'latitud': -3.0674,
+        'longitud': 37.3556,
+        'descripcion': 'Machame Gate, Tanzania - Acceso al Kilimanjaro, Techo de África (1800m)'
+    },
+    {
+        'nombre': 'Monte Fitz Roy',
+        'latitud': -49.2714,
+        'longitud': -72.9411,
+        'descripcion': 'El Chaltén, Argentina - Base para Monte Fitz Roy, Patagonia'
+    },
+    {
+        'nombre': 'Matterhorn Zermatt',
+        'latitud': 45.9766,
+        'longitud': 7.6586,
+        'descripcion': 'Hörnli Hut Area, Suiza - Base para Ascenso al Matterhorn (3260m)'
     }
 ]
 

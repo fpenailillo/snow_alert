@@ -1,9 +1,12 @@
 """
-Procesador de Datos Climáticos - Cloud Function Pub/Sub
+Snow Alert - Procesador de Datos Climáticos de Nieve y Montaña
 
-Cloud Function que procesa datos climáticos desde Pub/Sub, los almacena
-en Cloud Storage (capa bronce) y BigQuery (capa plata) siguiendo
-arquitectura medallion.
+Cloud Function que procesa datos climáticos de centros de esquí, pueblos de montaña
+y destinos de montañismo desde Pub/Sub, los almacena en Cloud Storage (capa bronce)
+y BigQuery (capa plata) siguiendo arquitectura medallion.
+
+Datos procesados incluyen: temperatura, sensación térmica, wind chill, viento,
+precipitación, visibilidad y otras métricas críticas para deportes de nieve.
 
 Arquitectura: Pub/Sub Topic → Cloud Function (Procesador) → BigQuery + Cloud Storage
 """
