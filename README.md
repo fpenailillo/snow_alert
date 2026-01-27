@@ -1,17 +1,23 @@
-# Sistema de Integración con Google Weather API en GCP
+# Snow Alert - Sistema de Monitoreo de Condiciones de Nieve
 
-Sistema serverless event-driven para la extracción, procesamiento y almacenamiento de datos climáticos de ubicaciones en Chile utilizando la Google Weather API y servicios de Google Cloud Platform.
+Sistema serverless event-driven para el monitoreo de condiciones climáticas y de nieve en centros de esquí, pueblos de montaña y destinos de montañismo a nivel mundial, utilizando la Google Weather API y servicios de Google Cloud Platform.
 
 ## Descripción
 
-Este proyecto implementa una arquitectura moderna de datos meteorológicos basada en eventos que:
+**Snow Alert** es un proyecto que implementa una arquitectura moderna de datos meteorológicos basada en eventos, especializado en destinos de nieve y alta montaña:
 
-- **Extrae** datos climáticos de la Google Weather API para ubicaciones configuradas en Chile
+- **Extrae** datos climáticos de la Google Weather API para centros de esquí, pueblos de montaña y bases de montañismo
 - **Procesa** los datos de forma asíncrona usando Pub/Sub como bus de mensajes
 - **Almacena** los datos en una arquitectura medallion:
   - **Capa Bronce** (Cloud Storage): Datos crudos sin transformar
   - **Capa Plata** (BigQuery): Datos limpios y estructurados para análisis
 - **Orquesta** la extracción periódica mediante Cloud Scheduler
+
+### Casos de Uso
+- Monitoreo de condiciones para esquí y snowboard
+- Alertas de clima para expediciones de montañismo
+- Seguimiento de temperaturas y viento para deportes de invierno
+- Análisis histórico de condiciones climáticas en alta montaña
 
 ## Arquitectura
 
@@ -58,51 +64,78 @@ Este proyecto implementa una arquitectura moderna de datos meteorológicos basad
 
 ## Ubicaciones Monitoreadas
 
-El sistema monitorea **20 ubicaciones** distribuidas de norte a sur de Chile, incluyendo principales ciudades y destinos turísticos:
+El sistema monitorea **45 ubicaciones** de destinos de nieve y montaña a nivel mundial, organizadas en las siguientes categorías:
 
-### Zona Norte Grande
+### Centros de Esquí - Chile (7)
+| Ubicación | Latitud | Longitud | Elevación | Descripción |
+|-----------|---------|----------|-----------|-------------|
+| **Portillo** | -32.8375 | -70.1267 | 2880m | Centro de Esquí Legendario |
+| **Valle Nevado** | -33.3558 | -70.2514 | 3025m | Mayor Centro de Esquí de Sudamérica |
+| **La Parva** | -33.3319 | -70.2856 | 2750m | Centro de Esquí Familiar |
+| **El Colorado** | -33.3500 | -70.2833 | 2430m | Cercano a Santiago |
+| **Nevados de Chillán** | -36.9063 | -71.4160 | 1650m | Esquí y Termas |
+| **Corralco** | -38.4833 | -71.5667 | 1500m | Volcán Lonquimay |
+| **Antillanca** | -40.7667 | -72.2000 | 1350m | Volcán Casablanca |
+
+### Centros de Esquí - Argentina (5)
+| Ubicación | Latitud | Longitud | Elevación | Descripción |
+|-----------|---------|----------|-----------|-------------|
+| **Cerro Catedral** | -41.1667 | -71.4500 | 2100m | Mayor Centro de Esquí de Sudamérica |
+| **Las Leñas** | -35.1500 | -70.0833 | 3430m | Esquí de Alta Montaña y Freeride |
+| **Chapelco** | -40.1500 | -71.2500 | 1980m | Esquí Patagónico |
+| **Cerro Castor** | -54.7500 | -68.3333 | 1057m | Centro más Austral del Mundo |
+| **Cerro Bayo** | -40.7167 | -71.5167 | 1780m | Esquí Boutique Patagonia |
+
+### Centros de Esquí - Europa/Alpes (7)
+| Ubicación | Latitud | Longitud | Elevación | Descripción |
+|-----------|---------|----------|-----------|-------------|
+| **Chamonix** | 45.9237 | 6.8694 | 1035m | Capital Mundial del Alpinismo |
+| **Zermatt** | 46.0207 | 7.7491 | 1608m | Vista al Matterhorn |
+| **St. Moritz** | 46.4908 | 9.8355 | 1822m | Turismo de Invierno de Lujo |
+| **Verbier** | 46.0964 | 7.2286 | 1500m | Freeride y Alta Montaña |
+| **Courchevel** | 45.4154 | 6.6347 | 1850m | Les 3 Vallées |
+| **Val Thorens** | 45.2981 | 6.5797 | 2300m | Estación más Alta de Europa |
+| **Cortina d'Ampezzo** | 46.5369 | 12.1356 | 1224m | Reina de las Dolomitas |
+
+### Centros de Esquí - Norteamérica (6)
+| Ubicación | Latitud | Longitud | Elevación | Descripción |
+|-----------|---------|----------|-----------|-------------|
+| **Vail** | 39.6403 | -106.3742 | 2476m | Legendario Resort de Colorado |
+| **Aspen** | 39.1911 | -106.8175 | 2438m | Icono del Esquí de Lujo |
+| **Jackson Hole** | 43.5875 | -110.8278 | 1924m | Esquí Extremo, Wyoming |
+| **Whistler** | 50.1163 | -122.9574 | 675m | Mayor Resort de Norteamérica |
+| **Park City** | 40.6461 | -111.4980 | 2103m | Mayor Resort de USA |
+| **Mammoth Mountain** | 37.6308 | -119.0326 | 2424m | Sierra Nevada, California |
+
+### Centros de Esquí - Oceanía y Asia (3)
 | Ubicación | Latitud | Longitud | Descripción |
 |-----------|---------|----------|-------------|
-| **Arica** | -18.4746 | -70.2979 | Ciudad de la Eterna Primavera |
-| **Iquique** | -20.2307 | -70.1355 | Playas y Zona Franca |
-| **San Pedro de Atacama** | -22.9098 | -68.1995 | Desierto y Turismo Astronómico |
+| **Queenstown** | -45.0312 | 168.6626 | Capital de la Aventura, Nueva Zelanda |
+| **Niseko** | 42.8048 | 140.6874 | Mejor Nieve Polvo del Mundo, Japón |
+| **Hakuba** | 36.6983 | 137.8619 | Alpes Japoneses, Sede Nagano 1998 |
 
-### Zona Norte Chico
+### Pueblos de Montaña (7)
 | Ubicación | Latitud | Longitud | Descripción |
 |-----------|---------|----------|-------------|
-| **La Serena** | -29.9027 | -71.2519 | Playas y Valle del Elqui |
+| **Bariloche** | -41.1335 | -71.3103 | Suiza de Sudamérica, Argentina |
+| **Ushuaia** | -54.8019 | -68.3030 | Fin del Mundo, Argentina |
+| **Pucón** | -39.2819 | -71.9755 | Volcán Villarrica, Chile |
+| **San Martín de los Andes** | -40.1575 | -71.3522 | Patagonia Argentina |
+| **Innsbruck** | 47.2692 | 11.4041 | Capital del Tirol, Austria |
+| **Interlaken** | 46.6863 | 7.8632 | Portal a Jungfrau, Suiza |
+| **Banff** | 51.1784 | -115.5708 | Rockies Canadienses |
 
-### Zona Central
-| Ubicación | Latitud | Longitud | Descripción |
-|-----------|---------|----------|-------------|
-| **Viña del Mar** | -33.0246 | -71.5516 | Ciudad Jardín |
-| **Valparaíso** | -33.0472 | -71.6127 | Puerto Principal y Patrimonio UNESCO |
-| **Santiago** | -33.4489 | -70.6693 | Capital y Región Metropolitana |
-| **Farellones** | -33.3558 | -70.2989 | Centro de Esquí Cordillera |
-| **Pichilemu** | -34.3870 | -72.0033 | Capital del Surf |
-
-### Zona Sur
-| Ubicación | Latitud | Longitud | Descripción |
-|-----------|---------|----------|-------------|
-| **Concepción** | -36.8270 | -73.0498 | Capital del Biobío |
-| **Temuco** | -38.7359 | -72.5904 | Puerta de La Araucanía |
-| **Pucón** | -39.2819 | -71.9755 | Turismo Aventura y Volcán Villarrica |
-| **Valdivia** | -39.8142 | -73.2459 | Ciudad de los Ríos |
-| **Puerto Varas** | -41.3194 | -72.9833 | Región de los Lagos |
-| **Puerto Montt** | -41.4693 | -72.9424 | Puerta de la Patagonia |
-| **Castro** | -42.4827 | -73.7622 | Palafitos y Cultura Chilota |
-
-### Zona Austral
-| Ubicación | Latitud | Longitud | Descripción |
-|-----------|---------|----------|-------------|
-| **Coyhaique** | -45.5752 | -72.0662 | Capital de Aysén |
-| **Puerto Natales** | -51.7283 | -72.5085 | Acceso Torres del Paine |
-| **Punta Arenas** | -53.1638 | -70.9171 | Ciudad Austral del Estrecho |
-
-### Territorio Insular
-| Ubicación | Latitud | Longitud | Descripción |
-|-----------|---------|----------|-------------|
-| **Isla de Pascua** | -27.1127 | -109.3497 | Rapa Nui - Patrimonio UNESCO |
+### Bases de Montañismo - Alta Montaña (8)
+| Ubicación | Latitud | Longitud | Elevación | Montaña |
+|-----------|---------|----------|-----------|---------|
+| **Plaza de Mulas** | -32.6500 | -70.0167 | 4370m | Aconcagua (Techo de América) |
+| **Everest Base Camp** | 28.0025 | 86.8528 | 5364m | Monte Everest |
+| **Chamonix Mont Blanc** | 45.8326 | 6.8652 | 3817m | Mont Blanc |
+| **Denali Base** | 63.0692 | -151.0070 | - | Denali/McKinley |
+| **Torres del Paine** | -50.9423 | -72.9682 | - | Patagonia Chilena |
+| **Kilimanjaro Gate** | -3.0674 | 37.3556 | 1800m | Kilimanjaro |
+| **Monte Fitz Roy** | -49.2714 | -72.9411 | - | Fitz Roy, El Chaltén |
+| **Matterhorn Zermatt** | 45.9766 | 7.6586 | 3260m | Matterhorn/Cervino |
 
 ## Características Técnicas
 
@@ -210,8 +243,8 @@ Las siguientes APIs deben estar habilitadas (el script de despliegue las habilit
 ### 1. Clonar el Repositorio
 
 ```bash
-git clone https://github.com/fpenailillo/clima_chileno_gcp
-cd clima_chileno_gcp
+git clone https://github.com/fpenailillo/snow_alert
+cd snow_alert
 ```
 
 ### 2. Configurar Variables de Entorno
@@ -459,26 +492,27 @@ ORDER BY
   frecuencia DESC;
 ```
 
-#### Gradiente climático de Norte a Sur (última medición)
+#### Condiciones actuales para esquí (sensación de viento y temperatura)
 
 ```sql
 SELECT
   nombre_ubicacion,
-  latitud,
   temperatura,
-  humedad_relativa,
+  sensacion_viento AS wind_chill,
   velocidad_viento,
+  humedad_relativa,
   descripcion_clima,
   hora_actual
 FROM
   `clima.condiciones_actuales`
 WHERE
   hora_actual = (SELECT MAX(hora_actual) FROM `clima.condiciones_actuales`)
+  AND nombre_ubicacion IN ('Valle Nevado', 'Portillo', 'Cerro Catedral', 'Vail', 'Chamonix')
 ORDER BY
-  latitud DESC  -- De norte (latitud menos negativa) a sur (más negativa)
+  temperatura ASC;
 ```
 
-#### Comparación de temperaturas extremas por región
+#### Comparación de temperaturas por región de esquí
 
 ```sql
 WITH ultima_hora AS (
@@ -487,16 +521,17 @@ WITH ultima_hora AS (
 )
 SELECT
   CASE
-    WHEN latitud > -23 THEN 'Norte Grande'
-    WHEN latitud > -32 THEN 'Norte Chico'
-    WHEN latitud > -38 THEN 'Zona Central'
-    WHEN latitud > -44 THEN 'Zona Sur'
-    ELSE 'Zona Austral'
-  END AS region,
-  COUNT(DISTINCT nombre_ubicacion) AS ciudades,
+    WHEN longitud BETWEEN -75 AND -65 THEN 'Sudamérica (Chile/Argentina)'
+    WHEN longitud BETWEEN -130 AND -100 THEN 'Norteamérica'
+    WHEN longitud BETWEEN 0 AND 20 THEN 'Alpes Europeos'
+    WHEN longitud > 100 THEN 'Asia/Oceanía'
+    ELSE 'Otras Regiones'
+  END AS region_esqui,
+  COUNT(DISTINCT nombre_ubicacion) AS centros,
   ROUND(AVG(temperatura), 1) AS temp_promedio,
   ROUND(MIN(temperatura), 1) AS temp_minima,
-  ROUND(MAX(temperatura), 1) AS temp_maxima
+  ROUND(MAX(temperatura), 1) AS temp_maxima,
+  ROUND(AVG(velocidad_viento), 1) AS viento_promedio
 FROM
   `clima.condiciones_actuales`
 CROSS JOIN
@@ -504,9 +539,29 @@ CROSS JOIN
 WHERE
   hora_actual = ultima_hora.max_hora
 GROUP BY
-  region
+  region_esqui
 ORDER BY
-  temp_promedio DESC
+  temp_promedio ASC;
+```
+
+#### Alertas de viento fuerte para montañismo
+
+```sql
+SELECT
+  nombre_ubicacion,
+  temperatura,
+  sensacion_viento,
+  velocidad_viento,
+  direccion_viento,
+  descripcion_clima,
+  hora_actual
+FROM
+  `clima.condiciones_actuales`
+WHERE
+  hora_actual >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 1 HOUR)
+  AND velocidad_viento > 50  -- km/h
+ORDER BY
+  velocidad_viento DESC;
 ```
 
 ### Explorar Datos Crudos en Cloud Storage
@@ -556,31 +611,31 @@ Ver [documentación de Cloud Monitoring](https://cloud.google.com/monitoring/doc
 
 ## Costos Estimados
 
-Estimación mensual para **20 ubicaciones** con ejecución **cada minuto** (43,200 invocaciones/mes):
+Estimación mensual para **45 ubicaciones** con ejecución **cada minuto** (43,200 invocaciones/mes):
 
 | Servicio | Uso | Costo Estimado (USD) |
 |----------|-----|----------------------|
 | Cloud Functions | 86,400 invocaciones (2 funciones × 43,200) | Gratis (tier: 2M/mes) |
-| Pub/Sub | ~864,000 mensajes (20 ubicaciones × 43,200) | Gratis (tier: 10 GB/mes) |
-| Cloud Storage | ~1.7 GB/mes (864,000 archivos JSON × 2 KB) | $0.03 |
-| BigQuery | ~5 GB almacenado/mes | $0.10 |
-| BigQuery | ~10 GB queries/mes | Gratis (tier: 1 TB/mes) |
+| Pub/Sub | ~1,944,000 mensajes (45 ubicaciones × 43,200) | Gratis (tier: 10 GB/mes) |
+| Cloud Storage | ~3.9 GB/mes (1,944,000 archivos JSON × 2 KB) | $0.08 |
+| BigQuery | ~12 GB almacenado/mes | $0.24 |
+| BigQuery | ~20 GB queries/mes | Gratis (tier: 1 TB/mes) |
 | Cloud Scheduler | 1 job | $0.10 |
 | Secret Manager | 1 secret, ~43,200 accesos/mes | $0.13 |
-| **TOTAL** | | **~$0.36/mes** |
+| **TOTAL** | | **~$0.55/mes** |
 
 **Nota**:
 - Los costos son aproximados y pueden variar según el uso real y la región
 - Primer año incluye $300 de créditos gratuitos de GCP
-- Con ejecución cada minuto: **1,440 mediciones/día** por ubicación (28,800 total)
-- Volumen mensual: ~864,000 registros (vs ~86,400 con ejecución cada 10 minutos)
+- Con ejecución cada minuto: **1,440 mediciones/día** por ubicación (64,800 total para 45 ubicaciones)
+- Volumen mensual: ~1,944,000 registros
 - La mayoría de servicios siguen en tier gratuito con este volumen
 - Estimación basada en precios de us-central1 (Enero 2026)
 
 ## Estructura del Proyecto
 
 ```
-clima_chileno_gcp/
+snow_alert/
 ├── extractor/
 │   ├── main.py                 # Cloud Function de extracción
 │   ├── requirements.txt        # Dependencias del extractor
@@ -593,6 +648,7 @@ clima_chileno_gcp/
 ├── .gcloudignore              # Archivos a ignorar en deploy general
 ├── .gitignore                  # Archivos a ignorar en git
 ├── requerimientos.md           # Requerimientos técnicos del proyecto
+├── CLAUDE.md                   # Guía para asistentes de IA
 └── README.md                   # Este archivo (documentación completa)
 ```
 
@@ -696,4 +752,4 @@ gcloud functions logs read procesador-clima --gen2 --region=$REGION --limit=100
 
 ---
 
-**Nota**: Este sistema está diseñado para propósitos educativos y de demostración.
+**Nota**: Snow Alert está diseñado para monitoreo de condiciones climáticas en destinos de nieve y montaña. Úselo para planificar sus aventuras de esquí, snowboard y montañismo de forma segura.
