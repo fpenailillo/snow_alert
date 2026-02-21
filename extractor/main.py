@@ -44,49 +44,137 @@ NOMBRE_SECRET_API_KEY = 'weather-api-key'
 # Cobertura mundial de destinos con nieve y alta montaña
 UBICACIONES_MONITOREO = [
     # ========================================================================
-    # CENTROS DE ESQUÍ - CHILE
+    # CENTROS DE ESQUÍ - CHILE (cobertura completa, de norte a sur)
     # ========================================================================
+
+    # --- Región de Valparaíso ---
     {
         'nombre': 'Portillo',
-        'latitud': -32.8375,
-        'longitud': -70.1267,
-        'descripcion': 'Portillo, Chile - Centro de Esquí Legendario, Cordillera de Los Andes (2880m)'
+        'latitud': -32.8369,
+        'longitud': -70.1287,
+        'descripcion': 'Portillo, Los Andes, Chile - Centro de Esquí Legendario (base 2580m / cima 3310m)'
     },
     {
-        'nombre': 'Valle Nevado',
-        'latitud': -33.3558,
-        'longitud': -70.2514,
-        'descripcion': 'Valle Nevado, Chile - Centro de Esquí más Grande de Sudamérica (3025m)'
+        'nombre': 'Ski Arpa',
+        'latitud': -32.6000,
+        'longitud': -70.3900,
+        'descripcion': 'Ski Arpa, Los Andes, Chile - Único Centro de Cat-Ski de Chile, 4000 acres (base 2690m / cima 3740m)'
+    },
+
+    # --- Región Metropolitana ---
+    {
+        'nombre': 'La Parva Sector Bajo',
+        'latitud': -33.3630,
+        'longitud': -70.3010,
+        'descripcion': 'La Parva - Sector Bajo / Villa La Parva, Lo Barnechea, Chile - Zona base: lodges y ski school (2650m)'
     },
     {
-        'nombre': 'La Parva',
-        'latitud': -33.3319,
-        'longitud': -70.2856,
-        'descripcion': 'La Parva, Chile - Centro de Esquí Familiar Cordillera Central (2750m)'
+        'nombre': 'La Parva Sector Medio',
+        'latitud': -33.3520,
+        'longitud': -70.2900,
+        'descripcion': 'La Parva - Sector Medio / Restaurante 3100, Lo Barnechea, Chile - Zona media montaña (3100m)'
+    },
+    {
+        'nombre': 'La Parva Sector Alto',
+        'latitud': -33.3440,
+        'longitud': -70.2800,
+        'descripcion': 'La Parva - Sector Alto / Cima, Lo Barnechea, Chile - Zona cumbre y terreno experto (3574m)'
     },
     {
         'nombre': 'El Colorado',
-        'latitud': -33.3500,
-        'longitud': -70.2833,
-        'descripcion': 'El Colorado-Farellones, Chile - Centro de Esquí Cercano a Santiago (2430m)'
+        'latitud': -33.3600,
+        'longitud': -70.3000,
+        'descripcion': 'El Colorado / Farellones, Lo Barnechea, Chile - Mayor número de pistas del Tres Valles (base 2350m / cima 3460m)'
     },
+    {
+        'nombre': 'Valle Nevado',
+        'latitud': -33.3547,
+        'longitud': -70.2498,
+        'descripcion': 'Valle Nevado, Lo Barnechea, Chile - Centro de Esquí más Grande de Sudamérica (base 2860m / cima 3670m)'
+    },
+    {
+        'nombre': 'Lagunillas',
+        'latitud': -33.6800,
+        'longitud': -70.2500,
+        'descripcion': 'Lagunillas, San José de Maipo, Chile - Centro familiar, 3 remontes (base 2200m / cima 2550m)'
+    },
+
+    # --- Región de O'Higgins ---
+    {
+        'nombre': 'Chapa Verde',
+        'latitud': -34.1700,
+        'longitud': -70.3700,
+        'descripcion': 'Chapa Verde, Rancagua, Chile - Centro de Esquí CODELCO, acceso restringido (base 2260m / cima 3050m)'
+    },
+
+    # --- Región de Ñuble / Biobío ---
     {
         'nombre': 'Nevados de Chillán',
-        'latitud': -36.9063,
-        'longitud': -71.4160,
-        'descripcion': 'Nevados de Chillán, Chile - Esquí y Termas en el Sur (1650m)'
+        'latitud': -36.8580,
+        'longitud': -71.3727,
+        'descripcion': 'Nevados de Chillán, Chile - Volcán Activo, Termas y Esquí (base 1530m / cima 2400m)'
     },
+    {
+        'nombre': 'Antuco',
+        'latitud': -37.4100,
+        'longitud': -71.4200,
+        'descripcion': 'Ski Antuco, Los Ángeles, Chile - Volcán Antuco, Biobío (base 1400m / cima 1850m)'
+    },
+
+    # --- Región de La Araucanía ---
     {
         'nombre': 'Corralco',
-        'latitud': -38.4833,
-        'longitud': -71.5667,
-        'descripcion': 'Corralco, Chile - Esquí en el Volcán Lonquimay, La Araucanía (1500m)'
+        'latitud': -38.3700,
+        'longitud': -71.5700,
+        'descripcion': 'Corralco, Volcán Lonquimay, Chile - Bosques de Araucarias y Nieve Andina (base 1550m / cima 2400m)'
     },
     {
+        'nombre': 'Las Araucarias',
+        'latitud': -38.7300,
+        'longitud': -71.7400,
+        'descripcion': 'Las Araucarias / Llaima, Vilcún, Chile - Esquí en Volcán Llaima (base 1550m / cima 1942m)'
+    },
+    {
+        'nombre': 'Ski Pucón',
+        'latitud': -39.5000,
+        'longitud': -71.9600,
+        'descripcion': 'Ski Pucón / Pillán, Volcán Villarrica, Chile - Esquí sobre volcán activo (base 1380m / cima 2100m)'
+    },
+    {
+        'nombre': 'Los Arenales',
+        'latitud': -38.8500,
+        'longitud': -72.0000,
+        'descripcion': 'Los Arenales, Temuco, Chile - Centro de Entrenamiento y Esquí Familiar (base 1600m / cima 1845m)'
+    },
+
+    # --- Región de Los Lagos ---
+    {
         'nombre': 'Antillanca',
-        'latitud': -40.7667,
-        'longitud': -72.2000,
-        'descripcion': 'Antillanca, Chile - Centro de Esquí Volcán Casablanca, Los Lagos (1350m)'
+        'latitud': -40.7756,
+        'longitud': -72.2046,
+        'descripcion': 'Antillanca, Volcán Casablanca, Chile - Parque Nacional Puyehue (base 1040m / cima 1540m)'
+    },
+    {
+        'nombre': 'Volcán Osorno',
+        'latitud': -41.1000,
+        'longitud': -72.5000,
+        'descripcion': 'Volcán Osorno, Puerto Varas, Chile - Esquí en el volcán icónico patagónico (base 1230m / cima 1760m)'
+    },
+
+    # --- Región de Aysén ---
+    {
+        'nombre': 'El Fraile',
+        'latitud': -45.6800,
+        'longitud': -71.9400,
+        'descripcion': 'El Fraile, Coyhaique, Chile - Esquí entre Bosques de Lenga Patagónicos (base 980m / cima 1280m)'
+    },
+
+    # --- Región de Magallanes ---
+    {
+        'nombre': 'Cerro Mirador',
+        'latitud': -53.1300,
+        'longitud': -70.9800,
+        'descripcion': 'Cerro Mirador, Punta Arenas, Chile - Centro de Esquí más Austral del Mundo (base 380m / cima 570m)'
     },
 
     # ========================================================================

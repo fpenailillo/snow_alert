@@ -64,18 +64,60 @@ Sistema serverless event-driven para el monitoreo de condiciones climáticas y d
 
 ## Ubicaciones Monitoreadas
 
-El sistema monitorea **45 ubicaciones** de destinos de nieve y montaña a nivel mundial, organizadas en las siguientes categorías:
+El sistema monitorea **57 ubicaciones** de destinos de nieve y montaña a nivel mundial, organizadas en las siguientes categorías:
 
-### Centros de Esquí - Chile (7)
+### Centros de Esquí - Chile (19 ubicaciones — cobertura completa de norte a sur)
+
+**Región de Valparaíso**
+| Ubicación | Latitud | Longitud | Base / Cima | Descripción |
+|-----------|---------|----------|-------------|-------------|
+| **Portillo** | -32.8369 | -70.1287 | 2580m / 3310m | Centro Legendario, Los Andes |
+| **Ski Arpa** | -32.6000 | -70.3900 | 2690m / 3740m | Único Cat-Ski de Chile, 4000 acres |
+
+**Región Metropolitana**
 | Ubicación | Latitud | Longitud | Elevación | Descripción |
 |-----------|---------|----------|-----------|-------------|
-| **Portillo** | -32.8375 | -70.1267 | 2880m | Centro de Esquí Legendario |
-| **Valle Nevado** | -33.3558 | -70.2514 | 3025m | Mayor Centro de Esquí de Sudamérica |
-| **La Parva** | -33.3319 | -70.2856 | 2750m | Centro de Esquí Familiar |
-| **El Colorado** | -33.3500 | -70.2833 | 2430m | Cercano a Santiago |
-| **Nevados de Chillán** | -36.9063 | -71.4160 | 1650m | Esquí y Termas |
-| **Corralco** | -38.4833 | -71.5667 | 1500m | Volcán Lonquimay |
-| **Antillanca** | -40.7667 | -72.2000 | 1350m | Volcán Casablanca |
+| **La Parva — Sector Bajo** | -33.3630 | -70.3010 | 2650m | Villa La Parva, base, lodges, ski school |
+| **La Parva — Sector Medio** | -33.3520 | -70.2900 | 3100m | Restaurante 3100, servicios de montaña |
+| **La Parva — Sector Alto** | -33.3440 | -70.2800 | 3574m | Cima, terreno experto, La Chimenea |
+| **El Colorado / Farellones** | -33.3600 | -70.3000 | 2350m / 3460m | Mayor nº de pistas del Tres Valles |
+| **Valle Nevado** | -33.3547 | -70.2498 | 2860m / 3670m | Mayor Centro de Esquí de Sudamérica |
+| **Lagunillas** | -33.6800 | -70.2500 | 2200m / 2550m | Centro familiar, San José de Maipo |
+
+**Región de O'Higgins**
+| Ubicación | Latitud | Longitud | Base / Cima | Descripción |
+|-----------|---------|----------|-------------|-------------|
+| **Chapa Verde** | -34.1700 | -70.3700 | 2260m / 3050m | Centro CODELCO, acceso restringido |
+
+**Región de Ñuble / Biobío**
+| Ubicación | Latitud | Longitud | Base / Cima | Descripción |
+|-----------|---------|----------|-------------|-------------|
+| **Nevados de Chillán** | -36.8580 | -71.3727 | 1530m / 2400m | Volcán activo, termas y tree skiing |
+| **Antuco** | -37.4100 | -71.4200 | 1400m / 1850m | Volcán Antuco, Los Ángeles |
+
+**Región de La Araucanía**
+| Ubicación | Latitud | Longitud | Base / Cima | Descripción |
+|-----------|---------|----------|-------------|-------------|
+| **Corralco** | -38.3700 | -71.5700 | 1550m / 2400m | Volcán Lonquimay, bosques de araucarias |
+| **Las Araucarias / Llaima** | -38.7300 | -71.7400 | 1550m / 1942m | Volcán Llaima |
+| **Ski Pucón / Pillán** | -39.5000 | -71.9600 | 1380m / 2100m | Volcán Villarrica (activo) |
+| **Los Arenales** | -38.8500 | -72.0000 | 1600m / 1845m | Centro entrenamiento, Temuco |
+
+**Región de Los Lagos**
+| Ubicación | Latitud | Longitud | Base / Cima | Descripción |
+|-----------|---------|----------|-------------|-------------|
+| **Antillanca** | -40.7756 | -72.2046 | 1040m / 1540m | Volcán Casablanca, Parque Puyehue |
+| **Volcán Osorno** | -41.1000 | -72.5000 | 1230m / 1760m | Volcán icónico, Puerto Varas |
+
+**Región de Aysén**
+| Ubicación | Latitud | Longitud | Base / Cima | Descripción |
+|-----------|---------|----------|-------------|-------------|
+| **El Fraile** | -45.6800 | -71.9400 | 980m / 1280m | Bosques de Lenga, Coyhaique |
+
+**Región de Magallanes**
+| Ubicación | Latitud | Longitud | Base / Cima | Descripción |
+|-----------|---------|----------|-------------|-------------|
+| **Cerro Mirador** | -53.1300 | -70.9800 | 380m / 570m | Centro más austral del mundo |
 
 ### Centros de Esquí - Argentina (5)
 | Ubicación | Latitud | Longitud | Elevación | Descripción |
@@ -611,24 +653,24 @@ Ver [documentación de Cloud Monitoring](https://cloud.google.com/monitoring/doc
 
 ## Costos Estimados
 
-Estimación mensual para **45 ubicaciones** con ejecución **cada minuto** (43,200 invocaciones/mes):
+Estimación mensual para **57 ubicaciones** con ejecución **cada minuto** (43,200 invocaciones/mes):
 
 | Servicio | Uso | Costo Estimado (USD) |
 |----------|-----|----------------------|
 | Cloud Functions | 86,400 invocaciones (2 funciones × 43,200) | Gratis (tier: 2M/mes) |
-| Pub/Sub | ~1,944,000 mensajes (45 ubicaciones × 43,200) | Gratis (tier: 10 GB/mes) |
-| Cloud Storage | ~3.9 GB/mes (1,944,000 archivos JSON × 2 KB) | $0.08 |
-| BigQuery | ~12 GB almacenado/mes | $0.24 |
+| Pub/Sub | ~2,462,400 mensajes (57 ubicaciones × 43,200) | Gratis (tier: 10 GB/mes) |
+| Cloud Storage | ~4.9 GB/mes (2,462,400 archivos JSON × 2 KB) | $0.10 |
+| BigQuery | ~15 GB almacenado/mes | $0.30 |
 | BigQuery | ~20 GB queries/mes | Gratis (tier: 1 TB/mes) |
 | Cloud Scheduler | 1 job | $0.10 |
 | Secret Manager | 1 secret, ~43,200 accesos/mes | $0.13 |
-| **TOTAL** | | **~$0.55/mes** |
+| **TOTAL** | | **~$0.63/mes** |
 
 **Nota**:
 - Los costos son aproximados y pueden variar según el uso real y la región
 - Primer año incluye $300 de créditos gratuitos de GCP
-- Con ejecución cada minuto: **1,440 mediciones/día** por ubicación (64,800 total para 45 ubicaciones)
-- Volumen mensual: ~1,944,000 registros
+- Con ejecución cada minuto: **1,440 mediciones/día** por ubicación (82,080 total para 57 ubicaciones)
+- Volumen mensual: ~2,462,400 registros
 - La mayoría de servicios siguen en tier gratuito con este volumen
 - Estimación basada en precios de us-central1 (Enero 2026)
 
