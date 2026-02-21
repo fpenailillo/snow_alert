@@ -15,7 +15,7 @@ Monitor weather and snow conditions at winter destinations to provide:
 
 ```
 ┌─────────────────┐
-│ Cloud Scheduler │ (Every minute)
+│ Cloud Scheduler │ (3x/día: 08:00, 14:00, 20:00)
 └────────┬────────┘
          │ HTTP POST
          ▼
@@ -65,7 +65,7 @@ snow_alert/
 
 ### extractor/main.py
 - **Entry point**: `extraer_clima(solicitud: Request)`
-- **Trigger**: HTTP (Cloud Scheduler every minute)
+- **Trigger**: HTTP (Cloud Scheduler 3x/día: 08:00, 14:00, 20:00)
 - **Function**: Calls Google Weather API for each monitored location, enriches data with metadata, publishes to Pub/Sub
 - **Key constant**: `UBICACIONES_MONITOREO` - List of locations to monitor
 
@@ -169,7 +169,7 @@ bq query --use_legacy_sql=false 'SELECT * FROM clima.condiciones_actuales ORDER 
 | BigQuery Table | `condiciones_actuales` | Processed weather data (Silver) |
 | Cloud Function | `extractor-clima` | HTTP-triggered extraction |
 | Cloud Function | `procesador-clima` | Pub/Sub-triggered processing |
-| Cloud Scheduler | `extraer-clima-job` | Periodic trigger (every minute) |
+| Cloud Scheduler | `extraer-clima-job` | Periodic trigger (3x/día: 08:00, 14:00, 20:00) |
 
 ## Important Weather API Fields
 
@@ -210,8 +210,14 @@ gcloud functions logs read procesador-clima --gen2 --limit=100 | grep ERROR
 
 ### Changing Scheduler Frequency
 ```bash
+# Schedule actual: 3 veces al día (08:00, 14:00, 20:00)
 gcloud scheduler jobs update http extraer-clima-job \
-  --schedule="*/5 * * * *"  # Every 5 minutes
+  --schedule="0 8,14,20 * * *"
+
+# Otros ejemplos:
+# Cada hora:        "0 * * * *"
+# Cada 6 horas:     "0 */6 * * *"
+# Una vez al día:   "0 12 * * *"
 ```
 
 ## Error Handling
