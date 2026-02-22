@@ -25,39 +25,47 @@ Sistema serverless event-driven para el monitoreo de condiciones climáticas y d
 ┌─────────────────┐
 │ Cloud Scheduler │ (08:00 / 14:00 / 20:00)
 └────────┬────────┘
-         │
+         │ HTTP POST
          ▼
-┌─────────────────────────────┐
-│ Cloud Function: Extractor   │
-│ • Llama a Weather API       │
-│ • API Key authentication    │
-│ • Publica a Pub/Sub         │
-└────────┬────────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│                  Cloud Function: Extractor                       │
+│  • Llama a 3 endpoints de Weather API:                          │
+│    - currentConditions (condiciones actuales)                    │
+│    - forecast/hours (próximas 24 horas)                         │
+│    - forecast/days (próximos 5 días)                            │
+│  • API Key desde Secret Manager                                  │
+│  • Publica a 3 topics de Pub/Sub                                │
+└────────┬────────────────────────────────────────────────────────┘
          │
-         ▼
-┌─────────────────────────────┐
-│ Pub/Sub Topic               │
-│ • clima-datos-crudos        │
-│ • Dead Letter Queue         │
-└────────┬────────────────────┘
+         │ Pub/Sub (3 topics)
          │
-         ▼
-┌─────────────────────────────┐
-│ Cloud Function: Procesador  │
-│ • Procesa mensajes Pub/Sub  │
-│ • Valida y transforma datos │
-└────────┬────────────────────┘
-         │
-         ├──────────────────────┐
-         ▼                      ▼
-┌──────────────────┐   ┌──────────────────┐
-│ Cloud Storage    │   │ BigQuery         │
-│ (Capa Bronce)    │   │ (Capa Plata)     │
-│ • Datos crudos   │   │ • Datos          │
-│ • Particionado   │   │   estructurados  │
-│   por fecha      │   │ • Particionado   │
-│ • Versionado     │   │ • Clustering     │
-└──────────────────┘   └──────────────────┘
+    ┌────┴────────────────────┬────────────────────────┐
+    │                         │                        │
+    ▼                         ▼                        ▼
+┌──────────────────┐  ┌──────────────────┐  ┌──────────────────┐
+│ clima-datos-     │  │ clima-pronostico-│  │ clima-pronostico-│
+│ crudos           │  │ horas            │  │ dias             │
+│ (+ DLQ)          │  │ (+ DLQ)          │  │ (+ DLQ)          │
+└────────┬─────────┘  └────────┬─────────┘  └────────┬─────────┘
+         │                     │                     │
+         ▼                     ▼                     ▼
+┌──────────────────┐  ┌──────────────────┐  ┌──────────────────┐
+│ Procesador       │  │ Procesador       │  │ Procesador       │
+│ (Condiciones)    │  │ (Horas)          │  │ (Días)           │
+└────────┬─────────┘  └────────┬─────────┘  └────────┬─────────┘
+         │                     │                     │
+         │                     │                     │
+         └─────────────────────┴─────────────────────┘
+                               │
+              ┌────────────────┴────────────────┐
+              ▼                                 ▼
+┌────────────────────────┐        ┌────────────────────────────┐
+│ Cloud Storage          │        │ BigQuery (Capa Plata)      │
+│ (Capa Bronce)          │        │ • condiciones_actuales     │
+│ • condiciones_actuales/│        │ • pronostico_horas         │
+│ • pronostico_horas/    │        │ • pronostico_dias          │
+│ • pronostico_dias/     │        │ Particionado + Clustering  │
+└────────────────────────┘        └────────────────────────────┘
 ```
 
 
@@ -189,24 +197,50 @@ El sistema monitorea **57 ubicaciones** de destinos de nieve y montaña a nivel 
 - **Timeout**: 60 segundos
 - **Funcionalidades**:
   - Autenticación con API Key desde Secret Manager
-  - Llamadas GET a Weather API para múltiples ubicaciones
+  - Llamadas a 3 endpoints de Weather API para cada ubicación:
+    - `currentConditions` - Condiciones actuales
+    - `forecast/hours` - Pronóstico próximas 24 horas
+    - `forecast/days` - Pronóstico próximos 5 días
   - Enriquecimiento de datos con metadata
-  - Publicación a Pub/Sub con atributos para routing
+  - Publicación a 3 topics de Pub/Sub según tipo de dato
   - Manejo robusto de errores y logging estructurado
 
-### Cloud Function: Procesador
+### Cloud Function: Procesador (Condiciones Actuales)
 
-- **Trigger**: Pub/Sub (topic: clima-datos-crudos)
+- **Trigger**: Pub/Sub (topic: `clima-datos-crudos`)
 - **Runtime**: Python 3.11
 - **Memoria**: 512 MB
 - **Timeout**: 120 segundos
 - **Funcionalidades**:
-  - Decodificación y validación de mensajes
-  - Almacenamiento de datos crudos en Cloud Storage
-  - Transformación a esquema estructurado
-  - Inserción en BigQuery
-  - Reintentos automáticos con exponential backoff
-  - Dead letter queue para mensajes fallidos
+  - Procesa condiciones climáticas actuales
+  - Almacena en Cloud Storage (capa bronce)
+  - Transforma e inserta en BigQuery (`condiciones_actuales`)
+  - Dead letter queue: `clima-datos-dlq`
+
+### Cloud Function: Procesador Horas
+
+- **Trigger**: Pub/Sub (topic: `clima-pronostico-horas`)
+- **Runtime**: Python 3.11
+- **Memoria**: 512 MB
+- **Timeout**: 120 segundos
+- **Funcionalidades**:
+  - Procesa pronóstico por horas (24 registros por ubicación)
+  - Almacena en Cloud Storage (`pronostico_horas/`)
+  - Transforma e inserta en BigQuery (`pronostico_horas`)
+  - Dead letter queue: `clima-pronostico-horas-dlq`
+
+### Cloud Function: Procesador Días
+
+- **Trigger**: Pub/Sub (topic: `clima-pronostico-dias`)
+- **Runtime**: Python 3.11
+- **Memoria**: 512 MB
+- **Timeout**: 120 segundos
+- **Funcionalidades**:
+  - Procesa pronóstico diario (5 registros por ubicación)
+  - Incluye datos de período diurno y nocturno
+  - Almacena en Cloud Storage (`pronostico_dias/`)
+  - Transforma e inserta en BigQuery (`pronostico_dias`)
+  - Dead letter queue: `clima-pronostico-dias-dlq`
 
 ### Cloud Storage (Capa Bronce)
 
@@ -221,7 +255,8 @@ El sistema monitorea **57 ubicaciones** de destinos de nieve y montaña a nivel 
 ### BigQuery (Capa Plata)
 
 - **Dataset**: `clima`
-- **Tabla**: `condiciones_actuales`
+
+#### Tabla: `condiciones_actuales`
 - **Particionamiento**: Por `DATE(hora_actual)`
 - **Clustering**: Por `nombre_ubicacion`
 - **Esquema** (27 campos):
@@ -234,6 +269,32 @@ El sistema monitorea **57 ubicaciones** de destinos de nieve y montaña a nivel 
   - Atmosféricas: presión, humedad, visibilidad
   - Otras: índice UV, cobertura de nubes, probabilidad de tormenta
   - Metadata: timestamp de ingesta, URI datos crudos, JSON completo
+
+#### Tabla: `pronostico_horas`
+- **Particionamiento**: Por `DATE(hora_inicio)`
+- **Clustering**: Por `nombre_ubicacion`
+- **Esquema** (27 campos):
+  - Identificación: ubicación, coordenadas
+  - Temporal: hora_inicio, hora_fin
+  - Temperatura: temperatura, sensación térmica, índice calor, sensación viento
+  - Condiciones: condición, descripción, icono URL
+  - Precipitación: probabilidad, cantidad
+  - Viento: velocidad, dirección
+  - Atmosféricas: humedad, presión, visibilidad
+  - Otras: índice UV, cobertura nubes, probabilidad tormenta, es_dia
+  - Metadata: timestamps de extracción e ingestión, URI datos crudos
+
+#### Tabla: `pronostico_dias`
+- **Particionamiento**: Por `DATE(fecha_inicio)`
+- **Clustering**: Por `nombre_ubicacion`
+- **Esquema** (45 campos):
+  - Identificación: ubicación, coordenadas
+  - Temporal: fecha_inicio, fecha_fin, año, mes, día
+  - Astronomía: hora_amanecer, hora_atardecer
+  - Temperaturas del día: temp_max_dia, temp_min_dia
+  - **Período diurno** (15 campos): condición, temperatura, sensación, viento, precipitación, nubes, UV
+  - **Período nocturno** (15 campos): condición, temperatura, sensación, viento, precipitación, nubes, UV
+  - Metadata: timestamps de extracción e ingestión, URI datos crudos
 
 ## Requisitos Previos
 
@@ -335,12 +396,20 @@ El script realiza las siguientes acciones:
 2. ✓ Habilita APIs necesarias (incluyendo Weather API y Secret Manager)
 3. ✓ Crea cuenta de servicio y asigna permisos
 4. ✓ Configura Secret Manager para Weather API Key
-5. ✓ Crea topics de Pub/Sub (principal y DLQ)
+5. ✓ Crea 6 topics de Pub/Sub:
+   - `clima-datos-crudos` + DLQ
+   - `clima-pronostico-horas` + DLQ
+   - `clima-pronostico-dias` + DLQ
 6. ✓ Crea bucket de Cloud Storage con ciclo de vida
-7. ✓ Crea dataset y tabla de BigQuery
+7. ✓ Crea dataset y 3 tablas de BigQuery:
+   - `condiciones_actuales`
+   - `pronostico_horas`
+   - `pronostico_dias`
 8. ✓ Despliega Cloud Function Extractor
-9. ✓ Despliega Cloud Function Procesador
-10. ✓ Configura Cloud Scheduler (3x/día: 08:00, 14:00, 20:00)
+9. ✓ Despliega Cloud Function Procesador (condiciones actuales)
+10. ✓ Despliega Cloud Function Procesador Horas
+11. ✓ Despliega Cloud Function Procesador Días
+12. ✓ Configura Cloud Scheduler (3x/día: 08:00, 14:00, 20:00)
 
 **Tiempo estimado**: 5-10 minutos
 
@@ -679,14 +748,22 @@ Estimación mensual para **57 ubicaciones** con ejecución **3 veces al día** (
 ```
 snow_alert/
 ├── extractor/
-│   ├── main.py                 # Cloud Function de extracción
+│   ├── main.py                 # Cloud Function de extracción (3 APIs)
 │   ├── requirements.txt        # Dependencias del extractor
 │   └── .gcloudignore          # Archivos a ignorar en deploy
 ├── procesador/
-│   ├── main.py                 # Cloud Function de procesamiento
+│   ├── main.py                 # Procesador de condiciones actuales
 │   ├── requirements.txt        # Dependencias del procesador
 │   └── .gcloudignore          # Archivos a ignorar en deploy
-├── desplegar.sh                # Script de despliegue automatizado (único punto de entrada)
+├── procesador_horas/
+│   ├── main.py                 # Procesador de pronóstico por horas
+│   ├── requirements.txt        # Dependencias
+│   └── .gcloudignore          # Archivos a ignorar en deploy
+├── procesador_dias/
+│   ├── main.py                 # Procesador de pronóstico por días
+│   ├── requirements.txt        # Dependencias
+│   └── .gcloudignore          # Archivos a ignorar en deploy
+├── desplegar.sh                # Script de despliegue automatizado
 ├── .gcloudignore              # Archivos a ignorar en deploy general
 ├── .gitignore                  # Archivos a ignorar en git
 ├── requerimientos.md           # Requerimientos técnicos del proyecto

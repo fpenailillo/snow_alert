@@ -19,27 +19,40 @@ Monitor weather and snow conditions at winter destinations to provide:
 └────────┬────────┘
          │ HTTP POST
          ▼
-┌────────────────────────────────┐
-│ Cloud Function: Extractor      │
-│ • Fetches from Weather API     │
-│ • API Key from Secret Manager  │
-│ • Publishes to Pub/Sub         │
-└────────┬───────────────────────┘
-         │ Pub/Sub
-         ▼
-┌────────────────────────────────┐
-│ Cloud Function: Procesador     │
-│ • Validates & transforms       │
-│ • Raw → GCS (Bronze)           │
-│ • Clean → BigQuery (Silver)    │
-└────────┬───────────────────────┘
-         │
-    ┌────┴────┐
-    ▼         ▼
-┌─────────┐  ┌──────────┐
-│   GCS   │  │ BigQuery │
-│ (Bronze)│  │ (Silver) │
-└─────────┘  └──────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│                  Cloud Function: Extractor                       │
+│  • Calls 3 Weather API endpoints per location:                   │
+│    - currentConditions (condiciones actuales)                    │
+│    - forecast/hours (próximas 24 horas)                          │
+│    - forecast/days (próximos 5 días)                             │
+│  • API Key from Secret Manager                                   │
+│  • Publishes to 3 Pub/Sub topics                                 │
+└────────┬────────────────────────────────────────────────────────┘
+         │ Pub/Sub (3 topics)
+    ┌────┴─────────────────────┬─────────────────────────┐
+    │                          │                         │
+    ▼                          ▼                         ▼
+┌────────────────┐    ┌────────────────┐    ┌────────────────┐
+│clima-datos-    │    │clima-pronostico│    │clima-pronostico│
+│crudos (+DLQ)   │    │-horas (+DLQ)   │    │-dias (+DLQ)    │
+└───────┬────────┘    └───────┬────────┘    └───────┬────────┘
+        │                     │                     │
+        ▼                     ▼                     ▼
+┌────────────────┐    ┌────────────────┐    ┌────────────────┐
+│ Procesador     │    │ Procesador     │    │ Procesador     │
+│ (condiciones)  │    │ (horas)        │    │ (días)         │
+└───────┬────────┘    └───────┬────────┘    └───────┬────────┘
+        │                     │                     │
+        └─────────────────────┴─────────────────────┘
+                              │
+              ┌───────────────┴───────────────┐
+              ▼                               ▼
+┌────────────────────────┐     ┌────────────────────────────┐
+│ GCS (Bronze)           │     │ BigQuery (Silver)          │
+│ • condiciones_actuales/│     │ • condiciones_actuales     │
+│ • pronostico_horas/    │     │ • pronostico_horas         │
+│ • pronostico_dias/     │     │ • pronostico_dias          │
+└────────────────────────┘     └────────────────────────────┘
 ```
 
 ## Project Structure
@@ -47,11 +60,19 @@ Monitor weather and snow conditions at winter destinations to provide:
 ```
 snow_alert/
 ├── extractor/
-│   ├── main.py              # Data extraction Cloud Function
+│   ├── main.py              # Extraction (3 Weather APIs)
 │   ├── requirements.txt     # Python dependencies
 │   └── .gcloudignore
 ├── procesador/
-│   ├── main.py              # Data processing Cloud Function
+│   ├── main.py              # Procesador condiciones actuales
+│   ├── requirements.txt     # Python dependencies
+│   └── .gcloudignore
+├── procesador_horas/
+│   ├── main.py              # Procesador pronóstico por horas
+│   ├── requirements.txt     # Python dependencies
+│   └── .gcloudignore
+├── procesador_dias/
+│   ├── main.py              # Procesador pronóstico por días
 │   ├── requirements.txt     # Python dependencies
 │   └── .gcloudignore
 ├── desplegar.sh             # Automated deployment script
@@ -66,18 +87,34 @@ snow_alert/
 ### extractor/main.py
 - **Entry point**: `extraer_clima(solicitud: Request)`
 - **Trigger**: HTTP (Cloud Scheduler 3x/día: 08:00, 14:00, 20:00)
-- **Function**: Calls Google Weather API for each monitored location, enriches data with metadata, publishes to Pub/Sub
-- **Key constant**: `UBICACIONES_MONITOREO` - List of locations to monitor
+- **Function**: Calls 3 Google Weather API endpoints for each location:
+  - `currentConditions` → publishes to `clima-datos-crudos`
+  - `forecast/hours` → publishes to `clima-pronostico-horas`
+  - `forecast/days` → publishes to `clima-pronostico-dias`
+- **Key constants**:
+  - `UBICACIONES_MONITOREO` - List of 57 locations to monitor
+  - `HORAS_PRONOSTICO = 24` - Hours ahead for hourly forecast
+  - `DIAS_PRONOSTICO = 5` - Days ahead for daily forecast
 
 ### procesador/main.py
 - **Entry point**: `procesar_clima(evento_nube)`
 - **Trigger**: Pub/Sub message from `clima-datos-crudos` topic
-- **Function**: Validates data, stores raw JSON in GCS (Bronze), transforms and inserts into BigQuery (Silver)
+- **Function**: Processes current conditions → GCS + BigQuery (`condiciones_actuales`)
+
+### procesador_horas/main.py
+- **Entry point**: `procesar_pronostico_horas(evento_nube)`
+- **Trigger**: Pub/Sub message from `clima-pronostico-horas` topic
+- **Function**: Processes hourly forecast (24 hours) → GCS + BigQuery (`pronostico_horas`)
+
+### procesador_dias/main.py
+- **Entry point**: `procesar_pronostico_dias(evento_nube)`
+- **Trigger**: Pub/Sub message from `clima-pronostico-dias` topic
+- **Function**: Processes daily forecast (5 days, with daytime/nighttime periods) → GCS + BigQuery (`pronostico_dias`)
 
 ### desplegar.sh
 - Automated deployment script for entire infrastructure
-- Creates service accounts, Pub/Sub topics, GCS buckets, BigQuery tables
-- Deploys both Cloud Functions
+- Creates service accounts, 6 Pub/Sub topics (3 main + 3 DLQ), GCS bucket, 3 BigQuery tables
+- Deploys 4 Cloud Functions (1 extractor + 3 processors)
 - Configures Cloud Scheduler
 
 ## Coding Conventions
@@ -162,18 +199,26 @@ bq query --use_legacy_sql=false 'SELECT * FROM clima.condiciones_actuales ORDER 
 |----------|------|---------|
 | Service Account | `funciones-clima-sa` | IAM identity for functions |
 | Secret | `weather-api-key` | Google Weather API key |
-| Pub/Sub Topic | `clima-datos-crudos` | Main event stream |
-| Pub/Sub Topic | `clima-datos-dlq` | Dead letter queue |
+| Pub/Sub Topic | `clima-datos-crudos` | Current conditions stream |
+| Pub/Sub Topic | `clima-datos-dlq` | Dead letter queue (conditions) |
+| Pub/Sub Topic | `clima-pronostico-horas` | Hourly forecast stream |
+| Pub/Sub Topic | `clima-pronostico-horas-dlq` | Dead letter queue (hours) |
+| Pub/Sub Topic | `clima-pronostico-dias` | Daily forecast stream |
+| Pub/Sub Topic | `clima-pronostico-dias-dlq` | Dead letter queue (days) |
 | GCS Bucket | `{project}-datos-clima-bronce` | Raw data storage (Bronze) |
 | BigQuery Dataset | `clima` | Analytics data warehouse |
-| BigQuery Table | `condiciones_actuales` | Processed weather data (Silver) |
-| Cloud Function | `extractor-clima` | HTTP-triggered extraction |
-| Cloud Function | `procesador-clima` | Pub/Sub-triggered processing |
+| BigQuery Table | `condiciones_actuales` | Current weather conditions |
+| BigQuery Table | `pronostico_horas` | Hourly forecast (24h) |
+| BigQuery Table | `pronostico_dias` | Daily forecast (5 days) |
+| Cloud Function | `extractor-clima` | HTTP-triggered extraction (3 APIs) |
+| Cloud Function | `procesador-clima` | Processes current conditions |
+| Cloud Function | `procesador-clima-horas` | Processes hourly forecast |
+| Cloud Function | `procesador-clima-dias` | Processes daily forecast |
 | Cloud Scheduler | `extraer-clima-job` | Periodic trigger (3x/día: 08:00, 14:00, 20:00) |
 
 ## Important Weather API Fields
 
-The system captures these key weather metrics:
+### Current Conditions (`condiciones_actuales`)
 - `temperatura` - Current temperature (°C)
 - `sensacion_termica` - Feels-like temperature
 - `sensacion_viento` - Wind chill (critical for snow sports)
@@ -184,6 +229,21 @@ The system captures these key weather metrics:
 - `visibilidad` - Visibility distance
 - `humedad_relativa` - Relative humidity
 - `condicion_clima` - Weather condition type
+
+### Hourly Forecast (`pronostico_horas`)
+- `hora_inicio` / `hora_fin` - Forecast time interval
+- `temperatura` - Forecasted temperature
+- `prob_precipitacion` - Precipitation probability
+- `cantidad_precipitacion` - Expected precipitation amount
+- `es_dia` - Is daytime (boolean)
+- All standard weather metrics per hour
+
+### Daily Forecast (`pronostico_dias`)
+- `fecha_inicio` / `fecha_fin` - Forecast date range
+- `hora_amanecer` / `hora_atardecer` - Sunrise/sunset times
+- `temp_max_dia` / `temp_min_dia` - Daily temperature range
+- `diurno_*` - Daytime period metrics (15 fields)
+- `nocturno_*` - Nighttime period metrics (15 fields)
 
 ## Common Tasks for AI Assistants
 
@@ -259,15 +319,36 @@ When working with snow locations:
 # Deploy everything
 ./desplegar.sh
 
-# View recent data
+# View current conditions
 bq query --use_legacy_sql=false \
   'SELECT nombre_ubicacion, temperatura, sensacion_viento, velocidad_viento
    FROM clima.condiciones_actuales
    ORDER BY hora_actual DESC LIMIT 20'
 
-# Check function status
+# View hourly forecast
+bq query --use_legacy_sql=false \
+  'SELECT nombre_ubicacion, hora_inicio, temperatura, prob_precipitacion
+   FROM clima.pronostico_horas
+   ORDER BY hora_inicio DESC LIMIT 20'
+
+# View daily forecast
+bq query --use_legacy_sql=false \
+  'SELECT nombre_ubicacion, fecha_inicio, temp_max_dia, temp_min_dia,
+          diurno_condicion, nocturno_condicion
+   FROM clima.pronostico_dias
+   ORDER BY fecha_inicio DESC LIMIT 20'
+
+# Check all function status
 gcloud functions describe extractor-clima --gen2
 gcloud functions describe procesador-clima --gen2
+gcloud functions describe procesador-clima-horas --gen2
+gcloud functions describe procesador-clima-dias --gen2
+
+# View logs for all functions
+gcloud functions logs read extractor-clima --gen2 --limit=20
+gcloud functions logs read procesador-clima --gen2 --limit=20
+gcloud functions logs read procesador-clima-horas --gen2 --limit=20
+gcloud functions logs read procesador-clima-dias --gen2 --limit=20
 
 # View scheduler job
 gcloud scheduler jobs describe extraer-clima-job

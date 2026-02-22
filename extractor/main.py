@@ -36,8 +36,21 @@ logger = logging.getLogger(__name__)
 
 # Constantes de configuración
 ID_PROYECTO = os.environ.get('GCP_PROJECT', os.environ.get('GOOGLE_CLOUD_PROJECT', ''))
-NOMBRE_TOPIC = 'clima-datos-crudos'
-URL_BASE_API = 'https://weather.googleapis.com/v1/currentConditions:lookup'
+
+# Topics de Pub/Sub para cada tipo de dato
+TOPIC_CONDICIONES_ACTUALES = 'clima-datos-crudos'
+TOPIC_PRONOSTICO_HORAS = 'clima-pronostico-horas'
+TOPIC_PRONOSTICO_DIAS = 'clima-pronostico-dias'
+
+# URLs de la Weather API
+URL_API_CONDICIONES = 'https://weather.googleapis.com/v1/currentConditions:lookup'
+URL_API_PRONOSTICO_HORAS = 'https://weather.googleapis.com/v1/forecast/hours:lookup'
+URL_API_PRONOSTICO_DIAS = 'https://weather.googleapis.com/v1/forecast/days:lookup'
+
+# Configuración de pronósticos
+HORAS_PRONOSTICO = 24  # Próximas 24 horas
+DIAS_PRONOSTICO = 5    # Próximos 5 días
+
 NOMBRE_SECRET_API_KEY = 'weather-api-key'
 
 # Ubicaciones a monitorear: Centros de Esquí, Pueblos de Montaña y Destinos de Montañismo
@@ -463,44 +476,63 @@ def obtener_api_key() -> str:
         raise ErrorConfiguracion(mensaje_error)
 
 
-def construir_url_api(latitud: float, longitud: float, api_key: str) -> str:
+def construir_url_api(
+    url_base: str,
+    latitud: float,
+    longitud: float,
+    api_key: str,
+    parametros_extra: Dict[str, Any] = None
+) -> str:
     """
     Construye la URL completa para la llamada a la Weather API.
 
     Args:
+        url_base: URL base del endpoint (condiciones, horas, días)
         latitud: Latitud de la ubicación
         longitud: Longitud de la ubicación
         api_key: API Key para autenticación
+        parametros_extra: Parámetros adicionales (ej: hours, days)
 
     Returns:
         str: URL completa con query parameters
     """
-    # Construir URL con query parameters
+    # Construir URL con query parameters básicos
     url = (
-        f"{URL_BASE_API}"
+        f"{url_base}"
         f"?key={api_key}"
         f"&location.latitude={latitud}"
         f"&location.longitude={longitud}"
         f"&languageCode=es"
     )
 
+    # Agregar parámetros extra si existen
+    if parametros_extra:
+        for clave, valor in parametros_extra.items():
+            url += f"&{clave}={valor}"
+
     return url
 
 
 def llamar_weather_api(
+    url_base: str,
     latitud: float,
     longitud: float,
     nombre_ubicacion: str,
-    api_key: str
+    api_key: str,
+    parametros_extra: Dict[str, Any] = None,
+    tipo_consulta: str = "condiciones"
 ) -> Dict[str, Any]:
     """
-    Realiza llamada GET a la Google Weather API para obtener condiciones actuales.
+    Realiza llamada GET a la Google Weather API.
 
     Args:
+        url_base: URL base del endpoint
         latitud: Latitud de la ubicación
         longitud: Longitud de la ubicación
         nombre_ubicacion: Nombre descriptivo de la ubicación
         api_key: API Key para autenticación
+        parametros_extra: Parámetros adicionales (hours, days, etc.)
+        tipo_consulta: Tipo de consulta para logging
 
     Returns:
         dict: Datos climáticos obtenidos de la API
@@ -510,41 +542,132 @@ def llamar_weather_api(
     """
     try:
         # Construir URL con query parameters
-        url = construir_url_api(latitud, longitud, api_key)
+        url = construir_url_api(url_base, latitud, longitud, api_key, parametros_extra)
 
-        logger.info(f"Consultando clima para {nombre_ubicacion} ({latitud}, {longitud})")
+        logger.info(f"Consultando {tipo_consulta} para {nombre_ubicacion} ({latitud}, {longitud})")
 
         # Hacer GET request
         respuesta = requests.get(url, timeout=30)
 
         if respuesta.status_code != 200:
             mensaje_error = (
-                f"Error en API para {nombre_ubicacion}: "
+                f"Error en API ({tipo_consulta}) para {nombre_ubicacion}: "
                 f"Estado {respuesta.status_code}, Respuesta: {respuesta.text[:500]}"
             )
             logger.error(mensaje_error)
             raise ErrorExtraccionClima(mensaje_error)
 
         datos_clima = respuesta.json()
-        logger.info(f"Datos climáticos obtenidos exitosamente para {nombre_ubicacion}")
+        logger.info(f"{tipo_consulta.capitalize()} obtenido exitosamente para {nombre_ubicacion}")
 
         return datos_clima
 
     except ErrorExtraccionClima:
         raise
     except requests.exceptions.RequestException as e:
-        mensaje_error = f"Error de red al llamar API para {nombre_ubicacion}: {str(e)}"
+        mensaje_error = f"Error de red al llamar API ({tipo_consulta}) para {nombre_ubicacion}: {str(e)}"
         logger.error(mensaje_error)
         raise ErrorExtraccionClima(mensaje_error)
     except Exception as e:
-        mensaje_error = f"Error inesperado al llamar API para {nombre_ubicacion}: {str(e)}"
+        mensaje_error = f"Error inesperado al llamar API ({tipo_consulta}) para {nombre_ubicacion}: {str(e)}"
         logger.error(mensaje_error)
         raise ErrorExtraccionClima(mensaje_error)
 
 
-def enriquecer_datos_clima(
+def obtener_condiciones_actuales(
+    latitud: float,
+    longitud: float,
+    nombre_ubicacion: str,
+    api_key: str
+) -> Dict[str, Any]:
+    """
+    Obtiene las condiciones climáticas actuales para una ubicación.
+
+    Args:
+        latitud: Latitud de la ubicación
+        longitud: Longitud de la ubicación
+        nombre_ubicacion: Nombre descriptivo
+        api_key: API Key
+
+    Returns:
+        dict: Condiciones actuales
+    """
+    return llamar_weather_api(
+        URL_API_CONDICIONES,
+        latitud,
+        longitud,
+        nombre_ubicacion,
+        api_key,
+        tipo_consulta="condiciones actuales"
+    )
+
+
+def obtener_pronostico_horas(
+    latitud: float,
+    longitud: float,
+    nombre_ubicacion: str,
+    api_key: str,
+    horas: int = HORAS_PRONOSTICO
+) -> Dict[str, Any]:
+    """
+    Obtiene el pronóstico por hora para una ubicación.
+
+    Args:
+        latitud: Latitud de la ubicación
+        longitud: Longitud de la ubicación
+        nombre_ubicacion: Nombre descriptivo
+        api_key: API Key
+        horas: Número de horas de pronóstico (default: 24)
+
+    Returns:
+        dict: Pronóstico por hora con array 'forecastHours'
+    """
+    return llamar_weather_api(
+        URL_API_PRONOSTICO_HORAS,
+        latitud,
+        longitud,
+        nombre_ubicacion,
+        api_key,
+        parametros_extra={'hours': horas},
+        tipo_consulta=f"pronóstico {horas}h"
+    )
+
+
+def obtener_pronostico_dias(
+    latitud: float,
+    longitud: float,
+    nombre_ubicacion: str,
+    api_key: str,
+    dias: int = DIAS_PRONOSTICO
+) -> Dict[str, Any]:
+    """
+    Obtiene el pronóstico diario para una ubicación.
+
+    Args:
+        latitud: Latitud de la ubicación
+        longitud: Longitud de la ubicación
+        nombre_ubicacion: Nombre descriptivo
+        api_key: API Key
+        dias: Número de días de pronóstico (default: 5)
+
+    Returns:
+        dict: Pronóstico diario con array 'forecastDays'
+    """
+    return llamar_weather_api(
+        URL_API_PRONOSTICO_DIAS,
+        latitud,
+        longitud,
+        nombre_ubicacion,
+        api_key,
+        parametros_extra={'days': dias},
+        tipo_consulta=f"pronóstico {dias} días"
+    )
+
+
+def enriquecer_datos(
     datos_clima: Dict[str, Any],
-    ubicacion: Dict[str, Any]
+    ubicacion: Dict[str, Any],
+    tipo_dato: str = 'condiciones_actuales'
 ) -> Dict[str, Any]:
     """
     Enriquece los datos climáticos con metadata adicional.
@@ -552,6 +675,7 @@ def enriquecer_datos_clima(
     Args:
         datos_clima: Datos crudos de la Weather API
         ubicacion: Información de la ubicación monitoreada
+        tipo_dato: Tipo de dato ('condiciones_actuales', 'pronostico_horas', 'pronostico_dias')
 
     Returns:
         dict: Datos climáticos enriquecidos con metadata
@@ -566,8 +690,9 @@ def enriquecer_datos_clima(
             'longitud': ubicacion['longitud']
         },
         'descripcion_ubicacion': ubicacion['descripcion'],
+        'tipo_dato': tipo_dato,
         'datos_clima_raw': datos_clima,
-        'version_extractor': '2.0.0'  # Actualizado a v2 (API Key)
+        'version_extractor': '3.0.0'  # v3: Soporte para pronósticos hora/día
     }
 
     return datos_enriquecidos
@@ -642,52 +767,151 @@ def obtener_ubicaciones_monitoreo() -> List[Dict[str, Any]]:
     return UBICACIONES_MONITOREO
 
 
+def procesar_ubicacion(
+    ubicacion: Dict[str, Any],
+    api_key: str,
+    cliente_publicador: pubsub_v1.PublisherClient,
+    proyecto: str
+) -> Dict[str, Any]:
+    """
+    Procesa una ubicación: extrae condiciones actuales y pronósticos,
+    publica a los respectivos topics de Pub/Sub.
+
+    Args:
+        ubicacion: Información de la ubicación
+        api_key: API Key para Weather API
+        cliente_publicador: Cliente Pub/Sub
+        proyecto: ID del proyecto GCP
+
+    Returns:
+        dict: Resultado del procesamiento con conteos de éxitos/fallos
+    """
+    nombre_ubicacion = ubicacion['nombre']
+    resultado = {
+        'ubicacion': nombre_ubicacion,
+        'condiciones_actuales': {'estado': 'pendiente'},
+        'pronostico_horas': {'estado': 'pendiente'},
+        'pronostico_dias': {'estado': 'pendiente'},
+        'exitosos': 0,
+        'fallidos': 0
+    }
+
+    # Topics para cada tipo de dato
+    topics = {
+        'condiciones_actuales': cliente_publicador.topic_path(proyecto, TOPIC_CONDICIONES_ACTUALES),
+        'pronostico_horas': cliente_publicador.topic_path(proyecto, TOPIC_PRONOSTICO_HORAS),
+        'pronostico_dias': cliente_publicador.topic_path(proyecto, TOPIC_PRONOSTICO_DIAS)
+    }
+
+    # 1. Condiciones Actuales
+    try:
+        datos = obtener_condiciones_actuales(
+            ubicacion['latitud'],
+            ubicacion['longitud'],
+            nombre_ubicacion,
+            api_key
+        )
+        datos_enriquecidos = enriquecer_datos(datos, ubicacion, 'condiciones_actuales')
+        id_mensaje = publicar_a_pubsub(
+            cliente_publicador,
+            topics['condiciones_actuales'],
+            datos_enriquecidos,
+            nombre_ubicacion
+        )
+        resultado['condiciones_actuales'] = {'estado': 'exitoso', 'id_mensaje': id_mensaje}
+        resultado['exitosos'] += 1
+    except (ErrorExtraccionClima, ErrorPublicacionPubSub) as e:
+        resultado['condiciones_actuales'] = {'estado': 'fallido', 'error': str(e)}
+        resultado['fallidos'] += 1
+        logger.error(f"Error condiciones actuales {nombre_ubicacion}: {str(e)}")
+
+    # 2. Pronóstico por Horas (próximas 24 horas)
+    try:
+        datos = obtener_pronostico_horas(
+            ubicacion['latitud'],
+            ubicacion['longitud'],
+            nombre_ubicacion,
+            api_key
+        )
+        datos_enriquecidos = enriquecer_datos(datos, ubicacion, 'pronostico_horas')
+        id_mensaje = publicar_a_pubsub(
+            cliente_publicador,
+            topics['pronostico_horas'],
+            datos_enriquecidos,
+            nombre_ubicacion
+        )
+        resultado['pronostico_horas'] = {'estado': 'exitoso', 'id_mensaje': id_mensaje}
+        resultado['exitosos'] += 1
+    except (ErrorExtraccionClima, ErrorPublicacionPubSub) as e:
+        resultado['pronostico_horas'] = {'estado': 'fallido', 'error': str(e)}
+        resultado['fallidos'] += 1
+        logger.error(f"Error pronóstico horas {nombre_ubicacion}: {str(e)}")
+
+    # 3. Pronóstico por Días (próximos 5 días)
+    try:
+        datos = obtener_pronostico_dias(
+            ubicacion['latitud'],
+            ubicacion['longitud'],
+            nombre_ubicacion,
+            api_key
+        )
+        datos_enriquecidos = enriquecer_datos(datos, ubicacion, 'pronostico_dias')
+        id_mensaje = publicar_a_pubsub(
+            cliente_publicador,
+            topics['pronostico_dias'],
+            datos_enriquecidos,
+            nombre_ubicacion
+        )
+        resultado['pronostico_dias'] = {'estado': 'exitoso', 'id_mensaje': id_mensaje}
+        resultado['exitosos'] += 1
+    except (ErrorExtraccionClima, ErrorPublicacionPubSub) as e:
+        resultado['pronostico_dias'] = {'estado': 'fallido', 'error': str(e)}
+        resultado['fallidos'] += 1
+        logger.error(f"Error pronóstico días {nombre_ubicacion}: {str(e)}")
+
+    return resultado
+
+
 @functions_framework.http
 def extraer_clima(solicitud: Request) -> Tuple[Dict[str, Any], int]:
     """
     Cloud Function HTTP principal que extrae datos climáticos y publica a Pub/Sub.
 
-    Esta función es invocada por Cloud Scheduler periódicamente para:
+    Esta función es invocada por Cloud Scheduler periódicamente (3x/día) para:
     1. Obtener API Key desde Secret Manager
-    2. Consultar Weather API para cada ubicación configurada (GET con query params)
+    2. Para cada ubicación, consultar 3 APIs de Weather:
+       - currentConditions: Condiciones actuales
+       - forecast/hours: Pronóstico próximas 24 horas
+       - forecast/days: Pronóstico próximos 5 días
     3. Enriquecer datos con metadata
-    4. Publicar a Pub/Sub topic 'clima-datos-crudos'
+    4. Publicar a 3 topics de Pub/Sub diferentes
 
     Args:
         solicitud: Objeto HTTP request de Cloud Functions
 
     Returns:
         Tuple[dict, int]: Respuesta JSON y código de estado HTTP
-
-    Ejemplo de respuesta exitosa:
-        {
-            "estado": "exitoso",
-            "total_ubicaciones": 3,
-            "mensajes_publicados": 3,
-            "detalles": [
-                {
-                    "ubicacion": "Santiago",
-                    "estado": "exitoso",
-                    "id_mensaje": "123456789"
-                }
-            ]
-        }
     """
     logger.info("=" * 60)
-    logger.info("Iniciando extracción de datos climáticos")
+    logger.info("Snow Alert - Iniciando extracción de datos climáticos")
+    logger.info("Extrayendo: Condiciones Actuales + Pronóstico 24h + Pronóstico 5 días")
     logger.info("=" * 60)
 
     resultados = {
         'estado': 'exitoso',
         'total_ubicaciones': 0,
-        'mensajes_publicados': 0,
-        'mensajes_fallidos': 0,
+        'resumen': {
+            'condiciones_actuales': {'exitosos': 0, 'fallidos': 0},
+            'pronostico_horas': {'exitosos': 0, 'fallidos': 0},
+            'pronostico_dias': {'exitosos': 0, 'fallidos': 0}
+        },
+        'total_mensajes_exitosos': 0,
+        'total_mensajes_fallidos': 0,
         'detalles': [],
         'errores': []
     }
 
     cliente_publicador = None
-    api_key = None
 
     try:
         # Validar configuración
@@ -704,67 +928,52 @@ def extraer_clima(solicitud: Request) -> Tuple[Dict[str, Any], int]:
 
         # Crear cliente de Pub/Sub
         cliente_publicador = pubsub_v1.PublisherClient()
-        ruta_topic = cliente_publicador.topic_path(proyecto, NOMBRE_TOPIC)
 
-        logger.info(f"Publicando a topic: {ruta_topic}")
+        logger.info(f"Topics configurados:")
+        logger.info(f"  - Condiciones Actuales: {TOPIC_CONDICIONES_ACTUALES}")
+        logger.info(f"  - Pronóstico Horas: {TOPIC_PRONOSTICO_HORAS}")
+        logger.info(f"  - Pronóstico Días: {TOPIC_PRONOSTICO_DIAS}")
 
         # Obtener ubicaciones a monitorear
         ubicaciones = obtener_ubicaciones_monitoreo()
         resultados['total_ubicaciones'] = len(ubicaciones)
 
         logger.info(f"Total de ubicaciones a procesar: {len(ubicaciones)}")
+        logger.info(f"Total de llamadas API esperadas: {len(ubicaciones) * 3}")
 
         # Procesar cada ubicación
         for ubicacion in ubicaciones:
-            nombre_ubicacion = ubicacion['nombre']
-            detalle_ubicacion = {
-                'ubicacion': nombre_ubicacion,
-                'estado': 'pendiente'
-            }
+            resultado_ubicacion = procesar_ubicacion(
+                ubicacion,
+                api_key,
+                cliente_publicador,
+                proyecto
+            )
 
-            try:
-                # Llamar a Weather API con GET + API Key
-                datos_clima = llamar_weather_api(
-                    ubicacion['latitud'],
-                    ubicacion['longitud'],
-                    nombre_ubicacion,
-                    api_key
-                )
+            # Actualizar contadores
+            resultados['total_mensajes_exitosos'] += resultado_ubicacion['exitosos']
+            resultados['total_mensajes_fallidos'] += resultado_ubicacion['fallidos']
 
-                # Enriquecer datos
-                datos_enriquecidos = enriquecer_datos_clima(datos_clima, ubicacion)
+            # Actualizar resumen por tipo
+            for tipo in ['condiciones_actuales', 'pronostico_horas', 'pronostico_dias']:
+                if resultado_ubicacion[tipo]['estado'] == 'exitoso':
+                    resultados['resumen'][tipo]['exitosos'] += 1
+                else:
+                    resultados['resumen'][tipo]['fallidos'] += 1
+                    resultados['errores'].append({
+                        'ubicacion': resultado_ubicacion['ubicacion'],
+                        'tipo': tipo,
+                        'error': resultado_ubicacion[tipo].get('error', 'Error desconocido')
+                    })
 
-                # Publicar a Pub/Sub
-                id_mensaje = publicar_a_pubsub(
-                    cliente_publicador,
-                    ruta_topic,
-                    datos_enriquecidos,
-                    nombre_ubicacion
-                )
-
-                # Registrar éxito
-                detalle_ubicacion['estado'] = 'exitoso'
-                detalle_ubicacion['id_mensaje'] = id_mensaje
-                resultados['mensajes_publicados'] += 1
-
-            except (ErrorExtraccionClima, ErrorPublicacionPubSub) as e:
-                # Error específico en esta ubicación
-                detalle_ubicacion['estado'] = 'fallido'
-                detalle_ubicacion['error'] = str(e)
-                resultados['mensajes_fallidos'] += 1
-                resultados['errores'].append({
-                    'ubicacion': nombre_ubicacion,
-                    'error': str(e)
-                })
-                logger.error(f"Error procesando {nombre_ubicacion}: {str(e)}")
-
-            resultados['detalles'].append(detalle_ubicacion)
+            resultados['detalles'].append(resultado_ubicacion)
 
         # Determinar estado final
-        if resultados['mensajes_fallidos'] == resultados['total_ubicaciones']:
+        total_esperado = len(ubicaciones) * 3  # 3 APIs por ubicación
+        if resultados['total_mensajes_fallidos'] == total_esperado:
             resultados['estado'] = 'fallido'
             codigo_estado = 500
-        elif resultados['mensajes_fallidos'] > 0:
+        elif resultados['total_mensajes_fallidos'] > 0:
             resultados['estado'] = 'parcial'
             codigo_estado = 207  # Multi-Status
         else:
@@ -772,10 +981,11 @@ def extraer_clima(solicitud: Request) -> Tuple[Dict[str, Any], int]:
             codigo_estado = 200
 
         logger.info("=" * 60)
-        logger.info(
-            f"Extracción completada: {resultados['mensajes_publicados']} exitosos, "
-            f"{resultados['mensajes_fallidos']} fallidos"
-        )
+        logger.info("Extracción completada:")
+        logger.info(f"  Condiciones Actuales: {resultados['resumen']['condiciones_actuales']['exitosos']} exitosos")
+        logger.info(f"  Pronóstico Horas: {resultados['resumen']['pronostico_horas']['exitosos']} exitosos")
+        logger.info(f"  Pronóstico Días: {resultados['resumen']['pronostico_dias']['exitosos']} exitosos")
+        logger.info(f"  Total: {resultados['total_mensajes_exitosos']} exitosos, {resultados['total_mensajes_fallidos']} fallidos")
         logger.info("=" * 60)
 
         return resultados, codigo_estado
@@ -797,10 +1007,5 @@ def extraer_clima(solicitud: Request) -> Tuple[Dict[str, Any], int]:
         }, 500
 
     finally:
-        # Cerrar cliente si existe
         if cliente_publicador:
-            try:
-                # Pub/Sub client no necesita close explícito
-                pass
-            except Exception as e:
-                logger.warning(f"Error al finalizar cliente: {str(e)}")
+            pass  # Pub/Sub client no necesita close explícito
