@@ -1,0 +1,50 @@
+[
+  {"name": "nombre_ubicacion", "type": "STRING", "mode": "REQUIRED", "description": "Nombre del centro/pueblo/base (snake_case)"},
+  {"name": "latitud", "type": "FLOAT64", "mode": "REQUIRED", "description": "Latitud del punto central"},
+  {"name": "longitud", "type": "FLOAT64", "mode": "REQUIRED", "description": "Longitud del punto central"},
+  {"name": "region", "type": "STRING", "mode": "NULLABLE", "description": "Región: chile/argentina/norteamerica/europa_alpes/asia_oceania/etc"},
+
+  {"name": "fecha_captura", "type": "DATE", "mode": "REQUIRED", "description": "Fecha de la captura"},
+  {"name": "tipo_captura", "type": "STRING", "mode": "REQUIRED", "description": "manana/tarde/noche"},
+  {"name": "timestamp_imagen", "type": "TIMESTAMP", "mode": "NULLABLE", "description": "Timestamp exacto de la imagen satelital"},
+  {"name": "timestamp_descarga", "type": "TIMESTAMP", "mode": "REQUIRED", "description": "Momento de ejecución de la descarga"},
+  {"name": "antiguedad_horas", "type": "FLOAT64", "mode": "NULLABLE", "description": "Horas entre captura satelital y descarga"},
+
+  {"name": "fuente_principal", "type": "STRING", "mode": "NULLABLE", "description": "goes18/goes16/modis_terra/modis_aqua/viirs"},
+  {"name": "coleccion_gee", "type": "STRING", "mode": "NULLABLE", "description": "ID completo de la colección GEE usada"},
+  {"name": "resolucion_m", "type": "INT64", "mode": "NULLABLE", "description": "Resolución espacial en metros"},
+
+  {"name": "pct_nubes", "type": "FLOAT64", "mode": "NULLABLE", "description": "% de cobertura de nubes en el tile (0-100)"},
+  {"name": "es_nublado", "type": "BOOLEAN", "mode": "NULLABLE", "description": "True si nubes > 80%"},
+  {"name": "tiene_nieve", "type": "BOOLEAN", "mode": "NULLABLE", "description": "True si NDSI detectó nieve en el tile"},
+
+  {"name": "ndsi_medio", "type": "FLOAT64", "mode": "NULLABLE", "description": "NDSI promedio en píxeles sin nube (0-100)"},
+  {"name": "ndsi_max", "type": "FLOAT64", "mode": "NULLABLE", "description": "NDSI máximo en el tile"},
+  {"name": "pct_cobertura_nieve", "type": "FLOAT64", "mode": "NULLABLE", "description": "% del tile cubierto por nieve (NDSI>=40)"},
+  {"name": "albedo_nieve_medio", "type": "FLOAT64", "mode": "NULLABLE", "description": "Albedo promedio en zonas de nieve (%)"},
+
+  {"name": "lst_dia_celsius", "type": "FLOAT64", "mode": "NULLABLE", "description": "LST diurna media del tile (°C), null si nocturno"},
+  {"name": "lst_noche_celsius", "type": "FLOAT64", "mode": "NULLABLE", "description": "LST nocturna media del tile (°C), null si diurno"},
+  {"name": "lst_min_celsius", "type": "FLOAT64", "mode": "NULLABLE", "description": "LST mínima en el tile (°C)"},
+
+  {"name": "era5_snow_depth_m", "type": "FLOAT64", "mode": "NULLABLE", "description": "Profundidad de nieve ERA5-Land (metros)"},
+  {"name": "era5_swe_m", "type": "FLOAT64", "mode": "NULLABLE", "description": "Snow Water Equivalent ERA5-Land (metros)"},
+  {"name": "era5_snow_cover", "type": "FLOAT64", "mode": "NULLABLE", "description": "Fracción de cobertura nieve ERA5 (0-1)"},
+  {"name": "era5_temp_2m_celsius", "type": "FLOAT64", "mode": "NULLABLE", "description": "Temperatura a 2m ERA5-Land (°C)"},
+
+  {"name": "sentinel2_disponible", "type": "BOOLEAN", "mode": "NULLABLE", "description": "True si hay imagen Sentinel-2 reciente (<5 días)"},
+  {"name": "sentinel2_fecha", "type": "DATE", "mode": "NULLABLE", "description": "Fecha de imagen Sentinel-2 más reciente, null si no hay"},
+  {"name": "sentinel2_pct_nieve", "type": "FLOAT64", "mode": "NULLABLE", "description": "% cobertura nieve según Sentinel-2 SCL"},
+
+  {"name": "uri_geotiff_visual", "type": "STRING", "mode": "NULLABLE", "description": "URI GCS del GeoTIFF visual"},
+  {"name": "uri_geotiff_ndsi", "type": "STRING", "mode": "NULLABLE", "description": "URI GCS del GeoTIFF NDSI"},
+  {"name": "uri_geotiff_lst", "type": "STRING", "mode": "NULLABLE", "description": "URI GCS del GeoTIFF LST"},
+  {"name": "uri_geotiff_era5", "type": "STRING", "mode": "NULLABLE", "description": "URI GCS del GeoTIFF ERA5"},
+  {"name": "uri_preview_visual", "type": "STRING", "mode": "NULLABLE", "description": "URI GCS del PNG preview visual"},
+  {"name": "uri_preview_ndsi", "type": "STRING", "mode": "NULLABLE", "description": "URI GCS del PNG preview NDSI"},
+  {"name": "uri_preview_lst", "type": "STRING", "mode": "NULLABLE", "description": "URI GCS del PNG preview LST"},
+  {"name": "uri_thumbnail_visual", "type": "STRING", "mode": "NULLABLE", "description": "URI GCS del thumbnail visual (para landing)"},
+  {"name": "uri_thumbnail_ndsi", "type": "STRING", "mode": "NULLABLE", "description": "URI GCS del thumbnail NDSI"},
+
+  {"name": "version_metodologia", "type": "STRING", "mode": "NULLABLE", "description": "Versión del algoritmo (ej: v1.0.0)"}
+]

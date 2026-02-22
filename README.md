@@ -517,6 +517,191 @@ ORDER BY
 
 ---
 
+## Monitor Satelital de Nieve
+
+### Descripción
+
+Snow Alert incluye un módulo de **monitoreo satelital de nieve** que utiliza Google Earth Engine (GEE) para descargar automáticamente imágenes satelitales de las ubicaciones monitoreadas. El sistema obtiene:
+
+1. **Imagen visual** (true color + false color nieve)
+2. **Cobertura de nieve** (NDSI / fracción de nieve)
+3. **Temperatura superficial** (LST día y noche)
+4. **Datos ERA5-Land** (gap-filler continuo sin nubes)
+
+### Fuentes Satelitales por Región
+
+El sistema adapta automáticamente la fuente satelital según la región geográfica:
+
+| Región | Fuente Principal | Frecuencia | Resolución |
+|--------|-----------------|------------|------------|
+| **Chile / Argentina** | GOES-18 | Cada 10 min | 2 km |
+| **Norteamérica** | GOES-16 | Cada 10 min | 2 km |
+| **Europa / Alpes** | MODIS Terra/Aqua | 2x/día | 500 m |
+| **Asia / Oceanía** | MODIS Terra/Aqua | 2x/día | 500 m |
+| **Todas las regiones** | ERA5-Land (backup) | Horario | 11 km |
+
+### Productos Generados
+
+#### Por Cada Captura (3 veces al día)
+
+| Producto | Formato | Uso |
+|----------|---------|-----|
+| **GeoTIFF Visual** | Multi-banda | Análisis GIS |
+| **GeoTIFF NDSI** | 1 banda (0-100) | Cobertura de nieve |
+| **GeoTIFF LST** | 1 banda (°C) | Temperatura superficial |
+| **GeoTIFF ERA5** | 3 bandas | Snow depth, SWE, cover |
+| **Preview PNG** | 768×768 px | Dashboards, reportes |
+| **Thumbnail PNG** | 256×256 px | Landing page, listas |
+
+### Métricas en BigQuery
+
+El sistema registra las siguientes métricas en la tabla `clima.imagenes_satelitales`:
+
+| Categoría | Métricas |
+|-----------|----------|
+| **Nubes** | pct_nubes, es_nublado |
+| **Nieve NDSI** | ndsi_medio, ndsi_max, pct_cobertura_nieve, tiene_nieve |
+| **Temperatura** | lst_dia_celsius, lst_noche_celsius, lst_min_celsius |
+| **ERA5-Land** | snow_depth_m, swe_m, snow_cover, temp_2m_celsius |
+| **Sentinel-2** | disponible, fecha, pct_nieve (cuando hay imagen) |
+
+### Cloud Function: Monitor Satelital de Nieve
+
+- **Nombre**: `monitor-satelital-nieve`
+- **Trigger**: HTTP (invocado por Cloud Scheduler)
+- **Runtime**: Python 3.11
+- **Memoria**: 2048 MB
+- **Timeout**: 540 segundos (9 minutos)
+- **Frecuencia**: 3x/día (08:30, 14:30, 20:30)
+- **Funcionalidades**:
+  - Inicializa Google Earth Engine con proyecto GCP
+  - Determina fuente satelital por región (GOES vs MODIS)
+  - Descarga imágenes usando `getDownloadURL()` y `getThumbURL()`
+  - Calcula métricas de cobertura de nieve y temperatura
+  - Almacena GeoTIFF, previews y thumbnails en Cloud Storage
+  - Registra métricas en BigQuery
+  - ERA5-Land como gap-filler (sin problemas de nubes)
+
+### Estructura de Archivos en Cloud Storage
+
+```
+gs://{proyecto}-datos-clima-bronce/satelital/
+├── geotiff/
+│   └── {ubicacion}/
+│       └── {YYYY-MM-DD}/
+│           ├── {ubicacion}_{captura}_{fuente}_visual.tif
+│           ├── {ubicacion}_{captura}_{fuente}_ndsi.tif
+│           ├── {ubicacion}_{captura}_{fuente}_lst.tif
+│           └── {ubicacion}_{captura}_era5_nieve.tif
+├── preview/
+│   └── {ubicacion}/
+│       └── {YYYY-MM-DD}/
+│           ├── {ubicacion}_{captura}_visual_768px.png
+│           ├── {ubicacion}_{captura}_ndsi_768px.png
+│           └── {ubicacion}_{captura}_lst_768px.png
+└── thumbnail/
+    └── {ubicacion}/
+        ├── {ubicacion}_ultimo_visual_256px.png
+        ├── {ubicacion}_ultimo_ndsi_256px.png
+        └── {ubicacion}_ultimo_lst_256px.png
+```
+
+### Estructura del Módulo
+
+```
+monitor_satelital/
+├── __init__.py              # Inicialización del paquete
+├── main.py                  # Cloud Function orquestadora
+├── constantes.py            # Colecciones GEE, bandas, vis_params
+├── fuentes.py               # Selección de fuente por región
+├── productos.py             # Procesamiento por producto
+├── metricas.py              # Cálculo de métricas para BigQuery
+├── descargador.py           # Descarga GEE y subida a GCS
+├── requirements.txt         # Dependencias (earthengine-api)
+├── schema_imagenes_bigquery.json  # Schema BigQuery
+└── .gcloudignore            # Archivos a ignorar en deploy
+```
+
+### Consultas de Ejemplo
+
+#### Cobertura de nieve más reciente por ubicación
+
+```sql
+SELECT
+  nombre_ubicacion,
+  fecha_captura,
+  tipo_captura,
+  fuente_principal,
+  pct_cobertura_nieve,
+  ndsi_medio,
+  lst_dia_celsius,
+  era5_snow_depth_m
+FROM
+  `clima.imagenes_satelitales`
+WHERE
+  fecha_captura = (SELECT MAX(fecha_captura) FROM `clima.imagenes_satelitales`)
+ORDER BY
+  pct_cobertura_nieve DESC;
+```
+
+#### Evolución de cobertura de nieve (últimos 7 días)
+
+```sql
+SELECT
+  nombre_ubicacion,
+  fecha_captura,
+  AVG(pct_cobertura_nieve) AS avg_cobertura_nieve,
+  AVG(ndsi_medio) AS avg_ndsi,
+  AVG(era5_snow_depth_m) AS avg_snow_depth
+FROM
+  `clima.imagenes_satelitales`
+WHERE
+  fecha_captura >= DATE_SUB(CURRENT_DATE(), INTERVAL 7 DAY)
+GROUP BY
+  nombre_ubicacion, fecha_captura
+ORDER BY
+  nombre_ubicacion, fecha_captura;
+```
+
+#### Ubicaciones con mejor cobertura de nieve
+
+```sql
+SELECT
+  nombre_ubicacion,
+  region,
+  ROUND(AVG(pct_cobertura_nieve), 1) AS avg_cobertura,
+  ROUND(AVG(era5_snow_depth_m), 3) AS avg_profundidad_m,
+  COUNT(*) AS total_capturas
+FROM
+  `clima.imagenes_satelitales`
+WHERE
+  fecha_captura >= DATE_SUB(CURRENT_DATE(), INTERVAL 30 DAY)
+  AND es_nublado = FALSE
+GROUP BY
+  nombre_ubicacion, region
+HAVING
+  avg_cobertura > 50
+ORDER BY
+  avg_cobertura DESC;
+```
+
+### Cuota de Google Earth Engine
+
+El tier gratuito Community provee **150 EECU-horas/mes**. Estimación de uso:
+
+| Parámetro | Valor |
+|-----------|-------|
+| Ubicaciones | 57 |
+| Capturas/día | 3 |
+| Productos/captura | ~4 |
+| EECU-seg/producto | ~10 |
+| **Total/ejecución** | ~0.5 EECU-horas |
+| **Total/mes** (3x/día × 30 días) | ~45 EECU-horas |
+
+El uso está dentro del límite gratuito de 150 EECU-horas/mes.
+
+---
+
 ## Requisitos Previos
 
 ### Software Necesario
@@ -994,6 +1179,17 @@ snow_alert/
 │   ├── visualizacion.py        # Generación de mapas PNG y GeoJSON
 │   ├── requirements.txt        # Dependencias (earthengine-api, matplotlib)
 │   ├── schema_zonas_bigquery.json  # Schema BigQuery
+│   └── .gcloudignore          # Archivos a ignorar en deploy
+├── monitor_satelital/          # Monitor Satelital de Nieve
+│   ├── __init__.py             # Inicialización del paquete
+│   ├── main.py                 # Cloud Function orquestadora
+│   ├── constantes.py           # Colecciones GEE, bandas, vis_params
+│   ├── fuentes.py              # Selección de fuente por región
+│   ├── productos.py            # Procesamiento por producto
+│   ├── metricas.py             # Cálculo de métricas para BigQuery
+│   ├── descargador.py          # Descarga GEE y subida a GCS
+│   ├── requirements.txt        # Dependencias (earthengine-api)
+│   ├── schema_imagenes_bigquery.json  # Schema BigQuery
 │   └── .gcloudignore          # Archivos a ignorar en deploy
 ├── desplegar.sh                # Script de despliegue automatizado
 ├── .gcloudignore              # Archivos a ignorar en deploy general

@@ -662,6 +662,72 @@ gcloud run services add-iam-policy-binding $FUNCION_ANALIZADOR \
 
 imprimir_exito "Permisos de invocación configurados para analizador"
 
+# ============================================================================
+# MÓDULO DE MONITOR SATELITAL DE NIEVE
+# ============================================================================
+
+imprimir_titulo "Configurando Monitor Satelital de Nieve"
+TABLA_IMAGENES="imagenes_satelitales"
+FUNCION_MONITOR="monitor-satelital-nieve"
+
+# Crear tabla de BigQuery: Imágenes Satelitales
+imprimir_info "Creando tabla de BigQuery: Imágenes Satelitales"
+
+if bq ls --project_id=$ID_PROYECTO $DATASET_CLIMA | grep -q $TABLA_IMAGENES; then
+    imprimir_advertencia "Tabla ya existe: $TABLA_IMAGENES"
+else
+    bq mk --project_id=$ID_PROYECTO \
+        --table \
+        --time_partitioning_field=fecha_captura \
+        --time_partitioning_type=DAY \
+        --clustering_fields=nombre_ubicacion,tipo_captura \
+        --description="Imágenes satelitales de cobertura de nieve (GOES, MODIS, ERA5)" \
+        $DATASET_CLIMA.$TABLA_IMAGENES \
+        ./monitor_satelital/schema_imagenes_bigquery.json
+    imprimir_exito "Tabla creada: $TABLA_IMAGENES"
+fi
+
+# Crear estructura de directorios en bucket (se crean automáticamente al subir)
+imprimir_info "Verificando estructura de directorios satelital/ en bucket..."
+
+# Desplegar Cloud Function Monitor Satelital
+imprimir_titulo "Desplegando Cloud Function: Monitor Satelital de Nieve"
+gcloud functions deploy $FUNCION_MONITOR \
+    --gen2 \
+    --runtime=python311 \
+    --region=$REGION \
+    --source=./monitor_satelital \
+    --entry-point=monitorear_satelital \
+    --trigger-http \
+    --service-account=${CUENTA_SERVICIO}@${ID_PROYECTO}.iam.gserviceaccount.com \
+    --set-env-vars=GCP_PROJECT=$ID_PROYECTO,GEE_PROJECT=$ID_PROYECTO \
+    --memory=2048MB \
+    --timeout=540s \
+    --max-instances=3 \
+    --project=$ID_PROYECTO \
+    --quiet
+
+imprimir_exito "Cloud Function desplegada: $FUNCION_MONITOR"
+
+# Obtener URL del monitor satelital
+URL_MONITOR=$(gcloud functions describe $FUNCION_MONITOR \
+    --gen2 \
+    --region=$REGION \
+    --project=$ID_PROYECTO \
+    --format='value(serviceConfig.uri)')
+
+echo "URL del monitor satelital: $URL_MONITOR"
+
+# Otorgar permisos de invocación
+gcloud run services add-iam-policy-binding $FUNCION_MONITOR \
+    --region=$REGION \
+    --member="serviceAccount:${CUENTA_SERVICIO}@${ID_PROYECTO}.iam.gserviceaccount.com" \
+    --role="roles/run.invoker" \
+    --project=$ID_PROYECTO \
+    --quiet
+
+imprimir_exito "Permisos de invocación configurados para monitor satelital"
+
 # Crear job de Cloud Scheduler
 imprimir_titulo "Creando job de Cloud Scheduler"
 
@@ -715,6 +781,33 @@ gcloud scheduler jobs create http $JOB_ANALIZADOR \
 
 imprimir_exito "Job de Cloud Scheduler creado: $JOB_ANALIZADOR"
 
+# Crear job de Cloud Scheduler para Monitor Satelital
+imprimir_titulo "Creando job de Cloud Scheduler: Monitor Satelital de Nieve"
+JOB_MONITOR="monitor-satelital-job"
+
+# Eliminar job existente si existe
+if gcloud scheduler jobs describe $JOB_MONITOR --location=$REGION --project=$ID_PROYECTO &> /dev/null; then
+    imprimir_advertencia "Eliminando job existente: $JOB_MONITOR"
+    gcloud scheduler jobs delete $JOB_MONITOR \
+        --location=$REGION \
+        --project=$ID_PROYECTO \
+        --quiet
+fi
+
+# Crear nuevo job (3 veces al día - sincronizado con extractor de clima)
+gcloud scheduler jobs create http $JOB_MONITOR \
+    --location=$REGION \
+    --schedule="30 8,14,20 * * *" \
+    --uri=$URL_MONITOR \
+    --http-method=POST \
+    --oidc-service-account-email=${CUENTA_SERVICIO}@${ID_PROYECTO}.iam.gserviceaccount.com \
+    --oidc-token-audience=$URL_MONITOR \
+    --time-zone=$ZONA_HORARIA \
+    --description="Descarga imágenes satelitales 3 veces al día (08:30, 14:30, 20:30)" \
+    --project=$ID_PROYECTO
+
+imprimir_exito "Job de Cloud Scheduler creado: $JOB_MONITOR"
+
 # Resumen final
 imprimir_titulo "DESPLIEGUE COMPLETADO EXITOSAMENTE"
 
@@ -737,6 +830,7 @@ echo "  • Tabla: $TABLA_CONDICIONES (condiciones actuales)"
 echo "  • Tabla: $TABLA_PRONOSTICO_HORAS (pronóstico 76 horas)"
 echo "  • Tabla: $TABLA_PRONOSTICO_DIAS (pronóstico 10 días)"
 echo "  • Tabla: $TABLA_ZONAS (zonas de avalancha EAWS)"
+echo "  • Tabla: $TABLA_IMAGENES (imágenes satelitales)"
 echo ""
 echo "  Cloud Functions:"
 echo "  • $FUNCION_EXTRACTOR (extrae datos de Weather API)"
@@ -744,32 +838,39 @@ echo "  • $FUNCION_PROCESADOR (procesa condiciones actuales)"
 echo "  • $FUNCION_PROCESADOR_HORAS (procesa pronóstico por horas)"
 echo "  • $FUNCION_PROCESADOR_DIAS (procesa pronóstico por días)"
 echo "  • $FUNCION_ANALIZADOR (análisis satelital de zonas riesgosas)"
+echo "  • $FUNCION_MONITOR (monitor satelital de nieve)"
 echo ""
 echo "  Scheduler:"
 echo "  • $JOB_SCHEDULER (3x/día: 08:00, 14:00, 20:00)"
 echo "  • $JOB_ANALIZADOR (mensual: día 1 a las 03:00)"
+echo "  • $JOB_MONITOR (3x/día: 08:30, 14:30, 20:30)"
 echo ""
 echo -e "${AZUL}URLs importantes:${NC}"
 echo "  • Extractor: $URL_EXTRACTOR"
 echo "  • Analizador: $URL_ANALIZADOR"
+echo "  • Monitor Satelital: $URL_MONITOR"
 echo "  • Logs: https://console.cloud.google.com/logs/query?project=$ID_PROYECTO"
 echo "  • BigQuery: https://console.cloud.google.com/bigquery?project=$ID_PROYECTO&d=$DATASET_CLIMA"
 echo ""
 echo -e "${AMARILLO}Próximos pasos:${NC}"
 echo "  1. Probar extractor manualmente: curl -X POST $URL_EXTRACTOR"
 echo "  2. Probar analizador manualmente: curl -X POST $URL_ANALIZADOR"
-echo "  3. Ver logs: gcloud functions logs read $FUNCION_EXTRACTOR --gen2 --region=$REGION"
-echo "  4. Consultar condiciones actuales:"
+echo "  3. Probar monitor satelital: curl -X POST $URL_MONITOR"
+echo "  4. Ver logs: gcloud functions logs read $FUNCION_EXTRACTOR --gen2 --region=$REGION"
+echo "  5. Consultar condiciones actuales:"
 echo "     bq query --use_legacy_sql=false 'SELECT * FROM $DATASET_CLIMA.$TABLA_CONDICIONES LIMIT 10'"
-echo "  5. Consultar pronóstico por horas:"
+echo "  6. Consultar pronóstico por horas:"
 echo "     bq query --use_legacy_sql=false 'SELECT * FROM $DATASET_CLIMA.$TABLA_PRONOSTICO_HORAS LIMIT 10'"
-echo "  6. Consultar pronóstico por días:"
+echo "  7. Consultar pronóstico por días:"
 echo "     bq query --use_legacy_sql=false 'SELECT * FROM $DATASET_CLIMA.$TABLA_PRONOSTICO_DIAS LIMIT 10'"
-echo "  7. Consultar zonas de avalancha:"
+echo "  8. Consultar zonas de avalancha:"
 echo "     bq query --use_legacy_sql=false 'SELECT nombre_ubicacion, indice_riesgo_topografico, clasificacion_riesgo FROM $DATASET_CLIMA.$TABLA_ZONAS LIMIT 10'"
-echo "  8. El scheduler ejecutará automáticamente:"
+echo "  9. Consultar imágenes satelitales:"
+echo "     bq query --use_legacy_sql=false 'SELECT nombre_ubicacion, fecha_captura, fuente_principal, pct_cobertura_nieve FROM $DATASET_CLIMA.$TABLA_IMAGENES LIMIT 10'"
+echo " 10. El scheduler ejecutará automáticamente:"
 echo "     - Clima: 3 veces al día (08:00, 14:00 y 20:00)"
 echo "     - Topografía: mensualmente (día 1 a las 03:00)"
+echo "     - Satelital: 3 veces al día (08:30, 14:30 y 20:30)"
 echo ""
 
 imprimir_exito "¡Listo! El sistema está desplegado y funcionando."
