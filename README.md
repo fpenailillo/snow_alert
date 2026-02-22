@@ -799,7 +799,7 @@ Ejemplo:
 El script realiza las siguientes acciones:
 
 1. ✓ Valida dependencias
-2. ✓ Habilita APIs necesarias (incluyendo Weather API y Secret Manager)
+2. ✓ Habilita APIs necesarias (incluyendo Weather API, Earth Engine y Secret Manager)
 3. ✓ Crea cuenta de servicio y asigna permisos
 4. ✓ Configura Secret Manager para Weather API Key
 5. ✓ Crea 6 topics de Pub/Sub:
@@ -807,15 +807,22 @@ El script realiza las siguientes acciones:
    - `clima-pronostico-horas` + DLQ
    - `clima-pronostico-dias` + DLQ
 6. ✓ Crea bucket de Cloud Storage con ciclo de vida
-7. ✓ Crea dataset y 3 tablas de BigQuery:
+7. ✓ Crea dataset y 5 tablas de BigQuery:
    - `condiciones_actuales`
    - `pronostico_horas`
    - `pronostico_dias`
+   - `zonas_avalancha`
+   - `imagenes_satelitales`
 8. ✓ Despliega Cloud Function Extractor
 9. ✓ Despliega Cloud Function Procesador (condiciones actuales)
 10. ✓ Despliega Cloud Function Procesador Horas
 11. ✓ Despliega Cloud Function Procesador Días
-12. ✓ Configura Cloud Scheduler (3x/día: 08:00, 14:00, 20:00)
+12. ✓ Despliega Cloud Function Analizador Satelital de Zonas Riesgosas en Avalanchas
+13. ✓ Despliega Cloud Function Monitor Satelital de Nieve
+14. ✓ Configura 3 jobs de Cloud Scheduler:
+    - `extraer-clima-job` (3x/día: 08:00, 14:00, 20:00)
+    - `monitor-satelital-job` (3x/día: 08:30, 14:30, 20:30)
+    - `analizar-topografia-job` (mensual: día 1 a las 03:00)
 
 **Tiempo estimado**: 5-10 minutos
 
