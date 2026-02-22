@@ -298,6 +298,174 @@ El sistema monitorea **57 ubicaciones** de destinos de nieve y montaña a nivel 
   - **Período nocturno** (15 campos): condición, temperatura, sensación, viento, precipitación, nubes, UV
   - Metadata: timestamps de extracción e ingestión, URI datos crudos
 
+#### Tabla: `zonas_avalancha`
+- **Particionamiento**: Por `DATE(fecha_analisis)`
+- **Clustering**: Por `nombre_ubicacion`, `clasificacion_riesgo`
+- **Cobertura**: Análisis estático mensual de todas las ubicaciones
+- **Esquema** (36 campos):
+  - Identificación: nombre_ubicacion, latitud, longitud, fecha_analisis
+  - **Áreas de zonas** (7 campos): zona_inicio_ha, zona_transito_ha, zona_deposito_ha, porcentajes
+  - **Pendientes** (3 campos): pendiente_media_inicio, pendiente_max_inicio, pendiente_p90_inicio
+  - **Aspecto y elevación** (4 campos): aspecto_predominante, elevaciones, desnivel
+  - **Sub-zonas de inicio** (3 campos): inicio_moderado_ha (30-45°), inicio_severo_ha (45-60°), inicio_extremo_ha (>60°)
+  - **Índice de riesgo** (6 campos): indice_riesgo_topografico (0-100), clasificacion_riesgo, componentes
+  - **Estimaciones EAWS** (4 campos): frecuencia_estimada, tamano_estimado, peligro_base, descripcion_riesgo
+  - **Metadatos** (4 campos): hemisferio, radio_analisis, resolucion_dem, fuente_dem
+
+---
+
+## Análisis Topográfico de Avalanchas
+
+### Descripción
+
+Snow Alert incluye un módulo de **análisis topográfico de avalanchas** que utiliza Google Earth Engine (GEE) con datos SRTM para identificar, clasificar y cubicar las zonas funcionales de avalancha en cada ubicación monitoreada.
+
+El análisis implementa la metodología **EAWS 2025** (European Avalanche Warning Services) según las publicaciones:
+- Müller, K., Techel, F., & Mitterer, C. (2025). *The EAWS matrix, Part A*. Nat. Hazards Earth Syst. Sci., 25, 4503-4525.
+- Techel, F., Müller, K., & Schweizer, J. (2025). *The EAWS matrix, Part B*. Nat. Hazards Earth Syst. Sci. (en revisión).
+
+### Zonas Funcionales de Avalancha
+
+El sistema identifica tres zonas funcionales basadas en parámetros topográficos:
+
+| Zona | Pendiente | Curvatura | Descripción |
+|------|-----------|-----------|-------------|
+| **Inicio** | 30° - 60° | Convexa | Donde se suelta la avalancha. Área crítica para estabilidad del manto. |
+| **Tránsito** | 15° - 30° | Cóncava | Corredor donde la avalancha acelera y fluye. Influye en el tamaño final. |
+| **Depósito** | < 15° | Cóncava | Donde se acumula la nieve. Zona de impacto y potencial destructivo. |
+
+### Factores EAWS Estimados
+
+El módulo calcula estimaciones de los tres factores de la matriz EAWS:
+
+1. **Estabilidad** (Factor 1): Evaluada mediante porcentaje de zona de inicio y aspectos de sombra
+2. **Frecuencia** (Factor 2): Estimada según extensión de zona de inicio
+   - `many`: >20% zona inicio
+   - `some`: 10-20% zona inicio
+   - `a_few`: 5-10% zona inicio
+   - `nearly_none`: <5% zona inicio
+3. **Tamaño** (Factor 3): Estimado según desnivel vertical inicio→depósito
+   - Tamaño 1: <100m desnivel
+   - Tamaño 2: 100-300m
+   - Tamaño 3: 300-600m
+   - Tamaño 4: 600-1000m
+   - Tamaño 5: >1000m
+
+### Índice de Riesgo Topográfico
+
+El sistema genera un índice estático de susceptibilidad topográfica (0-100) con cuatro componentes:
+
+| Componente | Peso | Descripción |
+|------------|------|-------------|
+| **Área** | 25% | Hectáreas y porcentaje de zona de inicio |
+| **Pendiente** | 25% | Pendiente máxima y media en zona de inicio |
+| **Aspecto** | 25% | Orientación a sombra (N en HS, S en HN) |
+| **Desnivel** | 25% | Desnivel vertical entre inicio y depósito |
+
+**Clasificación resultante:**
+- **BAJO** (0-25): Terreno con baja susceptibilidad
+- **MEDIO** (26-50): Susceptibilidad moderada, atención en condiciones inestables
+- **ALTO** (51-75): Alta susceptibilidad, evitar en peligro elevado
+- **EXTREMO** (76-100): Solo para expertos con condiciones favorables confirmadas
+
+### Cloud Function: Analizador de Avalanchas
+
+- **Trigger**: HTTP (invocado por Cloud Scheduler)
+- **Runtime**: Python 3.11
+- **Memoria**: 1024 MB
+- **Timeout**: 540 segundos (9 minutos)
+- **Frecuencia**: Mensual (día 1 a las 03:00)
+- **Funcionalidades**:
+  - Inicializa Google Earth Engine con proyecto GCP
+  - Carga DEM SRTM de 30m de resolución
+  - Clasifica zonas de inicio, tránsito y depósito
+  - Calcula estadísticas de cubicación (áreas, pendientes, aspectos)
+  - Genera índice de riesgo topográfico
+  - Almacena en BigQuery (tabla `zonas_avalancha`)
+  - Almacena JSON detallado en Cloud Storage
+
+### Estructura del Módulo
+
+```
+analizador_avalanchas/
+├── __init__.py              # Inicialización del paquete
+├── main.py                  # Cloud Function orquestadora
+├── eaws_constantes.py       # Matriz EAWS 2025 y constantes
+├── zonas.py                 # Clasificación GEE de zonas
+├── cubicacion.py            # Cálculo de áreas y estadísticas
+├── indice_riesgo.py         # Índice de riesgo 0-100
+├── requirements.txt         # Dependencias (earthengine-api)
+├── schema_zonas_bigquery.json  # Schema BigQuery
+└── .gcloudignore            # Archivos a ignorar en deploy
+```
+
+### Consultas de Ejemplo
+
+#### Ubicaciones con mayor riesgo topográfico
+
+```sql
+SELECT
+  nombre_ubicacion,
+  indice_riesgo_topografico,
+  clasificacion_riesgo,
+  zona_inicio_ha,
+  desnivel_inicio_deposito,
+  peligro_eaws_base
+FROM
+  `clima.zonas_avalancha`
+WHERE
+  fecha_analisis = (SELECT MAX(fecha_analisis) FROM `clima.zonas_avalancha`)
+ORDER BY
+  indice_riesgo_topografico DESC
+LIMIT 10;
+```
+
+#### Centros de esquí por clasificación de riesgo
+
+```sql
+SELECT
+  clasificacion_riesgo,
+  COUNT(*) AS total_ubicaciones,
+  ROUND(AVG(zona_inicio_ha), 2) AS avg_zona_inicio_ha,
+  ROUND(AVG(pendiente_max_inicio), 1) AS avg_pendiente_max,
+  ROUND(AVG(desnivel_inicio_deposito), 0) AS avg_desnivel
+FROM
+  `clima.zonas_avalancha`
+WHERE
+  fecha_analisis = (SELECT MAX(fecha_analisis) FROM `clima.zonas_avalancha`)
+GROUP BY
+  clasificacion_riesgo
+ORDER BY
+  CASE clasificacion_riesgo
+    WHEN 'extremo' THEN 1
+    WHEN 'alto' THEN 2
+    WHEN 'medio' THEN 3
+    WHEN 'bajo' THEN 4
+  END;
+```
+
+#### Detalle de componentes de riesgo
+
+```sql
+SELECT
+  nombre_ubicacion,
+  indice_riesgo_topografico,
+  componente_area,
+  componente_pendiente,
+  componente_aspecto,
+  componente_desnivel,
+  descripcion_riesgo
+FROM
+  `clima.zonas_avalancha`
+WHERE
+  clasificacion_riesgo = 'extremo'
+  AND fecha_analisis = (SELECT MAX(fecha_analisis) FROM `clima.zonas_avalancha`)
+ORDER BY
+  indice_riesgo_topografico DESC;
+```
+
+---
+
 ## Requisitos Previos
 
 ### Software Necesario
@@ -765,6 +933,16 @@ snow_alert/
 │   ├── main.py                 # Procesador de pronóstico por días
 │   ├── requirements.txt        # Dependencias
 │   └── .gcloudignore          # Archivos a ignorar en deploy
+├── analizador_avalanchas/
+│   ├── __init__.py             # Inicialización del paquete
+│   ├── main.py                 # Cloud Function de análisis topográfico
+│   ├── eaws_constantes.py      # Matriz EAWS 2025 y constantes de terreno
+│   ├── zonas.py                # Clasificación GEE de zonas de avalancha
+│   ├── cubicacion.py           # Cálculo de áreas y estadísticas
+│   ├── indice_riesgo.py        # Índice de riesgo topográfico 0-100
+│   ├── requirements.txt        # Dependencias (earthengine-api)
+│   ├── schema_zonas_bigquery.json  # Schema BigQuery
+│   └── .gcloudignore          # Archivos a ignorar en deploy
 ├── desplegar.sh                # Script de despliegue automatizado
 ├── .gcloudignore              # Archivos a ignorar en deploy general
 ├── .gitignore                  # Archivos a ignorar en git
@@ -864,12 +1042,20 @@ gcloud functions logs read procesador-clima --gen2 --region=$REGION --limit=100
 
 ## Referencias
 
+### Google Cloud Platform
 - [Google Weather API Documentation](https://developers.google.com/maps/documentation/weather)
 - [Google Cloud Functions](https://cloud.google.com/functions/docs)
 - [Google Cloud Pub/Sub](https://cloud.google.com/pubsub/docs)
 - [Google BigQuery](https://cloud.google.com/bigquery/docs)
 - [Cloud Scheduler](https://cloud.google.com/scheduler/docs)
+- [Google Earth Engine](https://earthengine.google.com/)
 - [Arquitectura Medallion](https://www.databricks.com/glossary/medallion-architecture)
+
+### Metodología EAWS (Avalanchas)
+- Müller, K., Techel, F., & Mitterer, C. (2025). *The EAWS matrix, Part A: Building a new European avalanche danger scale based on three interacting factors*. Nat. Hazards Earth Syst. Sci., 25, 4503-4525. [DOI: 10.5194/nhess-25-4503-2025](https://doi.org/10.5194/nhess-25-4503-2025)
+- Techel, F., Müller, K., & Schweizer, J. (2025). *The EAWS matrix, Part B: Deriving European avalanche danger level definitions using explicit decision criteria*. Nat. Hazards Earth Syst. Sci. (en revisión)
+- Statham, G., et al. (2018). *A conceptual model of avalanche hazard*. Natural Hazards, 90, 663-691
+- [EAWS - European Avalanche Warning Services](https://www.avalanches.org/)
 
 ---
 

@@ -1,0 +1,218 @@
+[
+  {
+    "name": "nombre_ubicacion",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "Nombre del centro de esquí o ubicación de montaña"
+  },
+  {
+    "name": "latitud",
+    "type": "FLOAT64",
+    "mode": "REQUIRED",
+    "description": "Latitud de la ubicación (grados decimales)"
+  },
+  {
+    "name": "longitud",
+    "type": "FLOAT64",
+    "mode": "REQUIRED",
+    "description": "Longitud de la ubicación (grados decimales)"
+  },
+  {
+    "name": "fecha_analisis",
+    "type": "TIMESTAMP",
+    "mode": "REQUIRED",
+    "description": "Fecha y hora UTC del análisis topográfico"
+  },
+  {
+    "name": "zona_inicio_ha",
+    "type": "FLOAT64",
+    "mode": "NULLABLE",
+    "description": "Área de zona de inicio de avalanchas en hectáreas"
+  },
+  {
+    "name": "zona_transito_ha",
+    "type": "FLOAT64",
+    "mode": "NULLABLE",
+    "description": "Área de zona de tránsito de avalanchas en hectáreas"
+  },
+  {
+    "name": "zona_deposito_ha",
+    "type": "FLOAT64",
+    "mode": "NULLABLE",
+    "description": "Área de zona de depósito de avalanchas en hectáreas"
+  },
+  {
+    "name": "area_total_ha",
+    "type": "FLOAT64",
+    "mode": "NULLABLE",
+    "description": "Área total analizada en hectáreas"
+  },
+  {
+    "name": "zona_inicio_pct",
+    "type": "FLOAT64",
+    "mode": "NULLABLE",
+    "description": "Porcentaje de zona de inicio respecto al área total"
+  },
+  {
+    "name": "zona_transito_pct",
+    "type": "FLOAT64",
+    "mode": "NULLABLE",
+    "description": "Porcentaje de zona de tránsito respecto al área total"
+  },
+  {
+    "name": "zona_deposito_pct",
+    "type": "FLOAT64",
+    "mode": "NULLABLE",
+    "description": "Porcentaje de zona de depósito respecto al área total"
+  },
+  {
+    "name": "pendiente_media_inicio",
+    "type": "FLOAT64",
+    "mode": "NULLABLE",
+    "description": "Pendiente media de la zona de inicio en grados"
+  },
+  {
+    "name": "pendiente_max_inicio",
+    "type": "FLOAT64",
+    "mode": "NULLABLE",
+    "description": "Pendiente máxima de la zona de inicio en grados"
+  },
+  {
+    "name": "pendiente_p90_inicio",
+    "type": "FLOAT64",
+    "mode": "NULLABLE",
+    "description": "Percentil 90 de pendiente en zona de inicio (grados)"
+  },
+  {
+    "name": "aspecto_predominante_inicio",
+    "type": "FLOAT64",
+    "mode": "NULLABLE",
+    "description": "Aspecto predominante de zona de inicio (0-360°, 0=Norte)"
+  },
+  {
+    "name": "elevacion_max_inicio",
+    "type": "FLOAT64",
+    "mode": "NULLABLE",
+    "description": "Elevación máxima de zona de inicio en metros"
+  },
+  {
+    "name": "elevacion_min_inicio",
+    "type": "FLOAT64",
+    "mode": "NULLABLE",
+    "description": "Elevación mínima de zona de inicio en metros"
+  },
+  {
+    "name": "elevacion_min_deposito",
+    "type": "FLOAT64",
+    "mode": "NULLABLE",
+    "description": "Elevación mínima de zona de depósito en metros"
+  },
+  {
+    "name": "desnivel_inicio_deposito",
+    "type": "FLOAT64",
+    "mode": "NULLABLE",
+    "description": "Desnivel vertical entre zona inicio y depósito (metros)"
+  },
+  {
+    "name": "inicio_moderado_ha",
+    "type": "FLOAT64",
+    "mode": "NULLABLE",
+    "description": "Área de inicio con pendiente 30-45° (hectáreas)"
+  },
+  {
+    "name": "inicio_severo_ha",
+    "type": "FLOAT64",
+    "mode": "NULLABLE",
+    "description": "Área de inicio con pendiente 45-60° (hectáreas)"
+  },
+  {
+    "name": "inicio_extremo_ha",
+    "type": "FLOAT64",
+    "mode": "NULLABLE",
+    "description": "Área de inicio con pendiente >60° (hectáreas)"
+  },
+  {
+    "name": "indice_riesgo_topografico",
+    "type": "FLOAT64",
+    "mode": "NULLABLE",
+    "description": "Índice de riesgo topográfico estático (0-100)"
+  },
+  {
+    "name": "clasificacion_riesgo",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Clasificación de riesgo: bajo, medio, alto, extremo"
+  },
+  {
+    "name": "componente_area",
+    "type": "FLOAT64",
+    "mode": "NULLABLE",
+    "description": "Componente de área del índice de riesgo (0-25)"
+  },
+  {
+    "name": "componente_pendiente",
+    "type": "FLOAT64",
+    "mode": "NULLABLE",
+    "description": "Componente de pendiente del índice de riesgo (0-25)"
+  },
+  {
+    "name": "componente_aspecto",
+    "type": "FLOAT64",
+    "mode": "NULLABLE",
+    "description": "Componente de aspecto del índice de riesgo (0-25)"
+  },
+  {
+    "name": "componente_desnivel",
+    "type": "FLOAT64",
+    "mode": "NULLABLE",
+    "description": "Componente de desnivel del índice de riesgo (0-25)"
+  },
+  {
+    "name": "frecuencia_estimada_eaws",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Frecuencia EAWS estimada: many, some, a_few, nearly_none"
+  },
+  {
+    "name": "tamano_estimado_eaws",
+    "type": "INT64",
+    "mode": "NULLABLE",
+    "description": "Tamaño de avalancha EAWS estimado (1-5)"
+  },
+  {
+    "name": "peligro_eaws_base",
+    "type": "INT64",
+    "mode": "NULLABLE",
+    "description": "Nivel de peligro EAWS base estimado (1-5)"
+  },
+  {
+    "name": "descripcion_riesgo",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Descripción textual del riesgo topográfico"
+  },
+  {
+    "name": "hemisferio",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Hemisferio: norte o sur"
+  },
+  {
+    "name": "radio_analisis_metros",
+    "type": "INT64",
+    "mode": "NULLABLE",
+    "description": "Radio del área de análisis en metros"
+  },
+  {
+    "name": "resolucion_dem_metros",
+    "type": "INT64",
+    "mode": "NULLABLE",
+    "description": "Resolución del DEM utilizado en metros"
+  },
+  {
+    "name": "fuente_dem",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Fuente del DEM utilizado (ej: USGS/SRTMGL1_003)"
+  }
+]

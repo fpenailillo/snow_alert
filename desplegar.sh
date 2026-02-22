@@ -497,6 +497,35 @@ else
 fi
 rm /tmp/schema_pronostico_dias.json
 
+# ============================================================================
+# MÓDULO DE ANÁLISIS TOPOGRÁFICO DE AVALANCHAS
+# ============================================================================
+
+# Crear tabla de BigQuery: Zonas de Avalancha
+imprimir_titulo "Creando tabla de BigQuery: Zonas de Avalancha"
+TABLA_ZONAS="zonas_avalancha"
+FUNCION_ANALIZADOR="analizador-avalanchas"
+
+if bq ls --project_id=$ID_PROYECTO $DATASET_CLIMA | grep -q $TABLA_ZONAS; then
+    imprimir_advertencia "Tabla ya existe: $TABLA_ZONAS"
+else
+    # Usar el schema JSON del módulo analizador_avalanchas
+    bq mk --project_id=$ID_PROYECTO \
+        --table \
+        --time_partitioning_field=fecha_analisis \
+        --time_partitioning_type=DAY \
+        --clustering_fields=nombre_ubicacion,clasificacion_riesgo \
+        --description="Análisis topográfico de zonas de avalancha (EAWS 2025)" \
+        $DATASET_CLIMA.$TABLA_ZONAS \
+        ./analizador_avalanchas/schema_zonas_bigquery.json
+    imprimir_exito "Tabla creada: $TABLA_ZONAS"
+fi
+
+# Habilitar Earth Engine API
+imprimir_titulo "Habilitando Earth Engine API"
+gcloud services enable earthengine.googleapis.com --project=$ID_PROYECTO
+imprimir_exito "Earth Engine API habilitada"
+
 # Desplegar Cloud Function Extractor
 imprimir_titulo "Desplegando Cloud Function: Extractor"
 gcloud functions deploy $FUNCION_EXTRACTOR \
@@ -595,6 +624,44 @@ gcloud functions deploy $FUNCION_PROCESADOR_DIAS \
 
 imprimir_exito "Cloud Function desplegada: $FUNCION_PROCESADOR_DIAS"
 
+# Desplegar Cloud Function Analizador de Avalanchas
+imprimir_titulo "Desplegando Cloud Function: Analizador de Avalanchas"
+gcloud functions deploy $FUNCION_ANALIZADOR \
+    --gen2 \
+    --runtime=python311 \
+    --region=$REGION \
+    --source=./analizador_avalanchas \
+    --entry-point=analizar_topografia \
+    --trigger-http \
+    --service-account=${CUENTA_SERVICIO}@${ID_PROYECTO}.iam.gserviceaccount.com \
+    --set-env-vars=GCP_PROJECT=$ID_PROYECTO,GEE_PROJECT=$ID_PROYECTO \
+    --memory=1024MB \
+    --timeout=540s \
+    --max-instances=3 \
+    --project=$ID_PROYECTO \
+    --quiet
+
+imprimir_exito "Cloud Function desplegada: $FUNCION_ANALIZADOR"
+
+# Obtener URL del analizador
+URL_ANALIZADOR=$(gcloud functions describe $FUNCION_ANALIZADOR \
+    --gen2 \
+    --region=$REGION \
+    --project=$ID_PROYECTO \
+    --format='value(serviceConfig.uri)')
+
+echo "URL del analizador: $URL_ANALIZADOR"
+
+# Otorgar permisos de invocación al servicio Cloud Run del analizador
+gcloud run services add-iam-policy-binding $FUNCION_ANALIZADOR \
+    --region=$REGION \
+    --member="serviceAccount:${CUENTA_SERVICIO}@${ID_PROYECTO}.iam.gserviceaccount.com" \
+    --role="roles/run.invoker" \
+    --project=$ID_PROYECTO \
+    --quiet
+
+imprimir_exito "Permisos de invocación configurados para analizador"
+
 # Crear job de Cloud Scheduler
 imprimir_titulo "Creando job de Cloud Scheduler"
 
@@ -621,6 +688,33 @@ gcloud scheduler jobs create http $JOB_SCHEDULER \
 
 imprimir_exito "Job de Cloud Scheduler creado: $JOB_SCHEDULER"
 
+# Crear job de Cloud Scheduler para Analizador Topográfico
+imprimir_titulo "Creando job de Cloud Scheduler: Analizador Topográfico"
+JOB_ANALIZADOR="analizar-topografia-job"
+
+# Eliminar job existente si existe
+if gcloud scheduler jobs describe $JOB_ANALIZADOR --location=$REGION --project=$ID_PROYECTO &> /dev/null; then
+    imprimir_advertencia "Eliminando job existente: $JOB_ANALIZADOR"
+    gcloud scheduler jobs delete $JOB_ANALIZADOR \
+        --location=$REGION \
+        --project=$ID_PROYECTO \
+        --quiet
+fi
+
+# Crear nuevo job (una vez al mes - el análisis topográfico es estático)
+gcloud scheduler jobs create http $JOB_ANALIZADOR \
+    --location=$REGION \
+    --schedule="0 3 1 * *" \
+    --uri=$URL_ANALIZADOR \
+    --http-method=POST \
+    --oidc-service-account-email=${CUENTA_SERVICIO}@${ID_PROYECTO}.iam.gserviceaccount.com \
+    --oidc-token-audience=$URL_ANALIZADOR \
+    --time-zone=$ZONA_HORARIA \
+    --description="Ejecuta análisis topográfico de avalanchas mensualmente (día 1 a las 03:00)" \
+    --project=$ID_PROYECTO
+
+imprimir_exito "Job de Cloud Scheduler creado: $JOB_ANALIZADOR"
+
 # Resumen final
 imprimir_titulo "DESPLIEGUE COMPLETADO EXITOSAMENTE"
 
@@ -642,31 +736,40 @@ echo "  • Dataset: $DATASET_CLIMA"
 echo "  • Tabla: $TABLA_CONDICIONES (condiciones actuales)"
 echo "  • Tabla: $TABLA_PRONOSTICO_HORAS (pronóstico 76 horas)"
 echo "  • Tabla: $TABLA_PRONOSTICO_DIAS (pronóstico 10 días)"
+echo "  • Tabla: $TABLA_ZONAS (zonas de avalancha EAWS)"
 echo ""
 echo "  Cloud Functions:"
 echo "  • $FUNCION_EXTRACTOR (extrae datos de Weather API)"
 echo "  • $FUNCION_PROCESADOR (procesa condiciones actuales)"
 echo "  • $FUNCION_PROCESADOR_HORAS (procesa pronóstico por horas)"
 echo "  • $FUNCION_PROCESADOR_DIAS (procesa pronóstico por días)"
+echo "  • $FUNCION_ANALIZADOR (análisis topográfico GEE)"
 echo ""
 echo "  Scheduler:"
 echo "  • $JOB_SCHEDULER (3x/día: 08:00, 14:00, 20:00)"
+echo "  • $JOB_ANALIZADOR (mensual: día 1 a las 03:00)"
 echo ""
 echo -e "${AZUL}URLs importantes:${NC}"
 echo "  • Extractor: $URL_EXTRACTOR"
+echo "  • Analizador: $URL_ANALIZADOR"
 echo "  • Logs: https://console.cloud.google.com/logs/query?project=$ID_PROYECTO"
 echo "  • BigQuery: https://console.cloud.google.com/bigquery?project=$ID_PROYECTO&d=$DATASET_CLIMA"
 echo ""
 echo -e "${AMARILLO}Próximos pasos:${NC}"
 echo "  1. Probar extractor manualmente: curl -X POST $URL_EXTRACTOR"
-echo "  2. Ver logs: gcloud functions logs read $FUNCION_EXTRACTOR --gen2 --region=$REGION"
-echo "  3. Consultar condiciones actuales:"
+echo "  2. Probar analizador manualmente: curl -X POST $URL_ANALIZADOR"
+echo "  3. Ver logs: gcloud functions logs read $FUNCION_EXTRACTOR --gen2 --region=$REGION"
+echo "  4. Consultar condiciones actuales:"
 echo "     bq query --use_legacy_sql=false 'SELECT * FROM $DATASET_CLIMA.$TABLA_CONDICIONES LIMIT 10'"
-echo "  4. Consultar pronóstico por horas:"
+echo "  5. Consultar pronóstico por horas:"
 echo "     bq query --use_legacy_sql=false 'SELECT * FROM $DATASET_CLIMA.$TABLA_PRONOSTICO_HORAS LIMIT 10'"
-echo "  5. Consultar pronóstico por días:"
+echo "  6. Consultar pronóstico por días:"
 echo "     bq query --use_legacy_sql=false 'SELECT * FROM $DATASET_CLIMA.$TABLA_PRONOSTICO_DIAS LIMIT 10'"
-echo "  6. El scheduler ejecutará automáticamente 3 veces al día (08:00, 14:00 y 20:00)"
+echo "  7. Consultar zonas de avalancha:"
+echo "     bq query --use_legacy_sql=false 'SELECT nombre_ubicacion, indice_riesgo_topografico, clasificacion_riesgo FROM $DATASET_CLIMA.$TABLA_ZONAS LIMIT 10'"
+echo "  8. El scheduler ejecutará automáticamente:"
+echo "     - Clima: 3 veces al día (08:00, 14:00 y 20:00)"
+echo "     - Topografía: mensualmente (día 1 a las 03:00)"
 echo ""
 
 imprimir_exito "¡Listo! El sistema está desplegado y funcionando."
