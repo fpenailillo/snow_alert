@@ -93,8 +93,8 @@ snow_alert/
   - `forecast/days` → publishes to `clima-pronostico-dias`
 - **Key constants**:
   - `UBICACIONES_MONITOREO` - List of 57 locations to monitor
-  - `HORAS_PRONOSTICO = 24` - Hours ahead for hourly forecast
-  - `DIAS_PRONOSTICO = 5` - Days ahead for daily forecast
+  - `HORAS_PRONOSTICO = 76` - Hours ahead for hourly forecast (~3 days)
+  - `DIAS_PRONOSTICO = 10` - Days ahead for daily forecast (API max)
 
 ### procesador/main.py
 - **Entry point**: `procesar_clima(evento_nube)`
@@ -104,12 +104,12 @@ snow_alert/
 ### procesador_horas/main.py
 - **Entry point**: `procesar_pronostico_horas(evento_nube)`
 - **Trigger**: Pub/Sub message from `clima-pronostico-horas` topic
-- **Function**: Processes hourly forecast (24 hours) → GCS + BigQuery (`pronostico_horas`)
+- **Function**: Processes hourly forecast (76 hours) → GCS + BigQuery (`pronostico_horas`)
 
 ### procesador_dias/main.py
 - **Entry point**: `procesar_pronostico_dias(evento_nube)`
 - **Trigger**: Pub/Sub message from `clima-pronostico-dias` topic
-- **Function**: Processes daily forecast (5 days, with daytime/nighttime periods) → GCS + BigQuery (`pronostico_dias`)
+- **Function**: Processes daily forecast (10 days, with daytime/nighttime periods) → GCS + BigQuery (`pronostico_dias`)
 
 ### desplegar.sh
 - Automated deployment script for entire infrastructure
@@ -208,8 +208,8 @@ bq query --use_legacy_sql=false 'SELECT * FROM clima.condiciones_actuales ORDER 
 | GCS Bucket | `{project}-datos-clima-bronce` | Raw data storage (Bronze) |
 | BigQuery Dataset | `clima` | Analytics data warehouse |
 | BigQuery Table | `condiciones_actuales` | Current weather conditions |
-| BigQuery Table | `pronostico_horas` | Hourly forecast (24h) |
-| BigQuery Table | `pronostico_dias` | Daily forecast (5 days) |
+| BigQuery Table | `pronostico_horas` | Hourly forecast (76h) |
+| BigQuery Table | `pronostico_dias` | Daily forecast (10 days) |
 | Cloud Function | `extractor-clima` | HTTP-triggered extraction (3 APIs) |
 | Cloud Function | `procesador-clima` | Processes current conditions |
 | Cloud Function | `procesador-clima-horas` | Processes hourly forecast |

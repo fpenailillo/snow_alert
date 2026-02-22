@@ -199,8 +199,8 @@ El sistema monitorea **57 ubicaciones** de destinos de nieve y montaña a nivel 
   - Autenticación con API Key desde Secret Manager
   - Llamadas a 3 endpoints de Weather API para cada ubicación:
     - `currentConditions` - Condiciones actuales
-    - `forecast/hours` - Pronóstico próximas 24 horas
-    - `forecast/days` - Pronóstico próximos 5 días
+    - `forecast/hours` - Pronóstico próximas 76 horas (~3 días)
+    - `forecast/days` - Pronóstico próximos 10 días (máximo API)
   - Enriquecimiento de datos con metadata
   - Publicación a 3 topics de Pub/Sub según tipo de dato
   - Manejo robusto de errores y logging estructurado
@@ -224,7 +224,7 @@ El sistema monitorea **57 ubicaciones** de destinos de nieve y montaña a nivel 
 - **Memoria**: 512 MB
 - **Timeout**: 120 segundos
 - **Funcionalidades**:
-  - Procesa pronóstico por horas (24 registros por ubicación)
+  - Procesa pronóstico por horas (76 registros por ubicación)
   - Almacena en Cloud Storage (`pronostico_horas/`)
   - Transforma e inserta en BigQuery (`pronostico_horas`)
   - Dead letter queue: `clima-pronostico-horas-dlq`
@@ -236,7 +236,7 @@ El sistema monitorea **57 ubicaciones** de destinos de nieve y montaña a nivel 
 - **Memoria**: 512 MB
 - **Timeout**: 120 segundos
 - **Funcionalidades**:
-  - Procesa pronóstico diario (5 registros por ubicación)
+  - Procesa pronóstico diario (10 registros por ubicación)
   - Incluye datos de período diurno y nocturno
   - Almacena en Cloud Storage (`pronostico_dias/`)
   - Transforma e inserta en BigQuery (`pronostico_dias`)
@@ -273,6 +273,7 @@ El sistema monitorea **57 ubicaciones** de destinos de nieve y montaña a nivel 
 #### Tabla: `pronostico_horas`
 - **Particionamiento**: Por `DATE(hora_inicio)`
 - **Clustering**: Por `nombre_ubicacion`
+- **Cobertura**: 76 horas (~3 días con detalle por hora)
 - **Esquema** (27 campos):
   - Identificación: ubicación, coordenadas
   - Temporal: hora_inicio, hora_fin
@@ -287,6 +288,7 @@ El sistema monitorea **57 ubicaciones** de destinos de nieve y montaña a nivel 
 #### Tabla: `pronostico_dias`
 - **Particionamiento**: Por `DATE(fecha_inicio)`
 - **Clustering**: Por `nombre_ubicacion`
+- **Cobertura**: 10 días (máximo de la API)
 - **Esquema** (45 campos):
   - Identificación: ubicación, coordenadas
   - Temporal: fecha_inicio, fecha_fin, año, mes, día

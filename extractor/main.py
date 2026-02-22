@@ -48,8 +48,8 @@ URL_API_PRONOSTICO_HORAS = 'https://weather.googleapis.com/v1/forecast/hours:loo
 URL_API_PRONOSTICO_DIAS = 'https://weather.googleapis.com/v1/forecast/days:lookup'
 
 # Configuración de pronósticos
-HORAS_PRONOSTICO = 24  # Próximas 24 horas
-DIAS_PRONOSTICO = 5    # Próximos 5 días
+HORAS_PRONOSTICO = 76   # Próximas 76 horas (~3 días con detalle horario)
+DIAS_PRONOSTICO = 10    # Próximos 10 días (máximo de la API)
 
 NOMBRE_SECRET_API_KEY = 'weather-api-key'
 

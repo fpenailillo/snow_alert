@@ -423,7 +423,7 @@ else
         --time_partitioning_field=hora_inicio \
         --time_partitioning_type=DAY \
         --clustering_fields=nombre_ubicacion \
-        --description="Pronóstico climático por horas (próximas 24 horas)" \
+        --description="Pronóstico climático por horas (próximas 76 horas)" \
         $DATASET_CLIMA.$TABLA_PRONOSTICO_HORAS \
         /tmp/schema_pronostico_horas.json
     imprimir_exito "Tabla creada: $TABLA_PRONOSTICO_HORAS"
@@ -490,7 +490,7 @@ else
         --time_partitioning_field=fecha_inicio \
         --time_partitioning_type=DAY \
         --clustering_fields=nombre_ubicacion \
-        --description="Pronóstico climático por días (próximos 5 días)" \
+        --description="Pronóstico climático por días (próximos 10 días)" \
         $DATASET_CLIMA.$TABLA_PRONOSTICO_DIAS \
         /tmp/schema_pronostico_dias.json
     imprimir_exito "Tabla creada: $TABLA_PRONOSTICO_DIAS"
@@ -640,8 +640,8 @@ echo ""
 echo "  BigQuery:"
 echo "  • Dataset: $DATASET_CLIMA"
 echo "  • Tabla: $TABLA_CONDICIONES (condiciones actuales)"
-echo "  • Tabla: $TABLA_PRONOSTICO_HORAS (pronóstico 24 horas)"
-echo "  • Tabla: $TABLA_PRONOSTICO_DIAS (pronóstico 5 días)"
+echo "  • Tabla: $TABLA_PRONOSTICO_HORAS (pronóstico 76 horas)"
+echo "  • Tabla: $TABLA_PRONOSTICO_DIAS (pronóstico 10 días)"
 echo ""
 echo "  Cloud Functions:"
 echo "  • $FUNCION_EXTRACTOR (extrae datos de Weather API)"
