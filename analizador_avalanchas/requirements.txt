@@ -16,3 +16,6 @@ Flask==3.*
 
 # Utilidades
 numpy>=1.24.0
+
+# Visualización de mapas y gráficos
+matplotlib>=3.7.0

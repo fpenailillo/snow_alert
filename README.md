@@ -382,8 +382,57 @@ El sistema genera un índice estático de susceptibilidad topográfica (0-100) c
   - Clasifica zonas de inicio, tránsito y depósito
   - Calcula estadísticas de cubicación (áreas, pendientes, aspectos)
   - Genera índice de riesgo topográfico
+  - **Genera visualizaciones** (mapas PNG, thumbnails, GeoJSON)
   - Almacena en BigQuery (tabla `zonas_avalancha`)
-  - Almacena JSON detallado en Cloud Storage
+  - Almacena JSON detallado y visualizaciones en Cloud Storage
+
+### Visualizaciones y Mapas
+
+El módulo genera automáticamente visualizaciones para fácil integración:
+
+| Tipo | Formato | Descripción | Uso |
+|------|---------|-------------|-----|
+| **Mapa de Zonas** | PNG (800x600) | Gráfico con distribución de zonas e indicadores | Dashboards, reportes |
+| **Thumbnail** | PNG (200x200) | Indicador circular de riesgo | Listas, vistas previas |
+| **GeoJSON** | JSON | Datos geográficos con estilos | Mapas web (Leaflet, Mapbox) |
+
+#### Archivos Generados en GCS
+
+```
+gs://{proyecto}-datos-clima-bronce/topografia/visualizaciones/
+├── 2025/02/22/
+│   ├── valle_nevado_mapa_20250222_030000.png      # Mapa completo
+│   ├── valle_nevado_thumb_20250222_030000.png     # Thumbnail
+│   ├── valle_nevado_zonas_20250222_030000.geojson # Datos GeoJSON
+│   └── ...
+```
+
+#### Integración con Mapas Web
+
+El GeoJSON incluye estilos predefinidos compatibles con Leaflet/Mapbox:
+
+```javascript
+// Ejemplo de integración con Leaflet
+fetch('ruta/a/zonas.geojson')
+  .then(response => response.json())
+  .then(data => {
+    L.geoJSON(data, {
+      style: feature => feature.properties.estilo
+    }).addTo(map);
+  });
+```
+
+#### Paleta de Colores EAWS
+
+| Elemento | Color | Hex |
+|----------|-------|-----|
+| Zona Inicio | Rojo | `#E53935` |
+| Zona Tránsito | Naranja | `#FB8C00` |
+| Zona Depósito | Amarillo | `#FDD835` |
+| Riesgo Bajo | Verde | `#4CAF50` |
+| Riesgo Medio | Amarillo | `#FFC107` |
+| Riesgo Alto | Naranja | `#FF5722` |
+| Riesgo Extremo | Rojo oscuro | `#B71C1C` |
 
 ### Estructura del Módulo
 
@@ -395,7 +444,8 @@ analizador_avalanchas/
 ├── zonas.py                 # Clasificación GEE de zonas
 ├── cubicacion.py            # Cálculo de áreas y estadísticas
 ├── indice_riesgo.py         # Índice de riesgo 0-100
-├── requirements.txt         # Dependencias (earthengine-api)
+├── visualizacion.py         # Generación de mapas PNG y GeoJSON
+├── requirements.txt         # Dependencias (earthengine-api, matplotlib)
 ├── schema_zonas_bigquery.json  # Schema BigQuery
 └── .gcloudignore            # Archivos a ignorar en deploy
 ```
@@ -941,7 +991,8 @@ snow_alert/
 │   ├── zonas.py                # Clasificación GEE de zonas de avalancha
 │   ├── cubicacion.py           # Cálculo de áreas y estadísticas
 │   ├── indice_riesgo.py        # Índice de riesgo topográfico 0-100
-│   ├── requirements.txt        # Dependencias (earthengine-api)
+│   ├── visualizacion.py        # Generación de mapas PNG y GeoJSON
+│   ├── requirements.txt        # Dependencias (earthengine-api, matplotlib)
 │   ├── schema_zonas_bigquery.json  # Schema BigQuery
 │   └── .gcloudignore          # Archivos a ignorar en deploy
 ├── desplegar.sh                # Script de despliegue automatizado

@@ -37,6 +37,10 @@ from indice_riesgo import (
     convertir_resultado_a_dict
 )
 from eaws_constantes import RADIO_ANALISIS_DEFAULT
+from visualizacion import (
+    generar_visualizaciones_completas,
+    guardar_visualizaciones_gcs
+)
 
 
 # Configuración de logging estructurado
@@ -319,7 +323,9 @@ def guardar_resultado_json_gcs(
 def analizar_ubicacion(
     ubicacion: Dict[str, Any],
     exportar_geotiff: bool = False,
-    bucket_exportacion: str = None
+    generar_mapas: bool = True,
+    bucket_exportacion: str = None,
+    fecha_analisis: datetime = None
 ) -> Dict[str, Any]:
     """
     Ejecuta el análisis topográfico completo para una ubicación.
@@ -327,14 +333,19 @@ def analizar_ubicacion(
     Args:
         ubicacion: Diccionario con nombre, latitud y longitud
         exportar_geotiff: Si exportar mapa como GeoTIFF a GCS
+        generar_mapas: Si generar visualizaciones PNG y GeoJSON
         bucket_exportacion: Bucket para exportación GeoTIFF
+        fecha_analisis: Fecha del análisis (para visualizaciones)
 
     Returns:
-        Dict: Resultado completo del análisis
+        Dict: Resultado completo del análisis incluyendo visualizaciones
     """
     nombre = ubicacion['nombre']
     latitud = ubicacion['latitud']
     longitud = ubicacion['longitud']
+
+    if fecha_analisis is None:
+        fecha_analisis = datetime.now(timezone.utc)
 
     logger.info(f"Analizando ubicación: {nombre} ({latitud}, {longitud})")
 
@@ -373,6 +384,24 @@ def analizar_ubicacion(
                 bucket=bucket_exportacion
             )
 
+        # 5. Generar visualizaciones (mapas PNG y GeoJSON)
+        visualizaciones = None
+        if generar_mapas:
+            try:
+                visualizaciones = generar_visualizaciones_completas(
+                    nombre_ubicacion=nombre,
+                    latitud=latitud,
+                    longitud=longitud,
+                    radio_metros=RADIO_ANALISIS,
+                    cubicacion=cubicacion,
+                    indice_dict=indice_dict,
+                    fecha_analisis=fecha_analisis
+                )
+                logger.info(f"Visualizaciones generadas para {nombre}")
+            except Exception as e:
+                logger.warning(f"No se pudieron generar visualizaciones para {nombre}: {e}")
+                visualizaciones = None
+
         return {
             'exito': True,
             'nombre': nombre,
@@ -380,6 +409,7 @@ def analizar_ubicacion(
             'longitud': longitud,
             'cubicacion': cubicacion,
             'indice': indice_dict,
+            'visualizaciones': visualizaciones,
             'tarea_exportacion': tarea_exportacion
         }
 
@@ -400,6 +430,7 @@ def procesar_lote(
     cliente_gcs: storage.Client,
     fecha_analisis: datetime,
     exportar_geotiff: bool = False,
+    generar_mapas: bool = True,
     bucket_exportacion: str = None
 ) -> Dict[str, Any]:
     """
@@ -411,6 +442,7 @@ def procesar_lote(
         cliente_gcs: Cliente de Cloud Storage
         fecha_analisis: Fecha/hora del análisis
         exportar_geotiff: Si exportar mapas GeoTIFF
+        generar_mapas: Si generar visualizaciones PNG y GeoJSON
         bucket_exportacion: Bucket para GeoTIFF
 
     Returns:
@@ -424,7 +456,9 @@ def procesar_lote(
         resultado = analizar_ubicacion(
             ubicacion,
             exportar_geotiff=exportar_geotiff,
-            bucket_exportacion=bucket_exportacion
+            generar_mapas=generar_mapas,
+            bucket_exportacion=bucket_exportacion,
+            fecha_analisis=fecha_analisis
         )
 
         if resultado['exito']:
@@ -460,6 +494,22 @@ def procesar_lote(
                 )
             except ErrorAlmacenamientoGCS as e:
                 logger.warning(f"No se pudo guardar JSON en GCS para {resultado['nombre']}: {e}")
+
+            # Guardar visualizaciones en GCS (mapas PNG, thumbnails, GeoJSON)
+            if resultado.get('visualizaciones'):
+                try:
+                    uris_vis = guardar_visualizaciones_gcs(
+                        cliente_gcs=cliente_gcs,
+                        bucket_nombre=BUCKET_BRONCE,
+                        nombre_ubicacion=resultado['nombre'],
+                        fecha_analisis=fecha_analisis,
+                        mapa_png=resultado['visualizaciones'].get('mapa_png'),
+                        thumbnail_png=resultado['visualizaciones'].get('thumbnail_png'),
+                        geojson_data=resultado['visualizaciones'].get('geojson')
+                    )
+                    logger.info(f"Visualizaciones guardadas para {resultado['nombre']}: {len(uris_vis)} archivos")
+                except Exception as e:
+                    logger.warning(f"No se pudieron guardar visualizaciones para {resultado['nombre']}: {e}")
 
             exitosos += 1
         else:
@@ -517,6 +567,7 @@ def analizar_topografia(solicitud: Request) -> Dict[str, Any]:
         # Parámetros opcionales de la solicitud
         datos_solicitud = solicitud.get_json(silent=True) or {}
         exportar_geotiff = datos_solicitud.get('exportar_geotiff', False)
+        generar_mapas = datos_solicitud.get('generar_mapas', True)  # Activado por defecto
         bucket_exportacion = datos_solicitud.get('bucket_exportacion', BUCKET_BRONCE)
 
         # Procesar en lotes
@@ -536,6 +587,7 @@ def analizar_topografia(solicitud: Request) -> Dict[str, Any]:
                 cliente_gcs=cliente_gcs,
                 fecha_analisis=inicio,
                 exportar_geotiff=exportar_geotiff,
+                generar_mapas=generar_mapas,
                 bucket_exportacion=bucket_exportacion
             )
 
@@ -557,7 +609,8 @@ def analizar_topografia(solicitud: Request) -> Dict[str, Any]:
             'total_ubicaciones': len(UBICACIONES_ANALISIS),
             'exitosos': total_exitosos,
             'fallidos': total_fallidos,
-            'exportacion_geotiff': exportar_geotiff
+            'exportacion_geotiff': exportar_geotiff,
+            'generacion_mapas': generar_mapas
         }
 
         logger.info(f"Análisis topográfico completado: {resumen}")
