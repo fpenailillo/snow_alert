@@ -1,20 +1,20 @@
 """
-Snow Alert - Analizador de Zonas de Avalancha
+Snow Alert - Analizador Satelital de Zonas Riesgosas en Avalanchas
 
-Cloud Function que analiza el terreno topográfico para identificar,
-clasificar y cubicar zonas de avalancha usando Google Earth Engine.
+Cloud Function que analiza el terreno mediante datos satelitales para identificar,
+clasificar y cubicar zonas riesgosas de avalancha usando Google Earth Engine.
 
 Este módulo es el orquestador principal que:
 1. Itera sobre las ubicaciones de monitoreo
-2. Ejecuta análisis GEE para cada ubicación
-3. Calcula estadísticas de cubicación
+2. Ejecuta análisis GEE con datos SRTM satelitales para cada ubicación
+3. Calcula estadísticas de cubicación de zonas riesgosas
 4. Genera índices de riesgo topográfico
 5. Almacena resultados en BigQuery y GCS
 
 Arquitectura: Cloud Scheduler → Cloud Function → GEE + BigQuery + GCS
 
-El análisis topográfico es estático (no cambia con el tiempo), por lo que
-se ejecuta con menor frecuencia que el monitoreo meteorológico.
+El análisis satelital de zonas riesgosas es estático (no cambia con el tiempo),
+por lo que se ejecuta con menor frecuencia que el monitoreo meteorológico.
 """
 
 import json

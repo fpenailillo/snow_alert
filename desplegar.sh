@@ -504,7 +504,7 @@ rm /tmp/schema_pronostico_dias.json
 # Crear tabla de BigQuery: Zonas de Avalancha
 imprimir_titulo "Creando tabla de BigQuery: Zonas de Avalancha"
 TABLA_ZONAS="zonas_avalancha"
-FUNCION_ANALIZADOR="analizador-avalanchas"
+FUNCION_ANALIZADOR="analizador-satelital-zonas-riesgosas-avalanchas"
 
 if bq ls --project_id=$ID_PROYECTO $DATASET_CLIMA | grep -q $TABLA_ZONAS; then
     imprimir_advertencia "Tabla ya existe: $TABLA_ZONAS"
@@ -624,8 +624,8 @@ gcloud functions deploy $FUNCION_PROCESADOR_DIAS \
 
 imprimir_exito "Cloud Function desplegada: $FUNCION_PROCESADOR_DIAS"
 
-# Desplegar Cloud Function Analizador de Avalanchas
-imprimir_titulo "Desplegando Cloud Function: Analizador de Avalanchas"
+# Desplegar Cloud Function Analizador Satelital de Zonas Riesgosas en Avalanchas
+imprimir_titulo "Desplegando Cloud Function: Analizador Satelital de Zonas Riesgosas en Avalanchas"
 gcloud functions deploy $FUNCION_ANALIZADOR \
     --gen2 \
     --runtime=python311 \
@@ -743,7 +743,7 @@ echo "  • $FUNCION_EXTRACTOR (extrae datos de Weather API)"
 echo "  • $FUNCION_PROCESADOR (procesa condiciones actuales)"
 echo "  • $FUNCION_PROCESADOR_HORAS (procesa pronóstico por horas)"
 echo "  • $FUNCION_PROCESADOR_DIAS (procesa pronóstico por días)"
-echo "  • $FUNCION_ANALIZADOR (análisis topográfico GEE)"
+echo "  • $FUNCION_ANALIZADOR (análisis satelital de zonas riesgosas)"
 echo ""
 echo "  Scheduler:"
 echo "  • $JOB_SCHEDULER (3x/día: 08:00, 14:00, 20:00)"

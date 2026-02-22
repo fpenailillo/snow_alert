@@ -314,11 +314,11 @@ El sistema monitorea **57 ubicaciones** de destinos de nieve y montaña a nivel 
 
 ---
 
-## Análisis Topográfico de Avalanchas
+## Analizador Satelital de Zonas Riesgosas en Avalanchas
 
 ### Descripción
 
-Snow Alert incluye un módulo de **análisis topográfico de avalanchas** que utiliza Google Earth Engine (GEE) con datos SRTM para identificar, clasificar y cubicar las zonas funcionales de avalancha en cada ubicación monitoreada.
+Snow Alert incluye un módulo de **análisis satelital de zonas riesgosas en avalanchas** que utiliza Google Earth Engine (GEE) con datos SRTM para identificar, clasificar y cubicar las zonas funcionales de avalancha en cada ubicación monitoreada.
 
 El análisis implementa la metodología **EAWS 2025** (European Avalanche Warning Services) según las publicaciones:
 - Müller, K., Techel, F., & Mitterer, C. (2025). *The EAWS matrix, Part A*. Nat. Hazards Earth Syst. Sci., 25, 4503-4525.
@@ -368,8 +368,9 @@ El sistema genera un índice estático de susceptibilidad topográfica (0-100) c
 - **ALTO** (51-75): Alta susceptibilidad, evitar en peligro elevado
 - **EXTREMO** (76-100): Solo para expertos con condiciones favorables confirmadas
 
-### Cloud Function: Analizador de Avalanchas
+### Cloud Function: Analizador Satelital de Zonas Riesgosas en Avalanchas
 
+- **Nombre**: `analizador-satelital-zonas-riesgosas-avalanchas`
 - **Trigger**: HTTP (invocado por Cloud Scheduler)
 - **Runtime**: Python 3.11
 - **Memoria**: 1024 MB
@@ -377,7 +378,7 @@ El sistema genera un índice estático de susceptibilidad topográfica (0-100) c
 - **Frecuencia**: Mensual (día 1 a las 03:00)
 - **Funcionalidades**:
   - Inicializa Google Earth Engine con proyecto GCP
-  - Carga DEM SRTM de 30m de resolución
+  - Carga DEM SRTM de 30m de resolución (datos satelitales)
   - Clasifica zonas de inicio, tránsito y depósito
   - Calcula estadísticas de cubicación (áreas, pendientes, aspectos)
   - Genera índice de riesgo topográfico
@@ -933,9 +934,9 @@ snow_alert/
 │   ├── main.py                 # Procesador de pronóstico por días
 │   ├── requirements.txt        # Dependencias
 │   └── .gcloudignore          # Archivos a ignorar en deploy
-├── analizador_avalanchas/
+├── analizador_avalanchas/      # Analizador Satelital de Zonas Riesgosas
 │   ├── __init__.py             # Inicialización del paquete
-│   ├── main.py                 # Cloud Function de análisis topográfico
+│   ├── main.py                 # Cloud Function de análisis satelital
 │   ├── eaws_constantes.py      # Matriz EAWS 2025 y constantes de terreno
 │   ├── zonas.py                # Clasificación GEE de zonas de avalancha
 │   ├── cubicacion.py           # Cálculo de áreas y estadísticas

@@ -1,8 +1,8 @@
 """
-Snow Alert - Módulo de Análisis Topográfico de Avalanchas
+Snow Alert - Analizador Satelital de Zonas Riesgosas en Avalanchas
 
-Este módulo implementa análisis de terreno para identificar, clasificar
-y cubicar zonas de avalancha usando Google Earth Engine con datos SRTM.
+Este módulo implementa análisis satelital de terreno para identificar, clasificar
+y cubicar zonas riesgosas de avalancha usando Google Earth Engine con datos SRTM.
 
 Componentes:
 - eaws_constantes: Matriz EAWS 2025 y constantes de terreno
