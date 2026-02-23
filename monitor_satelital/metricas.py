@@ -3,6 +3,8 @@ Monitor Satelital de Nieve - Cálculo de Métricas
 
 Funciones para calcular métricas estadísticas sobre los productos
 satelitales que se almacenarán en BigQuery (capa Silver).
+
+Versión 1.1: Incluye indicadores de nieve, SAR y viento en altura.
 """
 
 import logging
@@ -19,9 +21,18 @@ from constantes import (
     KELVIN_A_CELSIUS,
 )
 
+# Importar nuevos módulos de métricas
+from indicadores_nieve import compilar_indicadores_nieve
+from sentinel1_sar import obtener_productos_sar
+from viento_altura import compilar_metricas_viento_bigquery
+
 
 logger = logging.getLogger(__name__)
 
+
+# =============================================================================
+# MÉTRICAS DE NUBES
+# =============================================================================
 
 def calcular_porcentaje_nubes(
     imagen_ndsi: ee.Image,
@@ -64,6 +75,10 @@ def calcular_porcentaje_nubes(
         logger.error(f"Error al calcular porcentaje de nubes: {str(e)}")
         return -1.0
 
+
+# =============================================================================
+# MÉTRICAS NDSI
+# =============================================================================
 
 def calcular_metricas_ndsi(
     imagen_ndsi: ee.Image,
@@ -134,6 +149,10 @@ def calcular_metricas_ndsi(
         }
 
 
+# =============================================================================
+# MÉTRICAS LST
+# =============================================================================
+
 def calcular_metricas_lst(
     imagen_lst: ee.Image,
     roi: ee.Geometry,
@@ -186,6 +205,10 @@ def calcular_metricas_lst(
             'lst_max_celsius': None,
         }
 
+
+# =============================================================================
+# MÉTRICAS ERA5
+# =============================================================================
 
 def calcular_metricas_era5(
     imagen_nieve: ee.Image,
@@ -250,6 +273,10 @@ def calcular_metricas_era5(
         }
 
 
+# =============================================================================
+# MÉTRICAS SENTINEL-2
+# =============================================================================
+
 def calcular_metricas_sentinel2(
     imagen_ndsi: ee.Image,
     imagen_nieve: ee.Image,
@@ -294,6 +321,10 @@ def calcular_metricas_sentinel2(
             'sentinel2_pct_nieve': None,
         }
 
+
+# =============================================================================
+# MÉTRICAS ALBEDO
+# =============================================================================
 
 def calcular_albedo_nieve(
     imagen_ndsi: ee.Image,
@@ -340,23 +371,36 @@ def calcular_albedo_nieve(
         return None
 
 
+# =============================================================================
+# COMPILACIÓN DE MÉTRICAS
+# =============================================================================
+
 def compilar_metricas_completas(
     productos: Dict[str, Any],
     roi: ee.Geometry,
-    tipo_captura: str
+    tipo_captura: str,
+    latitud: float,
+    longitud: float,
+    fecha_captura: datetime
 ) -> Dict[str, Any]:
     """
     Compila todas las métricas de los productos obtenidos.
+
+    Versión 1.1: Incluye indicadores de nieve, SAR y viento.
 
     Args:
         productos: Diccionario con productos satelitales
         roi: Región de interés
         tipo_captura: 'manana', 'tarde', 'noche'
+        latitud: Latitud del punto
+        longitud: Longitud del punto
+        fecha_captura: Fecha de la captura
 
     Returns:
         dict: Todas las métricas para BigQuery
     """
     metricas = {
+        # Métricas originales
         'pct_nubes': None,
         'es_nublado': None,
         'tiene_nieve': None,
@@ -364,29 +408,70 @@ def compilar_metricas_completas(
         'ndsi_max': None,
         'pct_cobertura_nieve': None,
         'albedo_nieve_medio': None,
+
+        # Snowline y cambio de cobertura
+        'snowline_elevacion_m': None,
+        'snowline_mediana_m': None,
+        'snowline_cambio_24h_m': None,
+        'snowline_cambio_72h_m': None,
+        'delta_pct_nieve_24h': None,
+        'delta_pct_nieve_72h': None,
+        'tipo_cambio_nieve': None,
+        'tasa_cambio_nieve_dia': None,
+
+        # LST y ciclo diurno
         'lst_dia_celsius': None,
         'lst_noche_celsius': None,
         'lst_min_celsius': None,
+        'ciclo_diurno_amplitud': None,
+
+        # AMI (Accumulated Melting Index)
+        'ami_3d': None,
+        'ami_7d': None,
+
+        # ERA5
         'era5_snow_depth_m': None,
         'era5_swe_m': None,
         'era5_snow_cover': None,
         'era5_temp_2m_celsius': None,
+        'era5_snowfall_m': None,
+        'era5_swe_anomalia': None,
+
+        # Sentinel-2
         'sentinel2_disponible': False,
         'sentinel2_fecha': None,
         'sentinel2_pct_nieve': None,
+
+        # SAR (Sentinel-1)
+        'sar_disponible': False,
+        'sar_fecha': None,
+        'sar_orbita': None,
+        'sar_pct_nieve_humeda': None,
+        'sar_pct_nieve_seca': None,
+        'sar_vv_medio_db': None,
+        'sar_delta_vv_db': None,
+
+        # Viento en altura
+        'viento_altura_vel_ms': None,
+        'viento_altura_vel_kmh': None,
+        'viento_altura_dir_grados': None,
+        'viento_max_24h_ms': None,
+        'transporte_eolico_activo': None,
+        'aspecto_carga_eolica': None,
     }
 
     es_nocturno = tipo_captura == 'noche'
+    imagen_ndsi = None
+    lst_dia = None
+    lst_noche = None
 
     # NDSI y nubes (solo diurno)
     if not es_nocturno and 'ndsi' in productos:
         producto_ndsi = productos['ndsi']
         if producto_ndsi.get('imagen'):
-            metricas_ndsi = calcular_metricas_ndsi(producto_ndsi['imagen'], roi)
+            imagen_ndsi = producto_ndsi['imagen']
+            metricas_ndsi = calcular_metricas_ndsi(imagen_ndsi, roi)
             metricas.update(metricas_ndsi)
-
-            # Para porcentaje de nubes, necesitamos la imagen sin máscara
-            # Esto se calcularía con la imagen original
 
     # LST
     if 'lst' in productos:
@@ -397,10 +482,16 @@ def compilar_metricas_completas(
             periodo = producto_lst.get('periodo', 'dia')
             if periodo == 'dia':
                 metricas['lst_dia_celsius'] = metricas_lst.get('lst_media_celsius')
+                lst_dia = metricas['lst_dia_celsius']
             else:
                 metricas['lst_noche_celsius'] = metricas_lst.get('lst_media_celsius')
+                lst_noche = metricas['lst_noche_celsius']
 
             metricas['lst_min_celsius'] = metricas_lst.get('lst_min_celsius')
+
+    # Calcular ciclo diurno si tenemos ambas temperaturas
+    if lst_dia is not None and lst_noche is not None:
+        metricas['ciclo_diurno_amplitud'] = round(lst_dia - lst_noche, 2)
 
     # ERA5
     if 'era5' in productos:
@@ -433,10 +524,97 @@ def compilar_metricas_completas(
     if metricas['pct_nubes'] is not None:
         metricas['es_nublado'] = metricas['pct_nubes'] >= UMBRAL_NUBES_NUBLADO
 
-    logger.info(f"Métricas compiladas: {len([v for v in metricas.values() if v is not None])} campos con datos")
+    # =========================================================================
+    # NUEVOS INDICADORES v1.1
+    # =========================================================================
+
+    # Indicadores de nieve (snowline, cambio cobertura, AMI)
+    try:
+        if imagen_ndsi is not None:
+            indicadores_nieve = compilar_indicadores_nieve(
+                imagen_ndsi=imagen_ndsi,
+                roi=roi,
+                latitud=latitud,
+                longitud=longitud,
+                lst_dia=lst_dia,
+                lst_noche=lst_noche,
+                fecha_captura=fecha_captura
+            )
+            # Actualizar solo campos que tienen valor
+            for campo, valor in indicadores_nieve.items():
+                if valor is not None and campo in metricas:
+                    metricas[campo] = valor
+
+            logger.info("Indicadores de nieve calculados exitosamente")
+
+    except Exception as e:
+        logger.warning(f"No se pudieron calcular indicadores de nieve: {str(e)}")
+
+    # SAR (Sentinel-1) - funciona de noche y con nubes
+    try:
+        tiene_nieve = metricas.get('tiene_nieve', False)
+        if tiene_nieve:
+            productos_sar = obtener_productos_sar(
+                latitud=latitud,
+                longitud=longitud,
+                fecha_captura=fecha_captura
+            )
+
+            if productos_sar.get('disponible'):
+                metricas['sar_disponible'] = True
+                metricas['sar_fecha'] = productos_sar.get('fecha_imagen')
+                metricas['sar_orbita'] = productos_sar.get('orbita')
+                metricas['sar_pct_nieve_humeda'] = productos_sar.get('pct_nieve_humeda')
+                metricas['sar_pct_nieve_seca'] = productos_sar.get('pct_nieve_seca')
+                metricas['sar_vv_medio_db'] = productos_sar.get('vv_medio_db')
+                metricas['sar_delta_vv_db'] = productos_sar.get('delta_vv_db')
+
+                logger.info(
+                    f"SAR: {metricas['sar_pct_nieve_humeda']:.1f}% nieve húmeda"
+                )
+
+    except Exception as e:
+        logger.warning(f"No se pudieron obtener productos SAR: {str(e)}")
+
+    # Viento en altura (ERA5 pressure levels)
+    try:
+        tiene_nieve = metricas.get('tiene_nieve', False)
+        metricas_viento = compilar_metricas_viento_bigquery(
+            latitud=latitud,
+            longitud=longitud,
+            tiene_nieve=tiene_nieve,
+            fecha=fecha_captura
+        )
+
+        # Actualizar métricas de viento
+        if metricas_viento.get('viento_altura_vel_ms') is not None:
+            metricas['viento_altura_vel_ms'] = metricas_viento.get('viento_altura_vel_ms')
+            # Calcular km/h
+            metricas['viento_altura_vel_kmh'] = round(
+                metricas['viento_altura_vel_ms'] * 3.6, 1
+            )
+            metricas['viento_altura_dir_grados'] = metricas_viento.get('viento_altura_dir_grados')
+            metricas['transporte_eolico_activo'] = metricas_viento.get('transporte_eolico_activo')
+            metricas['aspecto_carga_eolica'] = metricas_viento.get('aspecto_carga_eolica')
+
+        if metricas_viento.get('viento_max_24h_ms') is not None:
+            metricas['viento_max_24h_ms'] = metricas_viento.get('viento_max_24h_ms')
+
+        logger.info("Métricas de viento en altura calculadas")
+
+    except Exception as e:
+        logger.warning(f"No se pudieron calcular métricas de viento: {str(e)}")
+
+    # Log resumen
+    campos_con_datos = len([v for v in metricas.values() if v is not None])
+    logger.info(f"Métricas compiladas: {campos_con_datos} campos con datos")
 
     return metricas
 
+
+# =============================================================================
+# CREACIÓN DE FILA BIGQUERY
+# =============================================================================
 
 def crear_fila_bigquery(
     nombre_ubicacion: str,
@@ -455,6 +633,8 @@ def crear_fila_bigquery(
 ) -> Dict[str, Any]:
     """
     Crea una fila completa para insertar en BigQuery.
+
+    Versión 1.1: Incluye todos los nuevos campos de indicadores.
 
     Args:
         nombre_ubicacion: Nombre de la ubicación
@@ -478,20 +658,25 @@ def crear_fila_bigquery(
     antiguedad_horas = (timestamp_descarga - timestamp_imagen).total_seconds() / 3600
 
     fila = {
+        # Identificación y ubicación
         'nombre_ubicacion': nombre_ubicacion,
         'latitud': latitud,
         'longitud': longitud,
         'region': region,
+
+        # Temporalidad
         'fecha_captura': fecha_captura.strftime('%Y-%m-%d'),
         'tipo_captura': tipo_captura,
         'timestamp_imagen': timestamp_imagen.isoformat(),
         'timestamp_descarga': timestamp_descarga.isoformat(),
         'antiguedad_horas': round(antiguedad_horas, 2),
+
+        # Fuente
         'fuente_principal': fuente_principal,
         'coleccion_gee': coleccion_gee,
         'resolucion_m': resolucion_m,
 
-        # Métricas
+        # Métricas de nubes y cobertura básica
         'pct_nubes': metricas.get('pct_nubes'),
         'es_nublado': metricas.get('es_nublado'),
         'tiene_nieve': metricas.get('tiene_nieve'),
@@ -499,29 +684,72 @@ def crear_fila_bigquery(
         'ndsi_max': metricas.get('ndsi_max'),
         'pct_cobertura_nieve': metricas.get('pct_cobertura_nieve'),
         'albedo_nieve_medio': metricas.get('albedo_nieve_medio'),
+
+        # Snowline y cambio de cobertura
+        'snowline_elevacion_m': metricas.get('snowline_elevacion_m'),
+        'snowline_mediana_m': metricas.get('snowline_mediana_m'),
+        'snowline_cambio_24h_m': metricas.get('snowline_cambio_24h_m'),
+        'snowline_cambio_72h_m': metricas.get('snowline_cambio_72h_m'),
+        'delta_pct_nieve_24h': metricas.get('delta_pct_nieve_24h'),
+        'delta_pct_nieve_72h': metricas.get('delta_pct_nieve_72h'),
+        'tipo_cambio_nieve': metricas.get('tipo_cambio_nieve'),
+        'tasa_cambio_nieve_dia': metricas.get('tasa_cambio_nieve_dia'),
+
+        # Temperatura superficial
         'lst_dia_celsius': metricas.get('lst_dia_celsius'),
         'lst_noche_celsius': metricas.get('lst_noche_celsius'),
         'lst_min_celsius': metricas.get('lst_min_celsius'),
+        'ciclo_diurno_amplitud': metricas.get('ciclo_diurno_amplitud'),
+
+        # AMI (Accumulated Melting Index)
+        'ami_3d': metricas.get('ami_3d'),
+        'ami_7d': metricas.get('ami_7d'),
+
+        # ERA5
         'era5_snow_depth_m': metricas.get('era5_snow_depth_m'),
         'era5_swe_m': metricas.get('era5_swe_m'),
         'era5_snow_cover': metricas.get('era5_snow_cover'),
         'era5_temp_2m_celsius': metricas.get('era5_temp_2m_celsius'),
+        'era5_snowfall_m': metricas.get('era5_snowfall_m'),
+        'era5_swe_anomalia': metricas.get('era5_swe_anomalia'),
+
+        # Sentinel-2
         'sentinel2_disponible': metricas.get('sentinel2_disponible', False),
         'sentinel2_fecha': metricas.get('sentinel2_fecha'),
         'sentinel2_pct_nieve': metricas.get('sentinel2_pct_nieve'),
+
+        # SAR (Sentinel-1)
+        'sar_disponible': metricas.get('sar_disponible', False),
+        'sar_fecha': metricas.get('sar_fecha'),
+        'sar_orbita': metricas.get('sar_orbita'),
+        'sar_pct_nieve_humeda': metricas.get('sar_pct_nieve_humeda'),
+        'sar_pct_nieve_seca': metricas.get('sar_pct_nieve_seca'),
+        'sar_vv_medio_db': metricas.get('sar_vv_medio_db'),
+        'sar_delta_vv_db': metricas.get('sar_delta_vv_db'),
+
+        # Viento en altura
+        'viento_altura_vel_ms': metricas.get('viento_altura_vel_ms'),
+        'viento_altura_vel_kmh': metricas.get('viento_altura_vel_kmh'),
+        'viento_altura_dir_grados': metricas.get('viento_altura_dir_grados'),
+        'viento_max_24h_ms': metricas.get('viento_max_24h_ms'),
+        'transporte_eolico_activo': metricas.get('transporte_eolico_activo'),
+        'aspecto_carga_eolica': metricas.get('aspecto_carga_eolica'),
 
         # URIs de archivos
         'uri_geotiff_visual': uris.get('geotiff_visual'),
         'uri_geotiff_ndsi': uris.get('geotiff_ndsi'),
         'uri_geotiff_lst': uris.get('geotiff_lst'),
         'uri_geotiff_era5': uris.get('geotiff_era5'),
+        'uri_geotiff_sar': uris.get('geotiff_sar'),
         'uri_preview_visual': uris.get('preview_visual'),
         'uri_preview_ndsi': uris.get('preview_ndsi'),
         'uri_preview_lst': uris.get('preview_lst'),
+        'uri_preview_sar': uris.get('preview_sar'),
         'uri_thumbnail_visual': uris.get('thumbnail_visual'),
         'uri_thumbnail_ndsi': uris.get('thumbnail_ndsi'),
 
-        'version_metodologia': 'v1.0.0',
+        # Versión
+        'version_metodologia': 'v1.1.0',
     }
 
     return fila

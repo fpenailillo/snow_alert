@@ -2,7 +2,10 @@
 Monitor Satelital de Nieve - Orquestador Principal
 
 Cloud Function HTTP que coordina la descarga de imágenes satelitales
-para las ubicaciones monitoreadas, procesando visual, NDSI, LST y ERA5.
+para las ubicaciones monitoreadas, procesando visual, NDSI, LST, ERA5,
+indicadores de nieve (snowline, AMI), SAR y viento en altura.
+
+Versión 1.1: Incluye indicadores derivados, SAR (Sentinel-1) y viento ERA5.
 
 Ejecuta 3 veces al día (mañana, tarde, noche) via Cloud Scheduler.
 """
@@ -224,9 +227,16 @@ def procesar_ubicacion(
         )
         resultado['productos_obtenidos'] = len([p for p in productos.values() if p])
 
-        # 3. Calcular métricas
+        # 3. Calcular métricas (v1.1: incluye indicadores, SAR y viento)
         roi = crear_roi(latitud, longitud)
-        metricas = compilar_metricas_completas(productos, roi, tipo_captura)
+        metricas = compilar_metricas_completas(
+            productos=productos,
+            roi=roi,
+            tipo_captura=tipo_captura,
+            latitud=latitud,
+            longitud=longitud,
+            fecha_captura=fecha_proceso
+        )
 
         # 4. Descargar y guardar en GCS
         resoluciones = {
