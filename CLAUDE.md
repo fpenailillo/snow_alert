@@ -2,88 +2,181 @@
 
 ## Project Overview
 
-**Snow Alert** is a serverless weather monitoring system focused on snow conditions at ski resorts, mountain towns, and popular mountaineering destinations worldwide. Built on Google Cloud Platform (GCP), it uses an event-driven medallion architecture (Bronze/Silver layers) to extract, process, and store weather data.
+**Snow Alert** is a serverless weather and snow monitoring system focused on ski resorts, mountain towns, and popular mountaineering destinations worldwide. Built on Google Cloud Platform (GCP), it uses an event-driven medallion architecture (Bronze/Silver layers) to extract, process, and store:
+
+- **Weather data** from Google Weather API
+- **Satellite imagery** from Google Earth Engine (GOES, MODIS, ERA5)
+- **Topographic analysis** for avalanche risk assessment
 
 ### Primary Purpose
 Monitor weather and snow conditions at winter destinations to provide:
 - Real-time snow conditions for ski resorts
 - Weather alerts for mountain towns
 - Climbing/mountaineering weather data for popular peaks
-- Temperature, precipitation, and wind data for snow sports planning
+- Satellite-based snow coverage monitoring
+- Topographic avalanche risk assessment (EAWS 2025)
 
 ## Architecture
 
 ```
-┌─────────────────┐
-│ Cloud Scheduler │ (Every minute)
-└────────┬────────┘
-         │ HTTP POST
-         ▼
-┌────────────────────────────────┐
-│ Cloud Function: Extractor      │
-│ • Fetches from Weather API     │
-│ • API Key from Secret Manager  │
-│ • Publishes to Pub/Sub         │
-└────────┬───────────────────────┘
-         │ Pub/Sub
-         ▼
-┌────────────────────────────────┐
-│ Cloud Function: Procesador     │
-│ • Validates & transforms       │
-│ • Raw → GCS (Bronze)           │
-│ • Clean → BigQuery (Silver)    │
-└────────┬───────────────────────┘
-         │
-    ┌────┴────┐
-    ▼         ▼
-┌─────────┐  ┌──────────┐
-│   GCS   │  │ BigQuery │
-│ (Bronze)│  │ (Silver) │
-└─────────┘  └──────────┘
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                              CLOUD SCHEDULER                                     │
+│  • extraer-clima-job (08:00, 14:00, 20:00)                                      │
+│  • monitor-satelital-job (08:30, 14:30, 20:30)                                  │
+│  • analizar-topografia-job (mensual: día 1 a las 03:00)                         │
+└───────┬─────────────────────────────┬─────────────────────────────┬─────────────┘
+        │                             │                             │
+        ▼                             ▼                             ▼
+┌───────────────────┐    ┌────────────────────────┐    ┌────────────────────────┐
+│  EXTRACTOR CLIMA  │    │  MONITOR SATELITAL     │    │  ANALIZADOR AVALANCHAS │
+│  (Weather API)    │    │  (Google Earth Engine) │    │  (GEE + SRTM DEM)      │
+│  57 ubicaciones   │    │  57 ubicaciones        │    │  39 ubicaciones        │
+└─────────┬─────────┘    └───────────┬────────────┘    └───────────┬────────────┘
+          │                          │                             │
+    ┌─────┴─────┐                    │                             │
+    │  Pub/Sub  │                    │                             │
+    │ (3 topics)│                    │                             │
+    └─────┬─────┘                    │                             │
+          ▼                          ▼                             ▼
+┌───────────────────┐    ┌────────────────────────┐    ┌────────────────────────┐
+│   PROCESADORES    │    │    DESCARGA GEE        │    │   ANÁLISIS TOPOGRÁFICO │
+│ • Condiciones     │    │ • GOES-18/16           │    │ • Zonas inicio/tránsito│
+│ • Pronóstico hrs  │    │ • MODIS Terra/Aqua     │    │   /depósito            │
+│ • Pronóstico días │    │ • ERA5-Land            │    │ • Índice riesgo EAWS   │
+└─────────┬─────────┘    │ • Sentinel-2           │    │ • Cubicación           │
+          │              └───────────┬────────────┘    └───────────┬────────────┘
+          │                          │                             │
+          └──────────────────────────┼─────────────────────────────┘
+                                     │
+                    ┌────────────────┴────────────────┐
+                    ▼                                 ▼
+        ┌────────────────────────┐      ┌────────────────────────────────────┐
+        │ GCS (Capa Bronce)      │      │ BigQuery (Capa Plata)              │
+        │ • condiciones_actuales/│      │ • condiciones_actuales             │
+        │ • pronostico_horas/    │      │ • pronostico_horas                 │
+        │ • pronostico_dias/     │      │ • pronostico_dias                  │
+        │ • satelital/           │      │ • imagenes_satelitales             │
+        │ • topografia/          │      │ • zonas_avalancha                  │
+        └────────────────────────┘      └────────────────────────────────────┘
 ```
 
 ## Project Structure
 
 ```
 snow_alert/
-├── extractor/
-│   ├── main.py              # Data extraction Cloud Function
-│   ├── requirements.txt     # Python dependencies
+├── extractor/                    # Weather data extraction
+│   ├── main.py                   # Entry: extraer_clima()
+│   ├── requirements.txt
 │   └── .gcloudignore
-├── procesador/
-│   ├── main.py              # Data processing Cloud Function
-│   ├── requirements.txt     # Python dependencies
+├── procesador/                   # Current conditions processor
+│   ├── main.py                   # Entry: procesar_clima()
+│   ├── requirements.txt
 │   └── .gcloudignore
-├── desplegar.sh             # Automated deployment script
-├── README.md                # Full documentation
-├── requerimientos.md        # Technical requirements
-├── CLAUDE.md                # This file
+├── procesador_horas/             # Hourly forecast processor
+│   ├── main.py                   # Entry: procesar_pronostico_horas()
+│   ├── requirements.txt
+│   └── .gcloudignore
+├── procesador_dias/              # Daily forecast processor
+│   ├── main.py                   # Entry: procesar_pronostico_dias()
+│   ├── requirements.txt
+│   └── .gcloudignore
+├── monitor_satelital/            # Satellite imagery module (GEE)
+│   ├── main.py                   # Entry: monitorear_satelital()
+│   ├── constantes.py             # GEE collections, bands, vis_params
+│   ├── fuentes.py                # Satellite source selection by region
+│   ├── productos.py              # Product processing (visual, NDSI, LST)
+│   ├── metricas.py               # Metrics for BigQuery
+│   ├── descargador.py            # GEE download and GCS upload
+│   ├── schema_imagenes_bigquery.json
+│   ├── requirements.txt
+│   ├── __init__.py
+│   └── .gcloudignore
+├── analizador_avalanchas/        # Avalanche analysis module (GEE)
+│   ├── main.py                   # Entry: analizar_topografia()
+│   ├── zonas.py                  # Zone classification (inicio/tránsito/depósito)
+│   ├── cubicacion.py             # Volume calculations
+│   ├── indice_riesgo.py          # Risk index (EAWS 2025)
+│   ├── eaws_constantes.py        # EAWS matrix thresholds
+│   ├── visualizacion.py          # PNG maps and GeoJSON generation
+│   ├── schema_zonas_bigquery.json
+│   ├── requirements.txt
+│   ├── __init__.py
+│   └── .gcloudignore
+├── desplegar.sh                  # Full deployment script
+├── README.md                     # Complete documentation
+├── CLAUDE.md                     # This file
+├── requerimientos.md             # Technical requirements
 └── .gitignore
 ```
 
-## Key Files
+## Key Modules
 
-### extractor/main.py
+### 1. extractor/main.py
 - **Entry point**: `extraer_clima(solicitud: Request)`
-- **Trigger**: HTTP (Cloud Scheduler every minute)
-- **Function**: Calls Google Weather API for each monitored location, enriches data with metadata, publishes to Pub/Sub
-- **Key constant**: `UBICACIONES_MONITOREO` - List of locations to monitor
+- **Trigger**: HTTP (Cloud Scheduler 3x/día: 08:00, 14:00, 20:00)
+- **Function**: Calls 3 Google Weather API endpoints for each location
+- **Key constants**:
+  - `UBICACIONES_MONITOREO` - 57 locations worldwide
+  - `HORAS_PRONOSTICO = 76` - Hours ahead (~3 days)
+  - `DIAS_PRONOSTICO = 10` - Days ahead (API max)
 
-### procesador/main.py
+### 2. procesador/main.py
 - **Entry point**: `procesar_clima(evento_nube)`
-- **Trigger**: Pub/Sub message from `clima-datos-crudos` topic
-- **Function**: Validates data, stores raw JSON in GCS (Bronze), transforms and inserts into BigQuery (Silver)
+- **Trigger**: Pub/Sub `clima-datos-crudos`
+- **Output**: GCS + BigQuery `condiciones_actuales`
 
-### desplegar.sh
+### 3. procesador_horas/main.py
+- **Entry point**: `procesar_pronostico_horas(evento_nube)`
+- **Trigger**: Pub/Sub `clima-pronostico-horas`
+- **Output**: GCS + BigQuery `pronostico_horas` (76 hours)
+
+### 4. procesador_dias/main.py
+- **Entry point**: `procesar_pronostico_dias(evento_nube)`
+- **Trigger**: Pub/Sub `clima-pronostico-dias`
+- **Output**: GCS + BigQuery `pronostico_dias` (10 days, day/night periods)
+
+### 5. monitor_satelital/main.py
+- **Entry point**: `monitorear_satelital(solicitud: Request)`
+- **Trigger**: HTTP (Cloud Scheduler 3x/día: 08:30, 14:30, 20:30)
+- **Function**: Downloads satellite imagery from Google Earth Engine
+- **Satellite sources by region**:
+  - Americas: GOES-18/16 (sub-daily, 2km)
+  - Global: MODIS Terra/Aqua (daily, 500m)
+  - Gap-filler: ERA5-Land (hourly, no clouds)
+  - Opportunistic: Sentinel-2 (high-res when available)
+- **Products generated**:
+  - Visual (true color + false color snow)
+  - NDSI (Normalized Difference Snow Index)
+  - LST (Land Surface Temperature, day/night)
+  - ERA5 meteorological data
+- **Output**: GCS (GeoTIFF, PNG) + BigQuery `imagenes_satelitales`
+
+### 6. analizador_avalanchas/main.py
+- **Entry point**: `analizar_topografia(solicitud: Request)`
+- **Trigger**: HTTP (Cloud Scheduler monthly: day 1 at 03:00)
+- **Function**: Analyzes terrain for avalanche risk using SRTM DEM
+- **Analysis zones (EAWS 2025)**:
+  - Zona Inicio (30°-60° slope, convex)
+  - Zona Tránsito (15°-30° slope, channeled)
+  - Zona Depósito (<15° slope, concave)
+- **Metrics calculated**:
+  - Area by zone (ha and %)
+  - Slope statistics (mean, max, p90)
+  - Aspect (predominant direction)
+  - Elevation (max, min, desnivel)
+  - Risk index and EAWS classification
+- **Output**: GCS (JSON, PNG maps, GeoJSON) + BigQuery `zonas_avalancha`
+
+### 7. desplegar.sh
 - Automated deployment script for entire infrastructure
-- Creates service accounts, Pub/Sub topics, GCS buckets, BigQuery tables
-- Deploys both Cloud Functions
-- Configures Cloud Scheduler
+- Creates: service accounts, 6 Pub/Sub topics, GCS bucket, 5 BigQuery tables
+- Deploys: 6 Cloud Functions
+- Configures: 3 Cloud Scheduler jobs
 
 ## Coding Conventions
 
 ### Language
-- **All code is in Spanish**: Variable names, function names, comments, docstrings, and error messages
+- **All code is in Spanish**: Variable names, function names, comments, docstrings, error messages
 - **Examples**:
   - Variables: `nombre_ubicacion`, `datos_clima`, `marca_tiempo`
   - Functions: `extraer_clima()`, `procesar_mensaje()`, `guardar_datos()`
@@ -92,16 +185,15 @@ snow_alert/
 
 ### Code Style
 - Python 3.11 compatible
-- Type hints are used throughout
+- Type hints throughout
 - Comprehensive docstrings in Spanish
 - Structured logging with `logging` module
-- Custom exception classes for different error types
+- Custom exception classes per module
 
 ### Location Data Structure
-When adding/modifying locations in `UBICACIONES_MONITOREO`:
 ```python
 {
-    'nombre': 'Location Name',           # Short name (used in BigQuery, GCS paths)
+    'nombre': 'Location Name',           # Short name (BigQuery, GCS paths)
     'latitud': -33.3558,                  # Decimal degrees, negative for south
     'longitud': -70.2989,                 # Decimal degrees, negative for west
     'descripcion': 'Full description'     # Descriptive text with context
@@ -112,121 +204,170 @@ When adding/modifying locations in `UBICACIONES_MONITOREO`:
 
 ### Local Testing
 ```bash
-# Install dependencies
+# Weather module
 cd extractor && pip install -r requirements.txt
-cd ../procesador && pip install -r requirements.txt
-
-# Run local function (requires GCP credentials)
 functions-framework --target=extraer_clima --port=8080
+
+# Satellite module (requires GEE auth)
+cd monitor_satelital && pip install -r requirements.txt
+python main.py --prueba --ubicacion="La Parva Sector Bajo"
+
+# Avalanche module (requires GEE auth)
+cd analizador_avalanchas && pip install -r requirements.txt
+python main.py --ubicacion="Portillo"
 ```
 
 ### Deployment
 ```bash
-# Full deployment (creates all resources)
+# Full deployment
 export ID_PROYECTO="your-gcp-project-id"
 ./desplegar.sh
 
-# Deploy only extractor function
-gcloud functions deploy extractor-clima --gen2 \
-  --runtime=python311 \
-  --source=./extractor \
-  --entry-point=extraer_clima \
-  --trigger-http
+# Deploy individual functions
+gcloud functions deploy extractor-clima --gen2 --runtime=python311 \
+  --source=./extractor --entry-point=extraer_clima --trigger-http
 
-# Deploy only procesador function
-gcloud functions deploy procesador-clima --gen2 \
-  --runtime=python311 \
-  --source=./procesador \
-  --entry-point=procesar_clima \
-  --trigger-topic=clima-datos-crudos
+gcloud functions deploy monitor-satelital-nieve --gen2 --runtime=python311 \
+  --source=./monitor_satelital --entry-point=monitorear_satelital \
+  --trigger-http --memory=2048MB --timeout=540s
+
+gcloud functions deploy analizador-satelital-zonas-riesgosas-avalanchas --gen2 \
+  --runtime=python311 --source=./analizador_avalanchas \
+  --entry-point=analizar_topografia --trigger-http --memory=1024MB --timeout=540s
 ```
 
 ### Viewing Logs
 ```bash
 gcloud functions logs read extractor-clima --gen2 --limit=50
 gcloud functions logs read procesador-clima --gen2 --limit=50
-```
-
-### Testing Manually
-```bash
-# Trigger extractor
-curl -X POST $(gcloud functions describe extractor-clima --gen2 --format='value(serviceConfig.uri)')
-
-# View BigQuery data
-bq query --use_legacy_sql=false 'SELECT * FROM clima.condiciones_actuales ORDER BY hora_actual DESC LIMIT 10'
+gcloud functions logs read monitor-satelital-nieve --gen2 --limit=50
+gcloud functions logs read analizador-satelital-zonas-riesgosas-avalanchas --gen2 --limit=50
 ```
 
 ## GCP Resources
 
 | Resource | Name | Purpose |
 |----------|------|---------|
-| Service Account | `funciones-clima-sa` | IAM identity for functions |
-| Secret | `weather-api-key` | Google Weather API key |
-| Pub/Sub Topic | `clima-datos-crudos` | Main event stream |
-| Pub/Sub Topic | `clima-datos-dlq` | Dead letter queue |
-| GCS Bucket | `{project}-datos-clima-bronce` | Raw data storage (Bronze) |
-| BigQuery Dataset | `clima` | Analytics data warehouse |
-| BigQuery Table | `condiciones_actuales` | Processed weather data (Silver) |
-| Cloud Function | `extractor-clima` | HTTP-triggered extraction |
-| Cloud Function | `procesador-clima` | Pub/Sub-triggered processing |
-| Cloud Scheduler | `extraer-clima-job` | Periodic trigger (every minute) |
+| **Service Account** | `funciones-clima-sa` | IAM identity for functions |
+| **Secret** | `weather-api-key` | Google Weather API key |
+| **Pub/Sub Topics** | | |
+| | `clima-datos-crudos` | Current conditions stream |
+| | `clima-datos-dlq` | Dead letter queue (conditions) |
+| | `clima-pronostico-horas` | Hourly forecast stream |
+| | `clima-pronostico-horas-dlq` | DLQ (hours) |
+| | `clima-pronostico-dias` | Daily forecast stream |
+| | `clima-pronostico-dias-dlq` | DLQ (days) |
+| **GCS Bucket** | `{project}-datos-clima-bronce` | Raw data storage (Bronze) |
+| **BigQuery Dataset** | `clima` | Analytics data warehouse |
+| **BigQuery Tables** | | |
+| | `condiciones_actuales` | Current weather conditions |
+| | `pronostico_horas` | Hourly forecast (76h) |
+| | `pronostico_dias` | Daily forecast (10 days) |
+| | `imagenes_satelitales` | Satellite imagery metadata |
+| | `zonas_avalancha` | Avalanche zone analysis |
+| **Cloud Functions** | | |
+| | `extractor-clima` | HTTP-triggered extraction |
+| | `procesador-clima` | Processes current conditions |
+| | `procesador-clima-horas` | Processes hourly forecast |
+| | `procesador-clima-dias` | Processes daily forecast |
+| | `monitor-satelital-nieve` | Downloads satellite imagery |
+| | `analizador-satelital-zonas-riesgosas-avalanchas` | Avalanche analysis |
+| **Cloud Scheduler** | | |
+| | `extraer-clima-job` | 3x/día (08:00, 14:00, 20:00) |
+| | `monitor-satelital-job` | 3x/día (08:30, 14:30, 20:30) |
+| | `analizar-topografia-job` | Mensual (día 1, 03:00) |
 
-## Important Weather API Fields
+## Important Data Fields
 
-The system captures these key weather metrics:
-- `temperatura` - Current temperature (°C)
-- `sensacion_termica` - Feels-like temperature
-- `sensacion_viento` - Wind chill (critical for snow sports)
-- `velocidad_viento` / `direccion_viento` - Wind speed and direction
-- `precipitacion_acumulada` - Accumulated precipitation
-- `probabilidad_precipitacion` - Precipitation probability
-- `cobertura_nubes` - Cloud cover percentage
-- `visibilidad` - Visibility distance
-- `humedad_relativa` - Relative humidity
-- `condicion_clima` - Weather condition type
+### Current Conditions (`condiciones_actuales`)
+- `temperatura`, `sensacion_termica`, `sensacion_viento`
+- `velocidad_viento`, `direccion_viento`
+- `precipitacion_acumulada`, `probabilidad_precipitacion`
+- `cobertura_nubes`, `visibilidad`, `humedad_relativa`
+- `condicion_clima`
+
+### Hourly Forecast (`pronostico_horas`)
+- `hora_inicio`, `hora_fin`, `es_dia`
+- `temperatura`, `prob_precipitacion`, `cantidad_precipitacion`
+- Wind, visibility, cloud cover per hour
+
+### Daily Forecast (`pronostico_dias`)
+- `fecha_inicio`, `fecha_fin`
+- `hora_amanecer`, `hora_atardecer`
+- `temp_max_dia`, `temp_min_dia`
+- `diurno_*` (15 fields), `nocturno_*` (15 fields)
+
+### Satellite Imagery (`imagenes_satelitales`)
+- `nombre_ubicacion`, `latitud`, `longitud`, `region`
+- `fecha_captura`, `tipo_captura` (mañana/tarde/noche)
+- `fuente_principal` (GOES/MODIS/VIIRS)
+- `pct_cobertura_nieve`, `ndsi_medio`, `ndsi_max`
+- `lst_dia_celsius`, `lst_noche_celsius`
+- `uri_geotiff_*`, `uri_png_*`, `uri_thumbnail_*`
+
+### Avalanche Zones (`zonas_avalancha`)
+- `nombre_ubicacion`, `latitud`, `longitud`
+- `zona_inicio_ha`, `zona_transito_ha`, `zona_deposito_ha`
+- `pendiente_media_inicio`, `pendiente_max_inicio`
+- `aspecto_predominante_inicio`
+- `indice_riesgo_topografico`, `clasificacion_riesgo`
+- `peligro_eaws_base`, `frecuencia_estimada_eaws`
 
 ## Common Tasks for AI Assistants
 
 ### Adding New Locations
-1. Edit `extractor/main.py`
-2. Add new location dict to `UBICACIONES_MONITOREO` list
-3. Include accurate coordinates (use Google Maps or similar)
-4. Provide meaningful Spanish description
-5. Redeploy extractor function
+1. Edit `extractor/main.py` - add to `UBICACIONES_MONITOREO`
+2. Edit `analizador_avalanchas/main.py` - add to `UBICACIONES_ANALISIS` if has avalanche terrain
+3. Include accurate coordinates and Spanish description
+4. Redeploy affected functions
 
 ### Modifying BigQuery Schema
-1. Edit `procesador/main.py` function `transformar_datos_para_bigquery()`
-2. Update the schema in `desplegar.sh` if adding new fields
-3. Consider backwards compatibility with existing data
+1. Edit the corresponding `schema_*_bigquery.json` file
+2. Update `preparar_fila_bigquery()` or equivalent in the module
+3. Update `desplegar.sh` if needed
+4. Consider backwards compatibility
 
 ### Debugging Failed Messages
 ```bash
-# Check dead letter queue
+# Check dead letter queues
 gcloud pubsub subscriptions pull clima-datos-dlq-sub --limit=10 --auto-ack
 
 # Check function errors
 gcloud functions logs read procesador-clima --gen2 --limit=100 | grep ERROR
+gcloud functions logs read monitor-satelital-nieve --gen2 --limit=100 | grep ERROR
 ```
 
 ### Changing Scheduler Frequency
 ```bash
-gcloud scheduler jobs update http extraer-clima-job \
-  --schedule="*/5 * * * *"  # Every 5 minutes
+# Weather extraction (current: 3x/day)
+gcloud scheduler jobs update http extraer-clima-job --schedule="0 8,14,20 * * *"
+
+# Satellite monitoring (current: 3x/day, 30 min after weather)
+gcloud scheduler jobs update http monitor-satelital-job --schedule="30 8,14,20 * * *"
+
+# Avalanche analysis (current: monthly)
+gcloud scheduler jobs update http analizar-topografia-job --schedule="0 3 1 * *"
 ```
 
 ## Error Handling
 
-### Custom Exceptions
-- `ErrorExtraccionClima` - Weather API call failures
-- `ErrorPublicacionPubSub` - Pub/Sub publishing failures
-- `ErrorConfiguracion` - Configuration/setup issues
-- `ErrorValidacionDatos` - Data validation failures
-- `ErrorAlmacenamientoGCS` - GCS storage failures
-- `ErrorAlmacenamientoBigQuery` - BigQuery insertion failures
+### Custom Exceptions by Module
+**extractor/**
+- `ErrorExtraccionClima`, `ErrorPublicacionPubSub`, `ErrorConfiguracion`
+
+**procesador/**
+- `ErrorValidacionDatos`, `ErrorAlmacenamientoGCS`, `ErrorAlmacenamientoBigQuery`
+
+**monitor_satelital/**
+- `ErrorMonitorSatelital`, `ErrorConfiguracionGEE`, `ErrorAlmacenamientoBigQuery`
+
+**analizador_avalanchas/**
+- `ErrorAnalisisTopografico`, `ErrorAlmacenamientoBigQuery`, `ErrorAlmacenamientoGCS`
 
 ### Retry Behavior
 - Pub/Sub automatically retries failed procesador invocations
-- After max retries, messages go to DLQ (`clima-datos-dlq`)
+- After max retries, messages go to DLQ
+- GEE downloads have built-in retry with exponential backoff
 - Validation errors are NOT retried (prevents poison pill loop)
 
 ## Best Practices
@@ -235,17 +376,20 @@ gcloud scheduler jobs update http extraer-clima-job \
 2. **Use Spanish naming** to maintain consistency
 3. **Log extensively** - GCP logs are your debugging lifeline
 4. **Validate data early** - Fail fast on bad data
-5. **Keep locations accurate** - Wrong coordinates = wrong weather data
+5. **Keep locations accurate** - Wrong coordinates = wrong weather/satellite data
 6. **Monitor the DLQ** - Failed messages indicate problems
+7. **GEE quotas** - Use batch processing (10 items, 2s delay) to avoid rate limits
 
-## Snow-Specific Considerations
+## Snow & Avalanche Considerations
 
-When working with snow locations:
+When working with snow/avalanche locations:
 - **Elevation matters**: Higher elevations have different weather patterns
 - **Wind chill is critical**: `sensacion_viento` is key for ski safety
-- **Precipitation type**: API returns precipitation but not snow-specific data
-- **Visibility**: Important for avalanche conditions and ski operations
-- **Cloud cover**: Affects snow quality and sun exposure
+- **NDSI thresholds**: >0.4 indicates snow, >0.6 indicates dense snow
+- **LST**: Critical for snowmelt prediction
+- **Slope angles**: 30°-45° is prime avalanche terrain
+- **Aspect**: North-facing slopes (S. Hemisphere) retain snow longer
+- **EAWS risk levels**: 1 (Low) to 5 (Very High)
 
 ## Quick Reference Commands
 
@@ -253,16 +397,36 @@ When working with snow locations:
 # Deploy everything
 ./desplegar.sh
 
-# View recent data
+# Trigger functions manually
+curl -X POST $(gcloud functions describe extractor-clima --gen2 --format='value(serviceConfig.uri)')
+curl -X POST $(gcloud functions describe monitor-satelital-nieve --gen2 --format='value(serviceConfig.uri)')
+curl -X POST $(gcloud functions describe analizador-satelital-zonas-riesgosas-avalanchas --gen2 --format='value(serviceConfig.uri)')
+
+# Query current conditions
 bq query --use_legacy_sql=false \
   'SELECT nombre_ubicacion, temperatura, sensacion_viento, velocidad_viento
-   FROM clima.condiciones_actuales
-   ORDER BY hora_actual DESC LIMIT 20'
+   FROM clima.condiciones_actuales ORDER BY hora_actual DESC LIMIT 20'
 
-# Check function status
+# Query satellite imagery
+bq query --use_legacy_sql=false \
+  'SELECT nombre_ubicacion, fecha_captura, fuente_principal, pct_cobertura_nieve, ndsi_medio
+   FROM clima.imagenes_satelitales ORDER BY fecha_captura DESC LIMIT 20'
+
+# Query avalanche zones
+bq query --use_legacy_sql=false \
+  'SELECT nombre_ubicacion, zona_inicio_ha, indice_riesgo_topografico, clasificacion_riesgo
+   FROM clima.zonas_avalancha ORDER BY indice_riesgo_topografico DESC LIMIT 20'
+
+# Check all function status
 gcloud functions describe extractor-clima --gen2
-gcloud functions describe procesador-clima --gen2
+gcloud functions describe monitor-satelital-nieve --gen2
+gcloud functions describe analizador-satelital-zonas-riesgosas-avalanchas --gen2
 
-# View scheduler job
-gcloud scheduler jobs describe extraer-clima-job
+# View logs
+gcloud functions logs read extractor-clima --gen2 --limit=20
+gcloud functions logs read monitor-satelital-nieve --gen2 --limit=20
+gcloud functions logs read analizador-satelital-zonas-riesgosas-avalanchas --gen2 --limit=20
+
+# View scheduler jobs
+gcloud scheduler jobs list --location=us-central1
 ```

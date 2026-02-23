@@ -1,0 +1,22 @@
+# .gcloudignore para Cloud Function Procesador Dias
+# Solo incluir main.py y requirements.txt
+
+# Python cache
+__pycache__/
+*.pyc
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+
+# Documentacion
+*.md
+
+# Git
+.git/
+.gitignore
+
+# Otros
+.DS_Store
+*.log

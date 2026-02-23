@@ -1,0 +1,21 @@
+# Snow Alert - Analizador de Avalanchas
+# Dependencias para análisis topográfico con Google Earth Engine
+
+# Framework de Cloud Functions
+functions-framework==3.*
+
+# Google Cloud Services
+google-cloud-bigquery==3.*
+google-cloud-storage==2.*
+
+# Google Earth Engine
+earthengine-api==1.*
+
+# HTTP Framework
+Flask==3.*
+
+# Utilidades
+numpy>=1.24.0
+
+# Visualización de mapas y gráficos
+matplotlib>=3.7.0

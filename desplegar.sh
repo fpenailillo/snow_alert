@@ -63,13 +63,28 @@ REGION=${2:-"us-central1"}
 ZONA_HORARIA="America/Santiago"
 
 # Nombres de recursos
+# Topics de Pub/Sub
 TOPIC_DATOS_CRUDOS="clima-datos-crudos"
+TOPIC_PRONOSTICO_HORAS="clima-pronostico-horas"
+TOPIC_PRONOSTICO_DIAS="clima-pronostico-dias"
 TOPIC_DLQ="clima-datos-dlq"
+TOPIC_PRONOSTICO_HORAS_DLQ="clima-pronostico-horas-dlq"
+TOPIC_PRONOSTICO_DIAS_DLQ="clima-pronostico-dias-dlq"
+
+# Storage y BigQuery
 BUCKET_BRONCE="datos-clima-bronce"
 DATASET_CLIMA="clima"
 TABLA_CONDICIONES="condiciones_actuales"
+TABLA_PRONOSTICO_HORAS="pronostico_horas"
+TABLA_PRONOSTICO_DIAS="pronostico_dias"
+
+# Cloud Functions
 FUNCION_EXTRACTOR="extractor-clima"
 FUNCION_PROCESADOR="procesador-clima"
+FUNCION_PROCESADOR_HORAS="procesador-clima-horas"
+FUNCION_PROCESADOR_DIAS="procesador-clima-dias"
+
+# Scheduler
 JOB_SCHEDULER="extraer-clima-job"
 CUENTA_SERVICIO="funciones-clima-sa"
 
@@ -231,6 +246,42 @@ else
     imprimir_exito "Topic DLQ creado: $TOPIC_DLQ"
 fi
 
+# Topic pronóstico por horas
+if gcloud pubsub topics describe $TOPIC_PRONOSTICO_HORAS --project=$ID_PROYECTO &> /dev/null; then
+    imprimir_advertencia "Topic ya existe: $TOPIC_PRONOSTICO_HORAS"
+else
+    gcloud pubsub topics create $TOPIC_PRONOSTICO_HORAS \
+        --project=$ID_PROYECTO
+    imprimir_exito "Topic creado: $TOPIC_PRONOSTICO_HORAS"
+fi
+
+# Topic DLQ pronóstico por horas
+if gcloud pubsub topics describe $TOPIC_PRONOSTICO_HORAS_DLQ --project=$ID_PROYECTO &> /dev/null; then
+    imprimir_advertencia "Topic DLQ ya existe: $TOPIC_PRONOSTICO_HORAS_DLQ"
+else
+    gcloud pubsub topics create $TOPIC_PRONOSTICO_HORAS_DLQ \
+        --project=$ID_PROYECTO
+    imprimir_exito "Topic DLQ creado: $TOPIC_PRONOSTICO_HORAS_DLQ"
+fi
+
+# Topic pronóstico por días
+if gcloud pubsub topics describe $TOPIC_PRONOSTICO_DIAS --project=$ID_PROYECTO &> /dev/null; then
+    imprimir_advertencia "Topic ya existe: $TOPIC_PRONOSTICO_DIAS"
+else
+    gcloud pubsub topics create $TOPIC_PRONOSTICO_DIAS \
+        --project=$ID_PROYECTO
+    imprimir_exito "Topic creado: $TOPIC_PRONOSTICO_DIAS"
+fi
+
+# Topic DLQ pronóstico por días
+if gcloud pubsub topics describe $TOPIC_PRONOSTICO_DIAS_DLQ --project=$ID_PROYECTO &> /dev/null; then
+    imprimir_advertencia "Topic DLQ ya existe: $TOPIC_PRONOSTICO_DIAS_DLQ"
+else
+    gcloud pubsub topics create $TOPIC_PRONOSTICO_DIAS_DLQ \
+        --project=$ID_PROYECTO
+    imprimir_exito "Topic DLQ creado: $TOPIC_PRONOSTICO_DIAS_DLQ"
+fi
+
 # Crear bucket de Cloud Storage
 imprimir_titulo "Creando bucket de Cloud Storage"
 BUCKET_COMPLETO="${ID_PROYECTO}-${BUCKET_BRONCE}"
@@ -330,6 +381,151 @@ else
 fi
 rm /tmp/schema_clima.json
 
+# Crear tabla de pronóstico por horas
+imprimir_titulo "Creando tabla de BigQuery: Pronóstico por Horas"
+cat > /tmp/schema_pronostico_horas.json <<EOF
+[
+  {"name": "nombre_ubicacion", "type": "STRING", "mode": "REQUIRED"},
+  {"name": "latitud", "type": "FLOAT64", "mode": "REQUIRED"},
+  {"name": "longitud", "type": "FLOAT64", "mode": "REQUIRED"},
+  {"name": "hora_inicio", "type": "TIMESTAMP", "mode": "REQUIRED"},
+  {"name": "hora_fin", "type": "TIMESTAMP", "mode": "NULLABLE"},
+  {"name": "temperatura", "type": "FLOAT64", "mode": "NULLABLE"},
+  {"name": "sensacion_termica", "type": "FLOAT64", "mode": "NULLABLE"},
+  {"name": "indice_calor", "type": "FLOAT64", "mode": "NULLABLE"},
+  {"name": "sensacion_viento", "type": "FLOAT64", "mode": "NULLABLE"},
+  {"name": "punto_rocio", "type": "FLOAT64", "mode": "NULLABLE"},
+  {"name": "condicion_clima", "type": "STRING", "mode": "NULLABLE"},
+  {"name": "descripcion_clima", "type": "STRING", "mode": "NULLABLE"},
+  {"name": "icono_url", "type": "STRING", "mode": "NULLABLE"},
+  {"name": "humedad_relativa", "type": "FLOAT64", "mode": "NULLABLE"},
+  {"name": "velocidad_viento", "type": "FLOAT64", "mode": "NULLABLE"},
+  {"name": "direccion_viento", "type": "STRING", "mode": "NULLABLE"},
+  {"name": "prob_precipitacion", "type": "FLOAT64", "mode": "NULLABLE"},
+  {"name": "cantidad_precipitacion", "type": "FLOAT64", "mode": "NULLABLE"},
+  {"name": "prob_tormenta", "type": "FLOAT64", "mode": "NULLABLE"},
+  {"name": "cobertura_nubes", "type": "FLOAT64", "mode": "NULLABLE"},
+  {"name": "indice_uv", "type": "FLOAT64", "mode": "NULLABLE"},
+  {"name": "es_dia", "type": "BOOLEAN", "mode": "NULLABLE"},
+  {"name": "visibilidad", "type": "FLOAT64", "mode": "NULLABLE"},
+  {"name": "presion_aire", "type": "FLOAT64", "mode": "NULLABLE"},
+  {"name": "marca_tiempo_extraccion", "type": "TIMESTAMP", "mode": "REQUIRED"},
+  {"name": "marca_tiempo_ingestion", "type": "TIMESTAMP", "mode": "REQUIRED"},
+  {"name": "uri_datos_crudos", "type": "STRING", "mode": "NULLABLE"}
+]
+EOF
+
+if bq ls --project_id=$ID_PROYECTO $DATASET_CLIMA | grep -q $TABLA_PRONOSTICO_HORAS; then
+    imprimir_advertencia "Tabla ya existe: $TABLA_PRONOSTICO_HORAS"
+else
+    bq mk --project_id=$ID_PROYECTO \
+        --table \
+        --time_partitioning_field=hora_inicio \
+        --time_partitioning_type=DAY \
+        --clustering_fields=nombre_ubicacion \
+        --description="Pronóstico climático por horas (próximas 76 horas)" \
+        $DATASET_CLIMA.$TABLA_PRONOSTICO_HORAS \
+        /tmp/schema_pronostico_horas.json
+    imprimir_exito "Tabla creada: $TABLA_PRONOSTICO_HORAS"
+fi
+rm /tmp/schema_pronostico_horas.json
+
+# Crear tabla de pronóstico por días
+imprimir_titulo "Creando tabla de BigQuery: Pronóstico por Días"
+cat > /tmp/schema_pronostico_dias.json <<EOF
+[
+  {"name": "nombre_ubicacion", "type": "STRING", "mode": "REQUIRED"},
+  {"name": "latitud", "type": "FLOAT64", "mode": "REQUIRED"},
+  {"name": "longitud", "type": "FLOAT64", "mode": "REQUIRED"},
+  {"name": "fecha_inicio", "type": "TIMESTAMP", "mode": "REQUIRED"},
+  {"name": "fecha_fin", "type": "TIMESTAMP", "mode": "NULLABLE"},
+  {"name": "anio", "type": "INT64", "mode": "NULLABLE"},
+  {"name": "mes", "type": "INT64", "mode": "NULLABLE"},
+  {"name": "dia", "type": "INT64", "mode": "NULLABLE"},
+  {"name": "hora_amanecer", "type": "STRING", "mode": "NULLABLE"},
+  {"name": "hora_atardecer", "type": "STRING", "mode": "NULLABLE"},
+  {"name": "temp_max_dia", "type": "FLOAT64", "mode": "NULLABLE"},
+  {"name": "temp_min_dia", "type": "FLOAT64", "mode": "NULLABLE"},
+  {"name": "diurno_condicion", "type": "STRING", "mode": "NULLABLE"},
+  {"name": "diurno_descripcion", "type": "STRING", "mode": "NULLABLE"},
+  {"name": "diurno_icono_url", "type": "STRING", "mode": "NULLABLE"},
+  {"name": "diurno_temp_max", "type": "FLOAT64", "mode": "NULLABLE"},
+  {"name": "diurno_temp_min", "type": "FLOAT64", "mode": "NULLABLE"},
+  {"name": "diurno_sensacion_max", "type": "FLOAT64", "mode": "NULLABLE"},
+  {"name": "diurno_sensacion_min", "type": "FLOAT64", "mode": "NULLABLE"},
+  {"name": "diurno_humedad", "type": "FLOAT64", "mode": "NULLABLE"},
+  {"name": "diurno_velocidad_viento", "type": "FLOAT64", "mode": "NULLABLE"},
+  {"name": "diurno_direccion_viento", "type": "STRING", "mode": "NULLABLE"},
+  {"name": "diurno_prob_precipitacion", "type": "FLOAT64", "mode": "NULLABLE"},
+  {"name": "diurno_cantidad_precipitacion", "type": "FLOAT64", "mode": "NULLABLE"},
+  {"name": "diurno_prob_tormenta", "type": "FLOAT64", "mode": "NULLABLE"},
+  {"name": "diurno_cobertura_nubes", "type": "FLOAT64", "mode": "NULLABLE"},
+  {"name": "diurno_indice_uv", "type": "FLOAT64", "mode": "NULLABLE"},
+  {"name": "nocturno_condicion", "type": "STRING", "mode": "NULLABLE"},
+  {"name": "nocturno_descripcion", "type": "STRING", "mode": "NULLABLE"},
+  {"name": "nocturno_icono_url", "type": "STRING", "mode": "NULLABLE"},
+  {"name": "nocturno_temp_max", "type": "FLOAT64", "mode": "NULLABLE"},
+  {"name": "nocturno_temp_min", "type": "FLOAT64", "mode": "NULLABLE"},
+  {"name": "nocturno_sensacion_max", "type": "FLOAT64", "mode": "NULLABLE"},
+  {"name": "nocturno_sensacion_min", "type": "FLOAT64", "mode": "NULLABLE"},
+  {"name": "nocturno_humedad", "type": "FLOAT64", "mode": "NULLABLE"},
+  {"name": "nocturno_velocidad_viento", "type": "FLOAT64", "mode": "NULLABLE"},
+  {"name": "nocturno_direccion_viento", "type": "STRING", "mode": "NULLABLE"},
+  {"name": "nocturno_prob_precipitacion", "type": "FLOAT64", "mode": "NULLABLE"},
+  {"name": "nocturno_cantidad_precipitacion", "type": "FLOAT64", "mode": "NULLABLE"},
+  {"name": "nocturno_prob_tormenta", "type": "FLOAT64", "mode": "NULLABLE"},
+  {"name": "nocturno_cobertura_nubes", "type": "FLOAT64", "mode": "NULLABLE"},
+  {"name": "nocturno_indice_uv", "type": "FLOAT64", "mode": "NULLABLE"},
+  {"name": "marca_tiempo_extraccion", "type": "TIMESTAMP", "mode": "REQUIRED"},
+  {"name": "marca_tiempo_ingestion", "type": "TIMESTAMP", "mode": "REQUIRED"},
+  {"name": "uri_datos_crudos", "type": "STRING", "mode": "NULLABLE"}
+]
+EOF
+
+if bq ls --project_id=$ID_PROYECTO $DATASET_CLIMA | grep -q $TABLA_PRONOSTICO_DIAS; then
+    imprimir_advertencia "Tabla ya existe: $TABLA_PRONOSTICO_DIAS"
+else
+    bq mk --project_id=$ID_PROYECTO \
+        --table \
+        --time_partitioning_field=fecha_inicio \
+        --time_partitioning_type=DAY \
+        --clustering_fields=nombre_ubicacion \
+        --description="Pronóstico climático por días (próximos 10 días)" \
+        $DATASET_CLIMA.$TABLA_PRONOSTICO_DIAS \
+        /tmp/schema_pronostico_dias.json
+    imprimir_exito "Tabla creada: $TABLA_PRONOSTICO_DIAS"
+fi
+rm /tmp/schema_pronostico_dias.json
+
+# ============================================================================
+# MÓDULO DE ANÁLISIS TOPOGRÁFICO DE AVALANCHAS
+# ============================================================================
+
+# Crear tabla de BigQuery: Zonas de Avalancha
+imprimir_titulo "Creando tabla de BigQuery: Zonas de Avalancha"
+TABLA_ZONAS="zonas_avalancha"
+FUNCION_ANALIZADOR="analizador-satelital-zonas-riesgosas-avalanchas"
+
+if bq ls --project_id=$ID_PROYECTO $DATASET_CLIMA | grep -q $TABLA_ZONAS; then
+    imprimir_advertencia "Tabla ya existe: $TABLA_ZONAS"
+else
+    # Usar el schema JSON del módulo analizador_avalanchas
+    bq mk --project_id=$ID_PROYECTO \
+        --table \
+        --time_partitioning_field=fecha_analisis \
+        --time_partitioning_type=DAY \
+        --clustering_fields=nombre_ubicacion,clasificacion_riesgo \
+        --description="Análisis topográfico de zonas de avalancha (EAWS 2025)" \
+        $DATASET_CLIMA.$TABLA_ZONAS \
+        ./analizador_avalanchas/schema_zonas_bigquery.json
+    imprimir_exito "Tabla creada: $TABLA_ZONAS"
+fi
+
+# Habilitar Earth Engine API
+imprimir_titulo "Habilitando Earth Engine API"
+gcloud services enable earthengine.googleapis.com --project=$ID_PROYECTO
+imprimir_exito "Earth Engine API habilitada"
+
 # Desplegar Cloud Function Extractor
 imprimir_titulo "Desplegando Cloud Function: Extractor"
 gcloud functions deploy $FUNCION_EXTRACTOR \
@@ -390,6 +586,148 @@ gcloud functions deploy $FUNCION_PROCESADOR \
 
 imprimir_exito "Cloud Function desplegada: $FUNCION_PROCESADOR"
 
+# Desplegar Cloud Function Procesador de Pronóstico por Horas
+imprimir_titulo "Desplegando Cloud Function: Procesador Pronóstico Horas"
+gcloud functions deploy $FUNCION_PROCESADOR_HORAS \
+    --gen2 \
+    --runtime=python311 \
+    --region=$REGION \
+    --source=./procesador_horas \
+    --entry-point=procesar_pronostico_horas \
+    --trigger-topic=$TOPIC_PRONOSTICO_HORAS \
+    --service-account=${CUENTA_SERVICIO}@${ID_PROYECTO}.iam.gserviceaccount.com \
+    --set-env-vars=GCP_PROJECT=$ID_PROYECTO,BUCKET_CLIMA=$BUCKET_COMPLETO,DATASET_CLIMA=$DATASET_CLIMA \
+    --memory=512MB \
+    --timeout=120s \
+    --max-instances=10 \
+    --project=$ID_PROYECTO \
+    --quiet
+
+imprimir_exito "Cloud Function desplegada: $FUNCION_PROCESADOR_HORAS"
+
+# Desplegar Cloud Function Procesador de Pronóstico por Días
+imprimir_titulo "Desplegando Cloud Function: Procesador Pronóstico Días"
+gcloud functions deploy $FUNCION_PROCESADOR_DIAS \
+    --gen2 \
+    --runtime=python311 \
+    --region=$REGION \
+    --source=./procesador_dias \
+    --entry-point=procesar_pronostico_dias \
+    --trigger-topic=$TOPIC_PRONOSTICO_DIAS \
+    --service-account=${CUENTA_SERVICIO}@${ID_PROYECTO}.iam.gserviceaccount.com \
+    --set-env-vars=GCP_PROJECT=$ID_PROYECTO,BUCKET_CLIMA=$BUCKET_COMPLETO,DATASET_CLIMA=$DATASET_CLIMA \
+    --memory=512MB \
+    --timeout=120s \
+    --max-instances=10 \
+    --project=$ID_PROYECTO \
+    --quiet
+
+imprimir_exito "Cloud Function desplegada: $FUNCION_PROCESADOR_DIAS"
+
+# Desplegar Cloud Function Analizador Satelital de Zonas Riesgosas en Avalanchas
+imprimir_titulo "Desplegando Cloud Function: Analizador Satelital de Zonas Riesgosas en Avalanchas"
+gcloud functions deploy $FUNCION_ANALIZADOR \
+    --gen2 \
+    --runtime=python311 \
+    --region=$REGION \
+    --source=./analizador_avalanchas \
+    --entry-point=analizar_topografia \
+    --trigger-http \
+    --service-account=${CUENTA_SERVICIO}@${ID_PROYECTO}.iam.gserviceaccount.com \
+    --set-env-vars=GCP_PROJECT=$ID_PROYECTO,GEE_PROJECT=$ID_PROYECTO \
+    --memory=1024MB \
+    --timeout=540s \
+    --max-instances=3 \
+    --project=$ID_PROYECTO \
+    --quiet
+
+imprimir_exito "Cloud Function desplegada: $FUNCION_ANALIZADOR"
+
+# Obtener URL del analizador
+URL_ANALIZADOR=$(gcloud functions describe $FUNCION_ANALIZADOR \
+    --gen2 \
+    --region=$REGION \
+    --project=$ID_PROYECTO \
+    --format='value(serviceConfig.uri)')
+
+echo "URL del analizador: $URL_ANALIZADOR"
+
+# Otorgar permisos de invocación al servicio Cloud Run del analizador
+gcloud run services add-iam-policy-binding $FUNCION_ANALIZADOR \
+    --region=$REGION \
+    --member="serviceAccount:${CUENTA_SERVICIO}@${ID_PROYECTO}.iam.gserviceaccount.com" \
+    --role="roles/run.invoker" \
+    --project=$ID_PROYECTO \
+    --quiet
+
+imprimir_exito "Permisos de invocación configurados para analizador"
+
+# ============================================================================
+# MÓDULO DE MONITOR SATELITAL DE NIEVE
+# ============================================================================
+
+imprimir_titulo "Configurando Monitor Satelital de Nieve"
+TABLA_IMAGENES="imagenes_satelitales"
+FUNCION_MONITOR="monitor-satelital-nieve"
+
+# Crear tabla de BigQuery: Imágenes Satelitales
+imprimir_info "Creando tabla de BigQuery: Imágenes Satelitales"
+
+if bq ls --project_id=$ID_PROYECTO $DATASET_CLIMA | grep -q $TABLA_IMAGENES; then
+    imprimir_advertencia "Tabla ya existe: $TABLA_IMAGENES"
+else
+    bq mk --project_id=$ID_PROYECTO \
+        --table \
+        --time_partitioning_field=fecha_captura \
+        --time_partitioning_type=DAY \
+        --clustering_fields=nombre_ubicacion,tipo_captura \
+        --description="Imágenes satelitales de cobertura de nieve (GOES, MODIS, ERA5)" \
+        $DATASET_CLIMA.$TABLA_IMAGENES \
+        ./monitor_satelital/schema_imagenes_bigquery.json
+    imprimir_exito "Tabla creada: $TABLA_IMAGENES"
+fi
+
+# Crear estructura de directorios en bucket (se crean automáticamente al subir)
+imprimir_info "Verificando estructura de directorios satelital/ en bucket..."
+
+# Desplegar Cloud Function Monitor Satelital
+imprimir_titulo "Desplegando Cloud Function: Monitor Satelital de Nieve"
+gcloud functions deploy $FUNCION_MONITOR \
+    --gen2 \
+    --runtime=python311 \
+    --region=$REGION \
+    --source=./monitor_satelital \
+    --entry-point=monitorear_satelital \
+    --trigger-http \
+    --service-account=${CUENTA_SERVICIO}@${ID_PROYECTO}.iam.gserviceaccount.com \
+    --set-env-vars=GCP_PROJECT=$ID_PROYECTO,GEE_PROJECT=$ID_PROYECTO \
+    --memory=2048MB \
+    --timeout=540s \
+    --max-instances=3 \
+    --project=$ID_PROYECTO \
+    --quiet
+
+imprimir_exito "Cloud Function desplegada: $FUNCION_MONITOR"
+
+# Obtener URL del monitor satelital
+URL_MONITOR=$(gcloud functions describe $FUNCION_MONITOR \
+    --gen2 \
+    --region=$REGION \
+    --project=$ID_PROYECTO \
+    --format='value(serviceConfig.uri)')
+
+echo "URL del monitor satelital: $URL_MONITOR"
+
+# Otorgar permisos de invocación
+gcloud run services add-iam-policy-binding $FUNCION_MONITOR \
+    --region=$REGION \
+    --member="serviceAccount:${CUENTA_SERVICIO}@${ID_PROYECTO}.iam.gserviceaccount.com" \
+    --role="roles/run.invoker" \
+    --project=$ID_PROYECTO \
+    --quiet
+
+imprimir_exito "Permisos de invocación configurados para monitor satelital"
+
 # Crear job de Cloud Scheduler
 imprimir_titulo "Creando job de Cloud Scheduler"
 
@@ -405,40 +743,134 @@ fi
 # Crear nuevo job
 gcloud scheduler jobs create http $JOB_SCHEDULER \
     --location=$REGION \
-    --schedule="* * * * *" \
+    --schedule="0 8,14,20 * * *" \
     --uri=$URL_EXTRACTOR \
     --http-method=POST \
     --oidc-service-account-email=${CUENTA_SERVICIO}@${ID_PROYECTO}.iam.gserviceaccount.com \
     --oidc-token-audience=$URL_EXTRACTOR \
     --time-zone=$ZONA_HORARIA \
-    --description="Ejecuta extracción de datos climáticos cada minuto" \
+    --description="Ejecuta extracción de datos climáticos 3 veces al día (08:00, 14:00, 20:00)" \
     --project=$ID_PROYECTO
 
 imprimir_exito "Job de Cloud Scheduler creado: $JOB_SCHEDULER"
+
+# Crear job de Cloud Scheduler para Analizador Topográfico
+imprimir_titulo "Creando job de Cloud Scheduler: Analizador Topográfico"
+JOB_ANALIZADOR="analizar-topografia-job"
+
+# Eliminar job existente si existe
+if gcloud scheduler jobs describe $JOB_ANALIZADOR --location=$REGION --project=$ID_PROYECTO &> /dev/null; then
+    imprimir_advertencia "Eliminando job existente: $JOB_ANALIZADOR"
+    gcloud scheduler jobs delete $JOB_ANALIZADOR \
+        --location=$REGION \
+        --project=$ID_PROYECTO \
+        --quiet
+fi
+
+# Crear nuevo job (una vez al mes - el análisis topográfico es estático)
+gcloud scheduler jobs create http $JOB_ANALIZADOR \
+    --location=$REGION \
+    --schedule="0 3 1 * *" \
+    --uri=$URL_ANALIZADOR \
+    --http-method=POST \
+    --oidc-service-account-email=${CUENTA_SERVICIO}@${ID_PROYECTO}.iam.gserviceaccount.com \
+    --oidc-token-audience=$URL_ANALIZADOR \
+    --time-zone=$ZONA_HORARIA \
+    --description="Ejecuta análisis topográfico de avalanchas mensualmente (día 1 a las 03:00)" \
+    --project=$ID_PROYECTO
+
+imprimir_exito "Job de Cloud Scheduler creado: $JOB_ANALIZADOR"
+
+# Crear job de Cloud Scheduler para Monitor Satelital
+imprimir_titulo "Creando job de Cloud Scheduler: Monitor Satelital de Nieve"
+JOB_MONITOR="monitor-satelital-job"
+
+# Eliminar job existente si existe
+if gcloud scheduler jobs describe $JOB_MONITOR --location=$REGION --project=$ID_PROYECTO &> /dev/null; then
+    imprimir_advertencia "Eliminando job existente: $JOB_MONITOR"
+    gcloud scheduler jobs delete $JOB_MONITOR \
+        --location=$REGION \
+        --project=$ID_PROYECTO \
+        --quiet
+fi
+
+# Crear nuevo job (3 veces al día - sincronizado con extractor de clima)
+gcloud scheduler jobs create http $JOB_MONITOR \
+    --location=$REGION \
+    --schedule="30 8,14,20 * * *" \
+    --uri=$URL_MONITOR \
+    --http-method=POST \
+    --oidc-service-account-email=${CUENTA_SERVICIO}@${ID_PROYECTO}.iam.gserviceaccount.com \
+    --oidc-token-audience=$URL_MONITOR \
+    --time-zone=$ZONA_HORARIA \
+    --description="Descarga imágenes satelitales 3 veces al día (08:30, 14:30, 20:30)" \
+    --project=$ID_PROYECTO
+
+imprimir_exito "Job de Cloud Scheduler creado: $JOB_MONITOR"
 
 # Resumen final
 imprimir_titulo "DESPLIEGUE COMPLETADO EXITOSAMENTE"
 
 echo -e "${VERDE}Recursos creados:${NC}"
-echo "  • Topic Pub/Sub: $TOPIC_DATOS_CRUDOS"
-echo "  • Topic DLQ: $TOPIC_DLQ"
+echo ""
+echo "  Pub/Sub Topics:"
+echo "  • $TOPIC_DATOS_CRUDOS (condiciones actuales)"
+echo "  • $TOPIC_PRONOSTICO_HORAS (pronóstico por horas)"
+echo "  • $TOPIC_PRONOSTICO_DIAS (pronóstico por días)"
+echo "  • $TOPIC_DLQ (dead letter queue - condiciones)"
+echo "  • $TOPIC_PRONOSTICO_HORAS_DLQ (dead letter queue - horas)"
+echo "  • $TOPIC_PRONOSTICO_DIAS_DLQ (dead letter queue - días)"
+echo ""
+echo "  Storage:"
 echo "  • Bucket GCS: gs://$BUCKET_COMPLETO"
-echo "  • Dataset BigQuery: $DATASET_CLIMA"
-echo "  • Tabla BigQuery: $TABLA_CONDICIONES"
-echo "  • Cloud Function Extractor: $FUNCION_EXTRACTOR"
-echo "  • Cloud Function Procesador: $FUNCION_PROCESADOR"
-echo "  • Cloud Scheduler Job: $JOB_SCHEDULER"
+echo ""
+echo "  BigQuery:"
+echo "  • Dataset: $DATASET_CLIMA"
+echo "  • Tabla: $TABLA_CONDICIONES (condiciones actuales)"
+echo "  • Tabla: $TABLA_PRONOSTICO_HORAS (pronóstico 76 horas)"
+echo "  • Tabla: $TABLA_PRONOSTICO_DIAS (pronóstico 10 días)"
+echo "  • Tabla: $TABLA_ZONAS (zonas de avalancha EAWS)"
+echo "  • Tabla: $TABLA_IMAGENES (imágenes satelitales)"
+echo ""
+echo "  Cloud Functions:"
+echo "  • $FUNCION_EXTRACTOR (extrae datos de Weather API)"
+echo "  • $FUNCION_PROCESADOR (procesa condiciones actuales)"
+echo "  • $FUNCION_PROCESADOR_HORAS (procesa pronóstico por horas)"
+echo "  • $FUNCION_PROCESADOR_DIAS (procesa pronóstico por días)"
+echo "  • $FUNCION_ANALIZADOR (análisis satelital de zonas riesgosas)"
+echo "  • $FUNCION_MONITOR (monitor satelital de nieve)"
+echo ""
+echo "  Scheduler:"
+echo "  • $JOB_SCHEDULER (3x/día: 08:00, 14:00, 20:00)"
+echo "  • $JOB_ANALIZADOR (mensual: día 1 a las 03:00)"
+echo "  • $JOB_MONITOR (3x/día: 08:30, 14:30, 20:30)"
 echo ""
 echo -e "${AZUL}URLs importantes:${NC}"
 echo "  • Extractor: $URL_EXTRACTOR"
+echo "  • Analizador: $URL_ANALIZADOR"
+echo "  • Monitor Satelital: $URL_MONITOR"
 echo "  • Logs: https://console.cloud.google.com/logs/query?project=$ID_PROYECTO"
-echo "  • BigQuery: https://console.cloud.google.com/bigquery?project=$ID_PROYECTO&d=$DATASET_CLIMA&t=$TABLA_CONDICIONES"
+echo "  • BigQuery: https://console.cloud.google.com/bigquery?project=$ID_PROYECTO&d=$DATASET_CLIMA"
 echo ""
 echo -e "${AMARILLO}Próximos pasos:${NC}"
 echo "  1. Probar extractor manualmente: curl -X POST $URL_EXTRACTOR"
-echo "  2. Ver logs: gcloud functions logs read $FUNCION_EXTRACTOR --gen2 --region=$REGION"
-echo "  3. Consultar BigQuery: bq query --use_legacy_sql=false 'SELECT * FROM $DATASET_CLIMA.$TABLA_CONDICIONES LIMIT 10'"
-echo "  4. El scheduler ejecutará automáticamente cada minuto"
+echo "  2. Probar analizador manualmente: curl -X POST $URL_ANALIZADOR"
+echo "  3. Probar monitor satelital: curl -X POST $URL_MONITOR"
+echo "  4. Ver logs: gcloud functions logs read $FUNCION_EXTRACTOR --gen2 --region=$REGION"
+echo "  5. Consultar condiciones actuales:"
+echo "     bq query --use_legacy_sql=false 'SELECT * FROM $DATASET_CLIMA.$TABLA_CONDICIONES LIMIT 10'"
+echo "  6. Consultar pronóstico por horas:"
+echo "     bq query --use_legacy_sql=false 'SELECT * FROM $DATASET_CLIMA.$TABLA_PRONOSTICO_HORAS LIMIT 10'"
+echo "  7. Consultar pronóstico por días:"
+echo "     bq query --use_legacy_sql=false 'SELECT * FROM $DATASET_CLIMA.$TABLA_PRONOSTICO_DIAS LIMIT 10'"
+echo "  8. Consultar zonas de avalancha:"
+echo "     bq query --use_legacy_sql=false 'SELECT nombre_ubicacion, indice_riesgo_topografico, clasificacion_riesgo FROM $DATASET_CLIMA.$TABLA_ZONAS LIMIT 10'"
+echo "  9. Consultar imágenes satelitales:"
+echo "     bq query --use_legacy_sql=false 'SELECT nombre_ubicacion, fecha_captura, fuente_principal, pct_cobertura_nieve FROM $DATASET_CLIMA.$TABLA_IMAGENES LIMIT 10'"
+echo " 10. El scheduler ejecutará automáticamente:"
+echo "     - Clima: 3 veces al día (08:00, 14:00 y 20:00)"
+echo "     - Topografía: mensualmente (día 1 a las 03:00)"
+echo "     - Satelital: 3 veces al día (08:30, 14:30 y 20:30)"
 echo ""
 
 imprimir_exito "¡Listo! El sistema está desplegado y funcionando."

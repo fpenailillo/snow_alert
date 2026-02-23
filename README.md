@@ -23,59 +23,109 @@ Sistema serverless event-driven para el monitoreo de condiciones climáticas y d
 
 ```
 ┌─────────────────┐
-│ Cloud Scheduler │ (Cada minuto)
+│ Cloud Scheduler │ (08:00 / 14:00 / 20:00)
 └────────┬────────┘
-         │
+         │ HTTP POST
          ▼
-┌─────────────────────────────┐
-│ Cloud Function: Extractor   │
-│ • Llama a Weather API       │
-│ • API Key authentication    │
-│ • Publica a Pub/Sub         │
-└────────┬────────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│                  Cloud Function: Extractor                       │
+│  • Llama a 3 endpoints de Weather API:                          │
+│    - currentConditions (condiciones actuales)                    │
+│    - forecast/hours (próximas 24 horas)                         │
+│    - forecast/days (próximos 5 días)                            │
+│  • API Key desde Secret Manager                                  │
+│  • Publica a 3 topics de Pub/Sub                                │
+└────────┬────────────────────────────────────────────────────────┘
          │
-         ▼
-┌─────────────────────────────┐
-│ Pub/Sub Topic               │
-│ • clima-datos-crudos        │
-│ • Dead Letter Queue         │
-└────────┬────────────────────┘
+         │ Pub/Sub (3 topics)
          │
-         ▼
-┌─────────────────────────────┐
-│ Cloud Function: Procesador  │
-│ • Procesa mensajes Pub/Sub  │
-│ • Valida y transforma datos │
-└────────┬────────────────────┘
-         │
-         ├──────────────────────┐
-         ▼                      ▼
-┌──────────────────┐   ┌──────────────────┐
-│ Cloud Storage    │   │ BigQuery         │
-│ (Capa Bronce)    │   │ (Capa Plata)     │
-│ • Datos crudos   │   │ • Datos          │
-│ • Particionado   │   │   estructurados  │
-│   por fecha      │   │ • Particionado   │
-│ • Versionado     │   │ • Clustering     │
-└──────────────────┘   └──────────────────┘
+    ┌────┴────────────────────┬────────────────────────┐
+    │                         │                        │
+    ▼                         ▼                        ▼
+┌──────────────────┐  ┌──────────────────┐  ┌──────────────────┐
+│ clima-datos-     │  │ clima-pronostico-│  │ clima-pronostico-│
+│ crudos           │  │ horas            │  │ dias             │
+│ (+ DLQ)          │  │ (+ DLQ)          │  │ (+ DLQ)          │
+└────────┬─────────┘  └────────┬─────────┘  └────────┬─────────┘
+         │                     │                     │
+         ▼                     ▼                     ▼
+┌──────────────────┐  ┌──────────────────┐  ┌──────────────────┐
+│ Procesador       │  │ Procesador       │  │ Procesador       │
+│ (Condiciones)    │  │ (Horas)          │  │ (Días)           │
+└────────┬─────────┘  └────────┬─────────┘  └────────┬─────────┘
+         │                     │                     │
+         │                     │                     │
+         └─────────────────────┴─────────────────────┘
+                               │
+              ┌────────────────┴────────────────┐
+              ▼                                 ▼
+┌────────────────────────┐        ┌────────────────────────────┐
+│ Cloud Storage          │        │ BigQuery (Capa Plata)      │
+│ (Capa Bronce)          │        │ • condiciones_actuales     │
+│ • condiciones_actuales/│        │ • pronostico_horas         │
+│ • pronostico_horas/    │        │ • pronostico_dias          │
+│ • pronostico_dias/     │        │ Particionado + Clustering  │
+└────────────────────────┘        └────────────────────────────┘
 ```
 
 
 
 ## Ubicaciones Monitoreadas
 
-El sistema monitorea **45 ubicaciones** de destinos de nieve y montaña a nivel mundial, organizadas en las siguientes categorías:
+El sistema monitorea **57 ubicaciones** de destinos de nieve y montaña a nivel mundial, organizadas en las siguientes categorías:
 
-### Centros de Esquí - Chile (7)
+### Centros de Esquí - Chile (19 ubicaciones — cobertura completa de norte a sur)
+
+**Región de Valparaíso**
+| Ubicación | Latitud | Longitud | Base / Cima | Descripción |
+|-----------|---------|----------|-------------|-------------|
+| **Portillo** | -32.8369 | -70.1287 | 2580m / 3310m | Centro Legendario, Los Andes |
+| **Ski Arpa** | -32.6000 | -70.3900 | 2690m / 3740m | Único Cat-Ski de Chile, 4000 acres |
+
+**Región Metropolitana**
 | Ubicación | Latitud | Longitud | Elevación | Descripción |
 |-----------|---------|----------|-----------|-------------|
-| **Portillo** | -32.8375 | -70.1267 | 2880m | Centro de Esquí Legendario |
-| **Valle Nevado** | -33.3558 | -70.2514 | 3025m | Mayor Centro de Esquí de Sudamérica |
-| **La Parva** | -33.3319 | -70.2856 | 2750m | Centro de Esquí Familiar |
-| **El Colorado** | -33.3500 | -70.2833 | 2430m | Cercano a Santiago |
-| **Nevados de Chillán** | -36.9063 | -71.4160 | 1650m | Esquí y Termas |
-| **Corralco** | -38.4833 | -71.5667 | 1500m | Volcán Lonquimay |
-| **Antillanca** | -40.7667 | -72.2000 | 1350m | Volcán Casablanca |
+| **La Parva — Sector Bajo** | -33.3630 | -70.3010 | 2650m | Villa La Parva, base, lodges, ski school |
+| **La Parva — Sector Medio** | -33.3520 | -70.2900 | 3100m | Restaurante 3100, servicios de montaña |
+| **La Parva — Sector Alto** | -33.3440 | -70.2800 | 3574m | Cima, terreno experto, La Chimenea |
+| **El Colorado / Farellones** | -33.3600 | -70.3000 | 2350m / 3460m | Mayor nº de pistas del Tres Valles |
+| **Valle Nevado** | -33.3547 | -70.2498 | 2860m / 3670m | Mayor Centro de Esquí de Sudamérica |
+| **Lagunillas** | -33.6800 | -70.2500 | 2200m / 2550m | Centro familiar, San José de Maipo |
+
+**Región de O'Higgins**
+| Ubicación | Latitud | Longitud | Base / Cima | Descripción |
+|-----------|---------|----------|-------------|-------------|
+| **Chapa Verde** | -34.1700 | -70.3700 | 2260m / 3050m | Centro CODELCO, acceso restringido |
+
+**Región de Ñuble / Biobío**
+| Ubicación | Latitud | Longitud | Base / Cima | Descripción |
+|-----------|---------|----------|-------------|-------------|
+| **Nevados de Chillán** | -36.8580 | -71.3727 | 1530m / 2400m | Volcán activo, termas y tree skiing |
+| **Antuco** | -37.4100 | -71.4200 | 1400m / 1850m | Volcán Antuco, Los Ángeles |
+
+**Región de La Araucanía**
+| Ubicación | Latitud | Longitud | Base / Cima | Descripción |
+|-----------|---------|----------|-------------|-------------|
+| **Corralco** | -38.3700 | -71.5700 | 1550m / 2400m | Volcán Lonquimay, bosques de araucarias |
+| **Las Araucarias / Llaima** | -38.7300 | -71.7400 | 1550m / 1942m | Volcán Llaima |
+| **Ski Pucón / Pillán** | -39.5000 | -71.9600 | 1380m / 2100m | Volcán Villarrica (activo) |
+| **Los Arenales** | -38.8500 | -72.0000 | 1600m / 1845m | Centro entrenamiento, Temuco |
+
+**Región de Los Lagos**
+| Ubicación | Latitud | Longitud | Base / Cima | Descripción |
+|-----------|---------|----------|-------------|-------------|
+| **Antillanca** | -40.7756 | -72.2046 | 1040m / 1540m | Volcán Casablanca, Parque Puyehue |
+| **Volcán Osorno** | -41.1000 | -72.5000 | 1230m / 1760m | Volcán icónico, Puerto Varas |
+
+**Región de Aysén**
+| Ubicación | Latitud | Longitud | Base / Cima | Descripción |
+|-----------|---------|----------|-------------|-------------|
+| **El Fraile** | -45.6800 | -71.9400 | 980m / 1280m | Bosques de Lenga, Coyhaique |
+
+**Región de Magallanes**
+| Ubicación | Latitud | Longitud | Base / Cima | Descripción |
+|-----------|---------|----------|-------------|-------------|
+| **Cerro Mirador** | -53.1300 | -70.9800 | 380m / 570m | Centro más austral del mundo |
 
 ### Centros de Esquí - Argentina (5)
 | Ubicación | Latitud | Longitud | Elevación | Descripción |
@@ -147,24 +197,50 @@ El sistema monitorea **45 ubicaciones** de destinos de nieve y montaña a nivel 
 - **Timeout**: 60 segundos
 - **Funcionalidades**:
   - Autenticación con API Key desde Secret Manager
-  - Llamadas GET a Weather API para múltiples ubicaciones
+  - Llamadas a 3 endpoints de Weather API para cada ubicación:
+    - `currentConditions` - Condiciones actuales
+    - `forecast/hours` - Pronóstico próximas 76 horas (~3 días)
+    - `forecast/days` - Pronóstico próximos 10 días (máximo API)
   - Enriquecimiento de datos con metadata
-  - Publicación a Pub/Sub con atributos para routing
+  - Publicación a 3 topics de Pub/Sub según tipo de dato
   - Manejo robusto de errores y logging estructurado
 
-### Cloud Function: Procesador
+### Cloud Function: Procesador (Condiciones Actuales)
 
-- **Trigger**: Pub/Sub (topic: clima-datos-crudos)
+- **Trigger**: Pub/Sub (topic: `clima-datos-crudos`)
 - **Runtime**: Python 3.11
 - **Memoria**: 512 MB
 - **Timeout**: 120 segundos
 - **Funcionalidades**:
-  - Decodificación y validación de mensajes
-  - Almacenamiento de datos crudos en Cloud Storage
-  - Transformación a esquema estructurado
-  - Inserción en BigQuery
-  - Reintentos automáticos con exponential backoff
-  - Dead letter queue para mensajes fallidos
+  - Procesa condiciones climáticas actuales
+  - Almacena en Cloud Storage (capa bronce)
+  - Transforma e inserta en BigQuery (`condiciones_actuales`)
+  - Dead letter queue: `clima-datos-dlq`
+
+### Cloud Function: Procesador Horas
+
+- **Trigger**: Pub/Sub (topic: `clima-pronostico-horas`)
+- **Runtime**: Python 3.11
+- **Memoria**: 512 MB
+- **Timeout**: 120 segundos
+- **Funcionalidades**:
+  - Procesa pronóstico por horas (76 registros por ubicación)
+  - Almacena en Cloud Storage (`pronostico_horas/`)
+  - Transforma e inserta en BigQuery (`pronostico_horas`)
+  - Dead letter queue: `clima-pronostico-horas-dlq`
+
+### Cloud Function: Procesador Días
+
+- **Trigger**: Pub/Sub (topic: `clima-pronostico-dias`)
+- **Runtime**: Python 3.11
+- **Memoria**: 512 MB
+- **Timeout**: 120 segundos
+- **Funcionalidades**:
+  - Procesa pronóstico diario (10 registros por ubicación)
+  - Incluye datos de período diurno y nocturno
+  - Almacena en Cloud Storage (`pronostico_dias/`)
+  - Transforma e inserta en BigQuery (`pronostico_dias`)
+  - Dead letter queue: `clima-pronostico-dias-dlq`
 
 ### Cloud Storage (Capa Bronce)
 
@@ -179,7 +255,8 @@ El sistema monitorea **45 ubicaciones** de destinos de nieve y montaña a nivel 
 ### BigQuery (Capa Plata)
 
 - **Dataset**: `clima`
-- **Tabla**: `condiciones_actuales`
+
+#### Tabla: `condiciones_actuales`
 - **Particionamiento**: Por `DATE(hora_actual)`
 - **Clustering**: Por `nombre_ubicacion`
 - **Esquema** (27 campos):
@@ -192,6 +269,438 @@ El sistema monitorea **45 ubicaciones** de destinos de nieve y montaña a nivel 
   - Atmosféricas: presión, humedad, visibilidad
   - Otras: índice UV, cobertura de nubes, probabilidad de tormenta
   - Metadata: timestamp de ingesta, URI datos crudos, JSON completo
+
+#### Tabla: `pronostico_horas`
+- **Particionamiento**: Por `DATE(hora_inicio)`
+- **Clustering**: Por `nombre_ubicacion`
+- **Cobertura**: 76 horas (~3 días con detalle por hora)
+- **Esquema** (27 campos):
+  - Identificación: ubicación, coordenadas
+  - Temporal: hora_inicio, hora_fin
+  - Temperatura: temperatura, sensación térmica, índice calor, sensación viento
+  - Condiciones: condición, descripción, icono URL
+  - Precipitación: probabilidad, cantidad
+  - Viento: velocidad, dirección
+  - Atmosféricas: humedad, presión, visibilidad
+  - Otras: índice UV, cobertura nubes, probabilidad tormenta, es_dia
+  - Metadata: timestamps de extracción e ingestión, URI datos crudos
+
+#### Tabla: `pronostico_dias`
+- **Particionamiento**: Por `DATE(fecha_inicio)`
+- **Clustering**: Por `nombre_ubicacion`
+- **Cobertura**: 10 días (máximo de la API)
+- **Esquema** (45 campos):
+  - Identificación: ubicación, coordenadas
+  - Temporal: fecha_inicio, fecha_fin, año, mes, día
+  - Astronomía: hora_amanecer, hora_atardecer
+  - Temperaturas del día: temp_max_dia, temp_min_dia
+  - **Período diurno** (15 campos): condición, temperatura, sensación, viento, precipitación, nubes, UV
+  - **Período nocturno** (15 campos): condición, temperatura, sensación, viento, precipitación, nubes, UV
+  - Metadata: timestamps de extracción e ingestión, URI datos crudos
+
+#### Tabla: `zonas_avalancha`
+- **Particionamiento**: Por `DATE(fecha_analisis)`
+- **Clustering**: Por `nombre_ubicacion`, `clasificacion_riesgo`
+- **Cobertura**: Análisis estático mensual de todas las ubicaciones
+- **Esquema** (36 campos):
+  - Identificación: nombre_ubicacion, latitud, longitud, fecha_analisis
+  - **Áreas de zonas** (7 campos): zona_inicio_ha, zona_transito_ha, zona_deposito_ha, porcentajes
+  - **Pendientes** (3 campos): pendiente_media_inicio, pendiente_max_inicio, pendiente_p90_inicio
+  - **Aspecto y elevación** (4 campos): aspecto_predominante, elevaciones, desnivel
+  - **Sub-zonas de inicio** (3 campos): inicio_moderado_ha (30-45°), inicio_severo_ha (45-60°), inicio_extremo_ha (>60°)
+  - **Índice de riesgo** (6 campos): indice_riesgo_topografico (0-100), clasificacion_riesgo, componentes
+  - **Estimaciones EAWS** (4 campos): frecuencia_estimada, tamano_estimado, peligro_base, descripcion_riesgo
+  - **Metadatos** (4 campos): hemisferio, radio_analisis, resolucion_dem, fuente_dem
+
+---
+
+## Analizador Satelital de Zonas Riesgosas en Avalanchas
+
+### Descripción
+
+Snow Alert incluye un módulo de **análisis satelital de zonas riesgosas en avalanchas** que utiliza Google Earth Engine (GEE) con datos SRTM para identificar, clasificar y cubicar las zonas funcionales de avalancha en cada ubicación monitoreada.
+
+El análisis implementa la metodología **EAWS 2025** (European Avalanche Warning Services) según las publicaciones:
+- Müller, K., Techel, F., & Mitterer, C. (2025). *The EAWS matrix, Part A*. Nat. Hazards Earth Syst. Sci., 25, 4503-4525.
+- Techel, F., Müller, K., & Schweizer, J. (2025). *The EAWS matrix, Part B*. Nat. Hazards Earth Syst. Sci. (en revisión).
+
+### Zonas Funcionales de Avalancha
+
+El sistema identifica tres zonas funcionales basadas en parámetros topográficos:
+
+| Zona | Pendiente | Curvatura | Descripción |
+|------|-----------|-----------|-------------|
+| **Inicio** | 30° - 60° | Convexa | Donde se suelta la avalancha. Área crítica para estabilidad del manto. |
+| **Tránsito** | 15° - 30° | Cóncava | Corredor donde la avalancha acelera y fluye. Influye en el tamaño final. |
+| **Depósito** | < 15° | Cóncava | Donde se acumula la nieve. Zona de impacto y potencial destructivo. |
+
+### Factores EAWS Estimados
+
+El módulo calcula estimaciones de los tres factores de la matriz EAWS:
+
+1. **Estabilidad** (Factor 1): Evaluada mediante porcentaje de zona de inicio y aspectos de sombra
+2. **Frecuencia** (Factor 2): Estimada según extensión de zona de inicio
+   - `many`: >20% zona inicio
+   - `some`: 10-20% zona inicio
+   - `a_few`: 5-10% zona inicio
+   - `nearly_none`: <5% zona inicio
+3. **Tamaño** (Factor 3): Estimado según desnivel vertical inicio→depósito
+   - Tamaño 1: <100m desnivel
+   - Tamaño 2: 100-300m
+   - Tamaño 3: 300-600m
+   - Tamaño 4: 600-1000m
+   - Tamaño 5: >1000m
+
+### Índice de Riesgo Topográfico
+
+El sistema genera un índice estático de susceptibilidad topográfica (0-100) con cuatro componentes:
+
+| Componente | Peso | Descripción |
+|------------|------|-------------|
+| **Área** | 25% | Hectáreas y porcentaje de zona de inicio |
+| **Pendiente** | 25% | Pendiente máxima y media en zona de inicio |
+| **Aspecto** | 25% | Orientación a sombra (N en HS, S en HN) |
+| **Desnivel** | 25% | Desnivel vertical entre inicio y depósito |
+
+**Clasificación resultante:**
+- **BAJO** (0-25): Terreno con baja susceptibilidad
+- **MEDIO** (26-50): Susceptibilidad moderada, atención en condiciones inestables
+- **ALTO** (51-75): Alta susceptibilidad, evitar en peligro elevado
+- **EXTREMO** (76-100): Solo para expertos con condiciones favorables confirmadas
+
+### Cloud Function: Analizador Satelital de Zonas Riesgosas en Avalanchas
+
+- **Nombre**: `analizador-satelital-zonas-riesgosas-avalanchas`
+- **Trigger**: HTTP (invocado por Cloud Scheduler)
+- **Runtime**: Python 3.11
+- **Memoria**: 1024 MB
+- **Timeout**: 540 segundos (9 minutos)
+- **Frecuencia**: Mensual (día 1 a las 03:00)
+- **Funcionalidades**:
+  - Inicializa Google Earth Engine con proyecto GCP
+  - Carga DEM SRTM de 30m de resolución (datos satelitales)
+  - Clasifica zonas de inicio, tránsito y depósito
+  - Calcula estadísticas de cubicación (áreas, pendientes, aspectos)
+  - Genera índice de riesgo topográfico
+  - **Genera visualizaciones** (mapas PNG, thumbnails, GeoJSON)
+  - Almacena en BigQuery (tabla `zonas_avalancha`)
+  - Almacena JSON detallado y visualizaciones en Cloud Storage
+
+### Visualizaciones y Mapas
+
+El módulo genera automáticamente visualizaciones para fácil integración:
+
+| Tipo | Formato | Descripción | Uso |
+|------|---------|-------------|-----|
+| **Mapa de Zonas** | PNG (800x600) | Gráfico con distribución de zonas e indicadores | Dashboards, reportes |
+| **Thumbnail** | PNG (200x200) | Indicador circular de riesgo | Listas, vistas previas |
+| **GeoJSON** | JSON | Datos geográficos con estilos | Mapas web (Leaflet, Mapbox) |
+
+#### Archivos Generados en GCS
+
+```
+gs://{proyecto}-datos-clima-bronce/topografia/visualizaciones/
+├── 2025/02/22/
+│   ├── valle_nevado_mapa_20250222_030000.png      # Mapa completo
+│   ├── valle_nevado_thumb_20250222_030000.png     # Thumbnail
+│   ├── valle_nevado_zonas_20250222_030000.geojson # Datos GeoJSON
+│   └── ...
+```
+
+#### Integración con Mapas Web
+
+El GeoJSON incluye estilos predefinidos compatibles con Leaflet/Mapbox:
+
+```javascript
+// Ejemplo de integración con Leaflet
+fetch('ruta/a/zonas.geojson')
+  .then(response => response.json())
+  .then(data => {
+    L.geoJSON(data, {
+      style: feature => feature.properties.estilo
+    }).addTo(map);
+  });
+```
+
+#### Paleta de Colores EAWS
+
+| Elemento | Color | Hex |
+|----------|-------|-----|
+| Zona Inicio | Rojo | `#E53935` |
+| Zona Tránsito | Naranja | `#FB8C00` |
+| Zona Depósito | Amarillo | `#FDD835` |
+| Riesgo Bajo | Verde | `#4CAF50` |
+| Riesgo Medio | Amarillo | `#FFC107` |
+| Riesgo Alto | Naranja | `#FF5722` |
+| Riesgo Extremo | Rojo oscuro | `#B71C1C` |
+
+### Estructura del Módulo
+
+```
+analizador_avalanchas/
+├── __init__.py              # Inicialización del paquete
+├── main.py                  # Cloud Function orquestadora
+├── eaws_constantes.py       # Matriz EAWS 2025 y constantes
+├── zonas.py                 # Clasificación GEE de zonas
+├── cubicacion.py            # Cálculo de áreas y estadísticas
+├── indice_riesgo.py         # Índice de riesgo 0-100
+├── visualizacion.py         # Generación de mapas PNG y GeoJSON
+├── requirements.txt         # Dependencias (earthengine-api, matplotlib)
+├── schema_zonas_bigquery.json  # Schema BigQuery
+└── .gcloudignore            # Archivos a ignorar en deploy
+```
+
+### Consultas de Ejemplo
+
+#### Ubicaciones con mayor riesgo topográfico
+
+```sql
+SELECT
+  nombre_ubicacion,
+  indice_riesgo_topografico,
+  clasificacion_riesgo,
+  zona_inicio_ha,
+  desnivel_inicio_deposito,
+  peligro_eaws_base
+FROM
+  `clima.zonas_avalancha`
+WHERE
+  fecha_analisis = (SELECT MAX(fecha_analisis) FROM `clima.zonas_avalancha`)
+ORDER BY
+  indice_riesgo_topografico DESC
+LIMIT 10;
+```
+
+#### Centros de esquí por clasificación de riesgo
+
+```sql
+SELECT
+  clasificacion_riesgo,
+  COUNT(*) AS total_ubicaciones,
+  ROUND(AVG(zona_inicio_ha), 2) AS avg_zona_inicio_ha,
+  ROUND(AVG(pendiente_max_inicio), 1) AS avg_pendiente_max,
+  ROUND(AVG(desnivel_inicio_deposito), 0) AS avg_desnivel
+FROM
+  `clima.zonas_avalancha`
+WHERE
+  fecha_analisis = (SELECT MAX(fecha_analisis) FROM `clima.zonas_avalancha`)
+GROUP BY
+  clasificacion_riesgo
+ORDER BY
+  CASE clasificacion_riesgo
+    WHEN 'extremo' THEN 1
+    WHEN 'alto' THEN 2
+    WHEN 'medio' THEN 3
+    WHEN 'bajo' THEN 4
+  END;
+```
+
+#### Detalle de componentes de riesgo
+
+```sql
+SELECT
+  nombre_ubicacion,
+  indice_riesgo_topografico,
+  componente_area,
+  componente_pendiente,
+  componente_aspecto,
+  componente_desnivel,
+  descripcion_riesgo
+FROM
+  `clima.zonas_avalancha`
+WHERE
+  clasificacion_riesgo = 'extremo'
+  AND fecha_analisis = (SELECT MAX(fecha_analisis) FROM `clima.zonas_avalancha`)
+ORDER BY
+  indice_riesgo_topografico DESC;
+```
+
+---
+
+## Monitor Satelital de Nieve
+
+### Descripción
+
+Snow Alert incluye un módulo de **monitoreo satelital de nieve** que utiliza Google Earth Engine (GEE) para descargar automáticamente imágenes satelitales de las ubicaciones monitoreadas. El sistema obtiene:
+
+1. **Imagen visual** (true color + false color nieve)
+2. **Cobertura de nieve** (NDSI / fracción de nieve)
+3. **Temperatura superficial** (LST día y noche)
+4. **Datos ERA5-Land** (gap-filler continuo sin nubes)
+
+### Fuentes Satelitales por Región
+
+El sistema adapta automáticamente la fuente satelital según la región geográfica:
+
+| Región | Fuente Principal | Frecuencia | Resolución |
+|--------|-----------------|------------|------------|
+| **Chile / Argentina** | GOES-18 | Cada 10 min | 2 km |
+| **Norteamérica** | GOES-16 | Cada 10 min | 2 km |
+| **Europa / Alpes** | MODIS Terra/Aqua | 2x/día | 500 m |
+| **Asia / Oceanía** | MODIS Terra/Aqua | 2x/día | 500 m |
+| **Todas las regiones** | ERA5-Land (backup) | Horario | 11 km |
+
+### Productos Generados
+
+#### Por Cada Captura (3 veces al día)
+
+| Producto | Formato | Uso |
+|----------|---------|-----|
+| **GeoTIFF Visual** | Multi-banda | Análisis GIS |
+| **GeoTIFF NDSI** | 1 banda (0-100) | Cobertura de nieve |
+| **GeoTIFF LST** | 1 banda (°C) | Temperatura superficial |
+| **GeoTIFF ERA5** | 3 bandas | Snow depth, SWE, cover |
+| **Preview PNG** | 768×768 px | Dashboards, reportes |
+| **Thumbnail PNG** | 256×256 px | Landing page, listas |
+
+### Métricas en BigQuery
+
+El sistema registra las siguientes métricas en la tabla `clima.imagenes_satelitales`:
+
+| Categoría | Métricas |
+|-----------|----------|
+| **Nubes** | pct_nubes, es_nublado |
+| **Nieve NDSI** | ndsi_medio, ndsi_max, pct_cobertura_nieve, tiene_nieve |
+| **Temperatura** | lst_dia_celsius, lst_noche_celsius, lst_min_celsius |
+| **ERA5-Land** | snow_depth_m, swe_m, snow_cover, temp_2m_celsius |
+| **Sentinel-2** | disponible, fecha, pct_nieve (cuando hay imagen) |
+
+### Cloud Function: Monitor Satelital de Nieve
+
+- **Nombre**: `monitor-satelital-nieve`
+- **Trigger**: HTTP (invocado por Cloud Scheduler)
+- **Runtime**: Python 3.11
+- **Memoria**: 2048 MB
+- **Timeout**: 540 segundos (9 minutos)
+- **Frecuencia**: 3x/día (08:30, 14:30, 20:30)
+- **Funcionalidades**:
+  - Inicializa Google Earth Engine con proyecto GCP
+  - Determina fuente satelital por región (GOES vs MODIS)
+  - Descarga imágenes usando `getDownloadURL()` y `getThumbURL()`
+  - Calcula métricas de cobertura de nieve y temperatura
+  - Almacena GeoTIFF, previews y thumbnails en Cloud Storage
+  - Registra métricas en BigQuery
+  - ERA5-Land como gap-filler (sin problemas de nubes)
+
+### Estructura de Archivos en Cloud Storage
+
+```
+gs://{proyecto}-datos-clima-bronce/satelital/
+├── geotiff/
+│   └── {ubicacion}/
+│       └── {YYYY-MM-DD}/
+│           ├── {ubicacion}_{captura}_{fuente}_visual.tif
+│           ├── {ubicacion}_{captura}_{fuente}_ndsi.tif
+│           ├── {ubicacion}_{captura}_{fuente}_lst.tif
+│           └── {ubicacion}_{captura}_era5_nieve.tif
+├── preview/
+│   └── {ubicacion}/
+│       └── {YYYY-MM-DD}/
+│           ├── {ubicacion}_{captura}_visual_768px.png
+│           ├── {ubicacion}_{captura}_ndsi_768px.png
+│           └── {ubicacion}_{captura}_lst_768px.png
+└── thumbnail/
+    └── {ubicacion}/
+        ├── {ubicacion}_ultimo_visual_256px.png
+        ├── {ubicacion}_ultimo_ndsi_256px.png
+        └── {ubicacion}_ultimo_lst_256px.png
+```
+
+### Estructura del Módulo
+
+```
+monitor_satelital/
+├── __init__.py              # Inicialización del paquete
+├── main.py                  # Cloud Function orquestadora
+├── constantes.py            # Colecciones GEE, bandas, vis_params
+├── fuentes.py               # Selección de fuente por región
+├── productos.py             # Procesamiento por producto
+├── metricas.py              # Cálculo de métricas para BigQuery
+├── descargador.py           # Descarga GEE y subida a GCS
+├── requirements.txt         # Dependencias (earthengine-api)
+├── schema_imagenes_bigquery.json  # Schema BigQuery
+└── .gcloudignore            # Archivos a ignorar en deploy
+```
+
+### Consultas de Ejemplo
+
+#### Cobertura de nieve más reciente por ubicación
+
+```sql
+SELECT
+  nombre_ubicacion,
+  fecha_captura,
+  tipo_captura,
+  fuente_principal,
+  pct_cobertura_nieve,
+  ndsi_medio,
+  lst_dia_celsius,
+  era5_snow_depth_m
+FROM
+  `clima.imagenes_satelitales`
+WHERE
+  fecha_captura = (SELECT MAX(fecha_captura) FROM `clima.imagenes_satelitales`)
+ORDER BY
+  pct_cobertura_nieve DESC;
+```
+
+#### Evolución de cobertura de nieve (últimos 7 días)
+
+```sql
+SELECT
+  nombre_ubicacion,
+  fecha_captura,
+  AVG(pct_cobertura_nieve) AS avg_cobertura_nieve,
+  AVG(ndsi_medio) AS avg_ndsi,
+  AVG(era5_snow_depth_m) AS avg_snow_depth
+FROM
+  `clima.imagenes_satelitales`
+WHERE
+  fecha_captura >= DATE_SUB(CURRENT_DATE(), INTERVAL 7 DAY)
+GROUP BY
+  nombre_ubicacion, fecha_captura
+ORDER BY
+  nombre_ubicacion, fecha_captura;
+```
+
+#### Ubicaciones con mejor cobertura de nieve
+
+```sql
+SELECT
+  nombre_ubicacion,
+  region,
+  ROUND(AVG(pct_cobertura_nieve), 1) AS avg_cobertura,
+  ROUND(AVG(era5_snow_depth_m), 3) AS avg_profundidad_m,
+  COUNT(*) AS total_capturas
+FROM
+  `clima.imagenes_satelitales`
+WHERE
+  fecha_captura >= DATE_SUB(CURRENT_DATE(), INTERVAL 30 DAY)
+  AND es_nublado = FALSE
+GROUP BY
+  nombre_ubicacion, region
+HAVING
+  avg_cobertura > 50
+ORDER BY
+  avg_cobertura DESC;
+```
+
+### Cuota de Google Earth Engine
+
+El tier gratuito Community provee **150 EECU-horas/mes**. Estimación de uso:
+
+| Parámetro | Valor |
+|-----------|-------|
+| Ubicaciones | 57 |
+| Capturas/día | 3 |
+| Productos/captura | ~4 |
+| EECU-seg/producto | ~10 |
+| **Total/ejecución** | ~0.5 EECU-horas |
+| **Total/mes** (3x/día × 30 días) | ~45 EECU-horas |
+
+El uso está dentro del límite gratuito de 150 EECU-horas/mes.
+
+---
 
 ## Requisitos Previos
 
@@ -290,15 +799,30 @@ Ejemplo:
 El script realiza las siguientes acciones:
 
 1. ✓ Valida dependencias
-2. ✓ Habilita APIs necesarias (incluyendo Weather API y Secret Manager)
+2. ✓ Habilita APIs necesarias (incluyendo Weather API, Earth Engine y Secret Manager)
 3. ✓ Crea cuenta de servicio y asigna permisos
 4. ✓ Configura Secret Manager para Weather API Key
-5. ✓ Crea topics de Pub/Sub (principal y DLQ)
+5. ✓ Crea 6 topics de Pub/Sub:
+   - `clima-datos-crudos` + DLQ
+   - `clima-pronostico-horas` + DLQ
+   - `clima-pronostico-dias` + DLQ
 6. ✓ Crea bucket de Cloud Storage con ciclo de vida
-7. ✓ Crea dataset y tabla de BigQuery
+7. ✓ Crea dataset y 5 tablas de BigQuery:
+   - `condiciones_actuales`
+   - `pronostico_horas`
+   - `pronostico_dias`
+   - `zonas_avalancha`
+   - `imagenes_satelitales`
 8. ✓ Despliega Cloud Function Extractor
-9. ✓ Despliega Cloud Function Procesador
-10. ✓ Configura Cloud Scheduler (ejecución cada minuto)
+9. ✓ Despliega Cloud Function Procesador (condiciones actuales)
+10. ✓ Despliega Cloud Function Procesador Horas
+11. ✓ Despliega Cloud Function Procesador Días
+12. ✓ Despliega Cloud Function Analizador Satelital de Zonas Riesgosas en Avalanchas
+13. ✓ Despliega Cloud Function Monitor Satelital de Nieve
+14. ✓ Configura 3 jobs de Cloud Scheduler:
+    - `extraer-clima-job` (3x/día: 08:00, 14:00, 20:00)
+    - `monitor-satelital-job` (3x/día: 08:30, 14:30, 20:30)
+    - `analizar-topografia-job` (mensual: día 1 a las 03:00)
 
 **Tiempo estimado**: 5-10 minutos
 
@@ -415,9 +939,9 @@ curl -X POST $URL_EXTRACTOR \
 
 ### Ejecución Programada
 
-Cloud Scheduler ejecuta automáticamente el extractor cada minuto según la configuración:
+Cloud Scheduler ejecuta automáticamente el extractor 3 veces al día según la configuración:
 
-- **Frecuencia**: `* * * * *` (cada minuto)
+- **Frecuencia**: `0 8,14,20 * * *` (08:00 mañana, 14:00 tarde, 20:00 noche)
 - **Zona horaria**: America/Santiago
 - **Reintentos**: Hasta 3 intentos con backoff exponencial
 
@@ -611,25 +1135,25 @@ Ver [documentación de Cloud Monitoring](https://cloud.google.com/monitoring/doc
 
 ## Costos Estimados
 
-Estimación mensual para **45 ubicaciones** con ejecución **cada minuto** (43,200 invocaciones/mes):
+Estimación mensual para **57 ubicaciones** con ejecución **3 veces al día** (~90 invocaciones/mes):
 
 | Servicio | Uso | Costo Estimado (USD) |
 |----------|-----|----------------------|
-| Cloud Functions | 86,400 invocaciones (2 funciones × 43,200) | Gratis (tier: 2M/mes) |
-| Pub/Sub | ~1,944,000 mensajes (45 ubicaciones × 43,200) | Gratis (tier: 10 GB/mes) |
-| Cloud Storage | ~3.9 GB/mes (1,944,000 archivos JSON × 2 KB) | $0.08 |
-| BigQuery | ~12 GB almacenado/mes | $0.24 |
-| BigQuery | ~20 GB queries/mes | Gratis (tier: 1 TB/mes) |
+| Cloud Functions | 180 invocaciones (2 funciones × 90) | Gratis (tier: 2M/mes) |
+| Pub/Sub | ~5,130 mensajes (57 ubicaciones × 90) | Gratis (tier: 10 GB/mes) |
+| Cloud Storage | ~10 MB/mes (5,130 archivos JSON × 2 KB) | $0.00 |
+| BigQuery | ~0.3 GB almacenado/mes | $0.01 |
+| BigQuery | ~1 GB queries/mes | Gratis (tier: 1 TB/mes) |
 | Cloud Scheduler | 1 job | $0.10 |
-| Secret Manager | 1 secret, ~43,200 accesos/mes | $0.13 |
-| **TOTAL** | | **~$0.55/mes** |
+| Secret Manager | 1 secret, ~90 accesos/mes | $0.00 |
+| **TOTAL** | | **~$0.11/mes** |
 
 **Nota**:
 - Los costos son aproximados y pueden variar según el uso real y la región
 - Primer año incluye $300 de créditos gratuitos de GCP
-- Con ejecución cada minuto: **1,440 mediciones/día** por ubicación (64,800 total para 45 ubicaciones)
-- Volumen mensual: ~1,944,000 registros
-- La mayoría de servicios siguen en tier gratuito con este volumen
+- Con 3 ejecuciones/día: **3 mediciones/día** por ubicación (171 total para 57 ubicaciones)
+- Volumen mensual: ~5,130 registros
+- Prácticamente toda la operación cae dentro del tier gratuito de GCP
 - Estimación basada en precios de us-central1 (Enero 2026)
 
 ## Estructura del Proyecto
@@ -637,14 +1161,44 @@ Estimación mensual para **45 ubicaciones** con ejecución **cada minuto** (43,2
 ```
 snow_alert/
 ├── extractor/
-│   ├── main.py                 # Cloud Function de extracción
+│   ├── main.py                 # Cloud Function de extracción (3 APIs)
 │   ├── requirements.txt        # Dependencias del extractor
 │   └── .gcloudignore          # Archivos a ignorar en deploy
 ├── procesador/
-│   ├── main.py                 # Cloud Function de procesamiento
+│   ├── main.py                 # Procesador de condiciones actuales
 │   ├── requirements.txt        # Dependencias del procesador
 │   └── .gcloudignore          # Archivos a ignorar en deploy
-├── desplegar.sh                # Script de despliegue automatizado (único punto de entrada)
+├── procesador_horas/
+│   ├── main.py                 # Procesador de pronóstico por horas
+│   ├── requirements.txt        # Dependencias
+│   └── .gcloudignore          # Archivos a ignorar en deploy
+├── procesador_dias/
+│   ├── main.py                 # Procesador de pronóstico por días
+│   ├── requirements.txt        # Dependencias
+│   └── .gcloudignore          # Archivos a ignorar en deploy
+├── analizador_avalanchas/      # Analizador Satelital de Zonas Riesgosas
+│   ├── __init__.py             # Inicialización del paquete
+│   ├── main.py                 # Cloud Function de análisis satelital
+│   ├── eaws_constantes.py      # Matriz EAWS 2025 y constantes de terreno
+│   ├── zonas.py                # Clasificación GEE de zonas de avalancha
+│   ├── cubicacion.py           # Cálculo de áreas y estadísticas
+│   ├── indice_riesgo.py        # Índice de riesgo topográfico 0-100
+│   ├── visualizacion.py        # Generación de mapas PNG y GeoJSON
+│   ├── requirements.txt        # Dependencias (earthengine-api, matplotlib)
+│   ├── schema_zonas_bigquery.json  # Schema BigQuery
+│   └── .gcloudignore          # Archivos a ignorar en deploy
+├── monitor_satelital/          # Monitor Satelital de Nieve
+│   ├── __init__.py             # Inicialización del paquete
+│   ├── main.py                 # Cloud Function orquestadora
+│   ├── constantes.py           # Colecciones GEE, bandas, vis_params
+│   ├── fuentes.py              # Selección de fuente por región
+│   ├── productos.py            # Procesamiento por producto
+│   ├── metricas.py             # Cálculo de métricas para BigQuery
+│   ├── descargador.py          # Descarga GEE y subida a GCS
+│   ├── requirements.txt        # Dependencias (earthengine-api)
+│   ├── schema_imagenes_bigquery.json  # Schema BigQuery
+│   └── .gcloudignore          # Archivos a ignorar en deploy
+├── desplegar.sh                # Script de despliegue automatizado
 ├── .gcloudignore              # Archivos a ignorar en deploy general
 ├── .gitignore                  # Archivos a ignorar en git
 ├── requerimientos.md           # Requerimientos técnicos del proyecto
@@ -743,12 +1297,20 @@ gcloud functions logs read procesador-clima --gen2 --region=$REGION --limit=100
 
 ## Referencias
 
+### Google Cloud Platform
 - [Google Weather API Documentation](https://developers.google.com/maps/documentation/weather)
 - [Google Cloud Functions](https://cloud.google.com/functions/docs)
 - [Google Cloud Pub/Sub](https://cloud.google.com/pubsub/docs)
 - [Google BigQuery](https://cloud.google.com/bigquery/docs)
 - [Cloud Scheduler](https://cloud.google.com/scheduler/docs)
+- [Google Earth Engine](https://earthengine.google.com/)
 - [Arquitectura Medallion](https://www.databricks.com/glossary/medallion-architecture)
+
+### Metodología EAWS (Avalanchas)
+- Müller, K., Techel, F., & Mitterer, C. (2025). *The EAWS matrix, Part A: Building a new European avalanche danger scale based on three interacting factors*. Nat. Hazards Earth Syst. Sci., 25, 4503-4525. [DOI: 10.5194/nhess-25-4503-2025](https://doi.org/10.5194/nhess-25-4503-2025)
+- Techel, F., Müller, K., & Schweizer, J. (2025). *The EAWS matrix, Part B: Deriving European avalanche danger level definitions using explicit decision criteria*. Nat. Hazards Earth Syst. Sci. (en revisión)
+- Statham, G., et al. (2018). *A conceptual model of avalanche hazard*. Natural Hazards, 90, 663-691
+- [EAWS - European Avalanche Warning Services](https://www.avalanches.org/)
 
 ---
 
