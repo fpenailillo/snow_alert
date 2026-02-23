@@ -74,36 +74,36 @@ UBICACIONES_MONITOREO = [
         'descripcion': 'Ski Arpa, Los Andes, Chile - Único Centro de Cat-Ski de Chile, 4000 acres (base 2690m / cima 3740m)'
     },
 
-    # --- Región Metropolitana ---
+    # --- Región Metropolitana (Tres Valles - MCP Mountain Partners) ---
     {
         'nombre': 'La Parva Sector Bajo',
         'latitud': -33.3630,
         'longitud': -70.3010,
-        'descripcion': 'La Parva - Sector Bajo / Villa La Parva, Lo Barnechea, Chile - Zona base: lodges y ski school (2650m)'
+        'descripcion': 'La Parva - Sector Bajo / Villa La Parva, Chile - MCP Mountain, Zona base (2650m)'
     },
     {
         'nombre': 'La Parva Sector Medio',
         'latitud': -33.3520,
         'longitud': -70.2900,
-        'descripcion': 'La Parva - Sector Medio / Restaurante 3100, Lo Barnechea, Chile - Zona media montaña (3100m)'
+        'descripcion': 'La Parva - Sector Medio / Restaurante 3100, Chile - MCP Mountain, Zona media (3100m)'
     },
     {
         'nombre': 'La Parva Sector Alto',
         'latitud': -33.3440,
         'longitud': -70.2800,
-        'descripcion': 'La Parva - Sector Alto / Cima, Lo Barnechea, Chile - Zona cumbre y terreno experto (3574m)'
+        'descripcion': 'La Parva - Sector Alto / Cima, Chile - MCP Mountain, Zona cumbre experto (3574m)'
     },
     {
         'nombre': 'El Colorado',
         'latitud': -33.3600,
         'longitud': -70.3000,
-        'descripcion': 'El Colorado / Farellones, Lo Barnechea, Chile - Mayor número de pistas del Tres Valles (base 2350m / cima 3460m)'
+        'descripcion': 'El Colorado / Farellones, Chile - MCP Mountain, Mayor pistas Tres Valles (base 2350m / cima 3460m)'
     },
     {
         'nombre': 'Valle Nevado',
         'latitud': -33.3547,
         'longitud': -70.2498,
-        'descripcion': 'Valle Nevado, Lo Barnechea, Chile - Centro de Esquí más Grande de Sudamérica (base 2860m / cima 3670m)'
+        'descripcion': 'Valle Nevado, Chile - MCP Mountain, Mayor resort Sudamérica (base 2860m / cima 3670m)'
     },
     {
         'nombre': 'Lagunillas',
@@ -151,7 +151,7 @@ UBICACIONES_MONITOREO = [
         'nombre': 'Ski Pucón',
         'latitud': -39.5000,
         'longitud': -71.9600,
-        'descripcion': 'Ski Pucón / Pillán, Volcán Villarrica, Chile - Esquí sobre volcán activo (base 1380m / cima 2100m)'
+        'descripcion': 'Ski Pucón / Pillán, Volcán Villarrica, Chile - MCP Mountain, Esquí volcán activo (base 1380m / cima 2100m)'
     },
     {
         'nombre': 'Los Arenales',
@@ -171,7 +171,7 @@ UBICACIONES_MONITOREO = [
         'nombre': 'Volcán Osorno',
         'latitud': -41.1000,
         'longitud': -72.5000,
-        'descripcion': 'Volcán Osorno, Puerto Varas, Chile - Esquí en el volcán icónico patagónico (base 1230m / cima 1760m)'
+        'descripcion': 'Volcán Osorno, Puerto Varas, Chile - MCP Mountain, Volcán icónico patagónico (base 1230m / cima 1760m)'
     },
 
     # --- Región de Aysén ---
@@ -308,6 +308,69 @@ UBICACIONES_MONITOREO = [
         'latitud': 37.6308,
         'longitud': -119.0326,
         'descripcion': 'Mammoth Mountain, California, USA - Esquí en Sierra Nevada (2424m)'
+    },
+
+    # --- MCP Mountain Partners (Mountain Capital Partners) ---
+    # Tercer grupo de resorts más grande de USA por número de centros
+    {
+        'nombre': 'Purgatory Resort',
+        'latitud': 37.6303,
+        'longitud': -107.8140,
+        'descripcion': 'Purgatory Resort, Durango, Colorado, USA - MCP Mountain, San Juan Mountains (base 2710m / cima 3299m)'
+    },
+    {
+        'nombre': 'Arizona Snowbowl',
+        'latitud': 35.3304,
+        'longitud': -111.7107,
+        'descripcion': 'Arizona Snowbowl, Flagstaff, Arizona, USA - MCP Mountain, San Francisco Peaks (base 2805m / cima 3505m)'
+    },
+    {
+        'nombre': 'Brian Head Resort',
+        'latitud': 37.7021,
+        'longitud': -112.8499,
+        'descripcion': 'Brian Head Resort, Utah, USA - MCP Mountain, Base más alta de Utah (base 2926m / cima 3353m)'
+    },
+    {
+        'nombre': 'Lee Canyon',
+        'latitud': 36.3038,
+        'longitud': -115.6796,
+        'descripcion': 'Lee Canyon, Las Vegas, Nevada, USA - MCP Mountain, Spring Mountains (base 2594m / cima 3353m)'
+    },
+    {
+        'nombre': 'Nordic Valley',
+        'latitud': 40.4800,
+        'longitud': -111.8600,
+        'descripcion': 'Nordic Valley, Eden, Utah, USA - MCP Mountain, Wasatch Range (base 1676m / cima 1981m)'
+    },
+    {
+        'nombre': 'Sipapu Ski Resort',
+        'latitud': 36.1542,
+        'longitud': -105.5483,
+        'descripcion': 'Sipapu Ski Resort, Taos, New Mexico, USA - MCP Mountain, Carson National Forest (base 2591m / cima 2865m)'
+    },
+    {
+        'nombre': 'Pajarito Mountain',
+        'latitud': 35.8903,
+        'longitud': -106.3928,
+        'descripcion': 'Pajarito Mountain, Los Alamos, New Mexico, USA - MCP Mountain, Jemez Mountains (base 2743m / cima 3182m)'
+    },
+    {
+        'nombre': 'Sandia Peak',
+        'latitud': 35.2070,
+        'longitud': -106.4136,
+        'descripcion': 'Sandia Peak, Albuquerque, New Mexico, USA - MCP Mountain, Primer resort de NM desde 1936 (base 2591m / cima 3200m)'
+    },
+    {
+        'nombre': 'Willamette Pass',
+        'latitud': 43.6007,
+        'longitud': -122.0365,
+        'descripcion': 'Willamette Pass, Oregon, USA - MCP Mountain, Cascade Range, 430" nieve anual (base 1676m / cima 2011m)'
+    },
+    {
+        'nombre': 'Hesperus Ski Area',
+        'latitud': 37.2996,
+        'longitud': -108.0551,
+        'descripcion': 'Hesperus Ski Area, Durango, Colorado, USA - MCP Mountain, Centro familiar (base 2499m / cima 2707m)'
     },
 
     # ========================================================================
