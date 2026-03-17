@@ -228,6 +228,13 @@ def guardar_boletin(resultado_boletin: dict) -> dict:
         cliente_bq = bigquery.Client(project=GCP_PROJECT)
         _asegurar_tabla_bigquery(cliente_bq)
 
+        # Extraer resultados de subagentes para campos v3
+        resultados_sa = resultado_boletin.get("resultados_subagentes", {})
+        res_topo = resultados_sa.get("topografico", {})
+        res_sat = resultados_sa.get("satelital", {})
+        res_meteo = resultados_sa.get("meteorologico", {})
+        res_nlp = resultados_sa.get("nlp", {})
+
         fila = {
             "nombre_ubicacion": nombre_ubicacion,
             "fecha_emision": fecha_emision.isoformat(),
@@ -241,7 +248,32 @@ def guardar_boletin(resultado_boletin: dict) -> dict:
             "duracion_segundos": resultado_boletin.get("duracion_segundos"),
             "datos_satelitales_disponibles": _datos_satelitales_disponibles(tools_llamadas),
             "confianza": confianza,
-            "modelo": resultado_boletin.get("modelo")
+            "modelo": resultado_boletin.get("modelo"),
+            # Campos v3 — arquitectura multi-agente
+            "arquitectura": resultado_boletin.get("arquitectura"),
+            "estado_pinn": res_topo.get("estado_pinn"),
+            "factor_seguridad_pinn": res_topo.get("factor_seguridad_pinn"),
+            "estado_vit": res_sat.get("estado_vit"),
+            "score_anomalia_vit": res_sat.get("score_anomalia_vit"),
+            "factor_meteorologico": res_meteo.get("factor_meteorologico"),
+            "ventanas_criticas": res_meteo.get("ventanas_criticas"),
+            "relatos_analizados": res_nlp.get("total_relatos_analizados"),
+            "indice_riesgo_historico": res_nlp.get("indice_riesgo_historico"),
+            "tipo_alud_predominante": res_nlp.get("tipo_alud_predominante"),
+            "patrones_nlp": json.dumps(res_nlp.get("patrones", []), ensure_ascii=False, default=str) if res_nlp.get("patrones") else None,
+            "confianza_historica": res_nlp.get("confianza"),
+            "subagentes_ejecutados": json.dumps(resultado_boletin.get("subagentes_ejecutados", []), ensure_ascii=False),
+            "duracion_por_subagente": json.dumps(resultado_boletin.get("duracion_por_subagente", {}), ensure_ascii=False, default=str),
+            # Campos de ablación y trazabilidad
+            "datos_topograficos_ok": res_topo.get("disponible"),
+            "datos_meteorologicos_ok": res_meteo.get("disponible"),
+            "version_prompts": resultado_boletin.get("version_prompts"),
+            "fuente_gradiente_pinn": res_topo.get("fuente_gradiente"),
+            "fuente_tamano_eaws": resultado_boletin.get("fuente_tamano_eaws"),
+            "viento_kmh": res_meteo.get("viento_kmh"),
+            "subagentes_degradados": json.dumps(
+                resultado.get("subagentes_degradados", [])
+            ),
         }
 
         tabla_ref = f"{GCP_PROJECT}.{DATASET}.{TABLA_BOLETINES}"

@@ -40,6 +40,7 @@ SUBAGENTES_ESPERADOS = [
     "topografico",
     "satelital",
     "meteorologico",
+    "nlp",
     "integrador",
 ]
 
@@ -93,17 +94,17 @@ def resultado_v2():
 # Tests de arquitectura v2
 # ═══════════════════════════════════════════════════════════════════════════════
 
-def test_arquitectura_es_v2(resultado_v2):
-    """El resultado debe identificarse como multi_agente_v2."""
-    assert resultado_v2.get("arquitectura") == "multi_agente_v2", (
-        f"Arquitectura esperada: 'multi_agente_v2', "
+def test_arquitectura_es_v3(resultado_v2):
+    """El resultado debe identificarse como multi_agente_v3."""
+    assert resultado_v2.get("arquitectura") == "multi_agente_v3", (
+        f"Arquitectura esperada: 'multi_agente_v3', "
         f"obtenida: '{resultado_v2.get('arquitectura')}'"
     )
     print(f"\n  ✓ Arquitectura: {resultado_v2['arquitectura']}")
 
 
-def test_cuatro_subagentes_ejecutados(resultado_v2):
-    """Los 4 subagentes deben aparecer en la lista de ejecutados."""
+def test_cinco_subagentes_ejecutados(resultado_v2):
+    """Los 5 subagentes deben aparecer en la lista de ejecutados."""
     subagentes = resultado_v2.get("subagentes_ejecutados", [])
 
     for nombre in SUBAGENTES_ESPERADOS:
@@ -119,8 +120,8 @@ def test_duracion_por_subagente_disponible(resultado_v2):
     duraciones = resultado_v2.get("duracion_por_subagente", {})
 
     assert isinstance(duraciones, dict), "duracion_por_subagente debe ser un dict"
-    assert len(duraciones) == 4, (
-        f"Deben registrarse 4 duraciones, se encontraron {len(duraciones)}: {duraciones}"
+    assert len(duraciones) == 5, (
+        f"Deben registrarse 5 duraciones, se encontraron {len(duraciones)}: {duraciones}"
     )
 
     for nombre, duracion in duraciones.items():

@@ -81,7 +81,7 @@
     "name": "arquitectura",
     "type": "STRING",
     "mode": "NULLABLE",
-    "description": "Versión de arquitectura: v1_single_agent, multi_agente_v2"
+    "description": "Versión de arquitectura: v1_single_agent, multi_agente_v2, multi_agente_v3"
   },
   {
     "name": "estado_pinn",
@@ -120,6 +120,36 @@
     "description": "Número de ventanas críticas meteorológicas detectadas"
   },
   {
+    "name": "relatos_analizados",
+    "type": "INT64",
+    "mode": "NULLABLE",
+    "description": "Número de relatos históricos de montañistas analizados por el SubagenteNLP"
+  },
+  {
+    "name": "indice_riesgo_historico",
+    "type": "FLOAT64",
+    "mode": "NULLABLE",
+    "description": "Índice de riesgo histórico calculado por el SubagenteNLP (0.0-1.0)"
+  },
+  {
+    "name": "tipo_alud_predominante",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Tipo de alud predominante en relatos históricos: placa, nieve_humeda, nieve_reciente, mixto, sin_datos"
+  },
+  {
+    "name": "patrones_nlp",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "JSON con los patrones de riesgo detectados por el SubagenteNLP en los relatos históricos"
+  },
+  {
+    "name": "confianza_historica",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Confianza del análisis NLP histórico: Alta (>10 relatos), Media (3-10), Baja (<3)"
+  },
+  {
     "name": "subagentes_ejecutados",
     "type": "STRING",
     "mode": "NULLABLE",
@@ -130,5 +160,47 @@
     "type": "STRING",
     "mode": "NULLABLE",
     "description": "JSON con duración en segundos por cada subagente"
+  },
+  {
+    "name": "datos_topograficos_ok",
+    "type": "BOOL",
+    "mode": "NULLABLE",
+    "description": "Si había datos topográficos DEM disponibles para esta ubicación"
+  },
+  {
+    "name": "datos_meteorologicos_ok",
+    "type": "BOOL",
+    "mode": "NULLABLE",
+    "description": "Si había datos meteorológicos recientes (<24h) disponibles"
+  },
+  {
+    "name": "version_prompts",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Versión del registro de prompts usado para generar este boletín (e.g. v3.1)"
+  },
+  {
+    "name": "fuente_gradiente_pinn",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Fuente del gradiente térmico PINN: lst_satelital_con_snow_depth, lst_satelital_sin_snow_depth, lapse_rate_estandar"
+  },
+  {
+    "name": "fuente_tamano_eaws",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Fuente del tamaño EAWS: estimar_tamano_potencial, explicito, default"
+  },
+  {
+    "name": "viento_kmh",
+    "type": "FLOAT64",
+    "mode": "NULLABLE",
+    "description": "Velocidad del viento en km/h usada para ajuste de frecuencia"
+  },
+  {
+    "name": "subagentes_degradados",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "JSON con lista de subagentes que fallaron y fueron degradados gracefully"
   }
 ]

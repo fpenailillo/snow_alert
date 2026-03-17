@@ -97,21 +97,36 @@ try:
     from main import UBICACIONES_MONITOREO
     logger.info(f"Ubicaciones importadas del extractor: {len(UBICACIONES_MONITOREO)}")
 except ImportError:
-    logger.warning("No se pudo importar UBICACIONES_MONITOREO del extractor, usando lista local")
-    # Lista de respaldo (subset para desarrollo)
+    logger.warning("No se pudo importar UBICACIONES_MONITOREO del extractor, usando lista completa local")
+    # Lista completa de respaldo (sincronizada con extractor/main.py)
     UBICACIONES_MONITOREO = [
-        {
-            'nombre': 'La Parva Sector Bajo',
-            'latitud': -33.3630,
-            'longitud': -70.3010,
-            'descripcion': 'La Parva - Sector Bajo, Chile'
-        },
-        {
-            'nombre': 'Valle Nevado',
-            'latitud': -33.3547,
-            'longitud': -70.2498,
-            'descripcion': 'Valle Nevado, Chile'
-        },
+        # Chile
+        {'nombre': 'Portillo', 'latitud': -32.8369, 'longitud': -70.1287, 'descripcion': 'Portillo, Los Andes, Chile'},
+        {'nombre': 'Ski Arpa', 'latitud': -32.6000, 'longitud': -70.3900, 'descripcion': 'Ski Arpa, Los Andes, Chile'},
+        {'nombre': 'La Parva Sector Bajo', 'latitud': -33.3630, 'longitud': -70.3010, 'descripcion': 'La Parva - Sector Bajo, Chile (2650m)'},
+        {'nombre': 'La Parva Sector Medio', 'latitud': -33.3520, 'longitud': -70.2900, 'descripcion': 'La Parva - Sector Medio, Chile (3100m)'},
+        {'nombre': 'La Parva Sector Alto', 'latitud': -33.3440, 'longitud': -70.2800, 'descripcion': 'La Parva - Sector Alto, Chile (3574m)'},
+        {'nombre': 'El Colorado', 'latitud': -33.3600, 'longitud': -70.3000, 'descripcion': 'El Colorado / Farellones, Chile'},
+        {'nombre': 'Valle Nevado', 'latitud': -33.3547, 'longitud': -70.2498, 'descripcion': 'Valle Nevado, Chile'},
+        {'nombre': 'Lagunillas', 'latitud': -33.6800, 'longitud': -70.2500, 'descripcion': 'Lagunillas, San José de Maipo, Chile'},
+        {'nombre': 'Chapa Verde', 'latitud': -34.1700, 'longitud': -70.3700, 'descripcion': 'Chapa Verde, Rancagua, Chile'},
+        {'nombre': 'Nevados de Chillán', 'latitud': -36.8580, 'longitud': -71.3727, 'descripcion': 'Nevados de Chillán, Chile'},
+        {'nombre': 'Antuco', 'latitud': -37.4100, 'longitud': -71.4200, 'descripcion': 'Ski Antuco, Los Ángeles, Chile'},
+        {'nombre': 'Corralco', 'latitud': -38.3700, 'longitud': -71.5700, 'descripcion': 'Corralco, Volcán Lonquimay, Chile'},
+        {'nombre': 'Las Araucarias', 'latitud': -38.7300, 'longitud': -71.7400, 'descripcion': 'Las Araucarias / Llaima, Chile'},
+        {'nombre': 'Ski Pucón', 'latitud': -39.5000, 'longitud': -71.9600, 'descripcion': 'Ski Pucón / Pillán, Chile'},
+        {'nombre': 'Antillanca', 'latitud': -40.7756, 'longitud': -72.2046, 'descripcion': 'Antillanca, Volcán Casablanca, Chile'},
+        {'nombre': 'Volcán Osorno', 'latitud': -41.1000, 'longitud': -72.5000, 'descripcion': 'Volcán Osorno, Puerto Varas, Chile'},
+        {'nombre': 'El Fraile', 'latitud': -45.6800, 'longitud': -71.9400, 'descripcion': 'El Fraile, Coyhaique, Chile'},
+        {'nombre': 'Cerro Mirador', 'latitud': -53.1300, 'longitud': -70.9800, 'descripcion': 'Cerro Mirador, Punta Arenas, Chile'},
+        # Argentina
+        {'nombre': 'Cerro Catedral', 'latitud': -41.1667, 'longitud': -71.4500, 'descripcion': 'Cerro Catedral, Bariloche, Argentina'},
+        {'nombre': 'Cerro Chapelco', 'latitud': -40.2500, 'longitud': -71.2000, 'descripcion': 'Cerro Chapelco, San Martín de los Andes, Argentina'},
+        {'nombre': 'Las Leñas', 'latitud': -35.1553, 'longitud': -70.0986, 'descripcion': 'Las Leñas, Malargüe, Argentina'},
+        {'nombre': 'Los Penitentes', 'latitud': -32.8567, 'longitud': -69.8075, 'descripcion': 'Los Penitentes, Mendoza, Argentina'},
+        {'nombre': 'Vallecitos', 'latitud': -33.0000, 'longitud': -69.4700, 'descripcion': 'Vallecitos, Mendoza, Argentina'},
+        {'nombre': 'Cerro Bayo', 'latitud': -40.7167, 'longitud': -71.5500, 'descripcion': 'Cerro Bayo, Villa La Angostura, Argentina'},
+        {'nombre': 'Caviahue', 'latitud': -37.8700, 'longitud': -71.0500, 'descripcion': 'Caviahue, Neuquén, Argentina'},
     ]
 
 

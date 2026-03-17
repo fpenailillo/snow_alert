@@ -208,17 +208,17 @@ def transformar_hora_para_bigquery(
 
         # Viento
         'velocidad_viento': extraer_valor_seguro(hora_data, ['wind', 'speed', 'value']),
+        'direccion_viento': extraer_valor_seguro(hora_data, ['wind', 'direction', 'cardinal']),
         'direccion_viento_grados': extraer_valor_seguro(hora_data, ['wind', 'direction', 'degrees']),
-        'direccion_viento_cardinal': extraer_valor_seguro(hora_data, ['wind', 'direction', 'cardinal']),
         'rafaga_viento': extraer_valor_seguro(hora_data, ['wind', 'gust', 'value']),
 
         # Precipitación
-        'probabilidad_precipitacion': extraer_valor_seguro(hora_data, ['precipitation', 'probability', 'percent']),
+        'prob_precipitacion': extraer_valor_seguro(hora_data, ['precipitation', 'probability', 'percent']),
         'tipo_precipitacion': extraer_valor_seguro(hora_data, ['precipitation', 'probability', 'type']),
         'cantidad_precipitacion': extraer_valor_seguro(hora_data, ['precipitation', 'qpf', 'quantity']),
 
         # Otros
-        'probabilidad_tormenta': hora_data.get('thunderstormProbability'),
+        'prob_tormenta': hora_data.get('thunderstormProbability'),
         'indice_uv': hora_data.get('uvIndex'),
         'visibilidad': extraer_valor_seguro(hora_data, ['visibility', 'distance']),
         'cobertura_nubes': hora_data.get('cloudCover'),

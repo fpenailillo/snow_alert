@@ -1,0 +1,39 @@
+apiVersion: run.googleapis.com/v1
+kind: Job
+metadata:
+  name: orquestador-avalanchas
+  namespace: climas-chileno
+  labels:
+    sistema: snow-alert
+    version: "v3"
+spec:
+  template:
+    spec:
+      template:
+        spec:
+          containers:
+            - image: gcr.io/climas-chileno/snow-alert-agentes:latest
+              name: orquestador
+              resources:
+                limits:
+                  memory: 4Gi
+                  cpu: "2"
+              env:
+                - name: ID_PROYECTO
+                  value: climas-chileno
+                - name: DATASET_ID
+                  value: clima
+                - name: REGION
+                  value: us-central1
+                # Token OAuth para la API de Claude (desde Secret Manager)
+                - name: CLAUDE_CODE_OAUTH_TOKEN
+                  valueFrom:
+                    secretKeyRef:
+                      name: claude-oauth-token
+                      key: latest
+              # Tiempo máximo de ejecución: 60 minutos
+              # (5 subagentes × ~20 ubicaciones × ~3 min/ubicación ≈ 50 min)
+          timeoutSeconds: 3600
+          serviceAccountName: funciones-clima-sa@climas-chileno.iam.gserviceaccount.com
+      # Reintentos en caso de fallo transitorio
+      maxRetries: 1

@@ -1,0 +1,44 @@
+steps:
+  # Paso 1: Construir imagen Docker
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'build-imagen'
+    args:
+      - 'build'
+      - '-t'
+      - 'gcr.io/$PROJECT_ID/snow-alert-agentes:$COMMIT_SHA'
+      - '-t'
+      - 'gcr.io/$PROJECT_ID/snow-alert-agentes:latest'
+      - '-f'
+      - 'agentes/despliegue/Dockerfile'
+      - '.'
+
+  # Paso 2: Push de la imagen al registro
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'push-imagen'
+    args:
+      - 'push'
+      - '--all-tags'
+      - 'gcr.io/$PROJECT_ID/snow-alert-agentes'
+
+  # Paso 3: Actualizar el Cloud Run Job con la nueva imagen
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: 'actualizar-job'
+    entrypoint: 'gcloud'
+    args:
+      - 'run'
+      - 'jobs'
+      - 'update'
+      - 'orquestador-avalanchas'
+      - '--image=gcr.io/$PROJECT_ID/snow-alert-agentes:$COMMIT_SHA'
+      - '--region=us-central1'
+      - '--project=$PROJECT_ID'
+
+substitutions:
+  _REGION: us-central1
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+
+images:
+  - 'gcr.io/$PROJECT_ID/snow-alert-agentes:$COMMIT_SHA'
+  - 'gcr.io/$PROJECT_ID/snow-alert-agentes:latest'

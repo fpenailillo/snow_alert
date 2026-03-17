@@ -1,11 +1,12 @@
 """
 Orquestador del Sistema Multi-Agente de Predicción de Avalanchas (v2)
 
-Coordina 4 subagentes independientes de Claude en secuencia:
+Coordina 5 subagentes independientes de Claude en secuencia:
 1. SubagenteTopografico — análisis DEM + PINNs
 2. SubagenteSatelital — análisis satelital + ViT
 3. SubagenteMeteorologico — condiciones y ventanas críticas
-4. SubagenteIntegrador — clasificación EAWS + boletín final
+4. SubagenteNLP — análisis de relatos históricos de montañistas
+5. SubagenteIntegrador — clasificación EAWS + boletín final
 
 El contexto se acumula de cada subagente al siguiente.
 Mantiene retrocompatibilidad con la interfaz v1 (AgenteRiesgoAvalancha).
@@ -25,6 +26,8 @@ from agentes.subagentes.subagente_topografico.agente import SubagenteTopografico
 from agentes.subagentes.subagente_satelital.agente import SubagenteSatelital
 from agentes.subagentes.subagente_meteorologico.agente import SubagenteMeteorologico
 from agentes.subagentes.subagente_integrador.agente import SubagenteIntegrador
+from agentes.subagentes.subagente_nlp.agente import SubagenteNLP
+from agentes.prompts.registro_versiones import obtener_version_actual, verificar_integridad
 
 
 logging.basicConfig(
@@ -43,11 +46,12 @@ class OrquestadorAvalancha:
     """
     Orquestador del sistema multi-agente de predicción de avalanchas.
 
-    Coordina 4 subagentes independientes de Claude en secuencia:
+    Coordina 5 subagentes independientes de Claude en secuencia:
     1. Topográfico (DEM + PINNs)
     2. Satelital (imágenes + ViT)
     3. Meteorológico (condiciones + ventanas críticas)
-    4. Integrador (EAWS + boletín final)
+    4. NLP Relatos (análisis histórico de montañistas)
+    5. Integrador (EAWS + boletín final)
 
     El contexto se acumula de cada subagente al siguiente para
     proporcionar información enriquecida a cada etapa del análisis.
@@ -56,24 +60,34 @@ class OrquestadorAvalancha:
     MODELO_SUBAGENTES = "claude-sonnet-4-5"
 
     def __init__(self):
-        """Inicializa el orquestador y los 4 subagentes."""
-        logger.info("Inicializando OrquestadorAvalancha (v2 multi-agente)...")
+        """Inicializa el orquestador y los 5 subagentes."""
+        logger.info("Inicializando OrquestadorAvalancha (v3 multi-agente)...")
 
         self.subagente_topografico = SubagenteTopografico()
         self.subagente_satelital = SubagenteSatelital()
         self.subagente_meteorologico = SubagenteMeteorologico()
+        self.subagente_nlp = SubagenteNLP()
         self.subagente_integrador = SubagenteIntegrador()
+
+        # Verificar integridad de prompts al inicializar
+        self._version_prompts = obtener_version_actual()
+        if not verificar_integridad():
+            logger.warning(
+                "Integridad de prompts NO verificada — algún prompt fue "
+                "modificado sin actualizar registro_versiones.py"
+            )
 
         logger.info(
             "OrquestadorAvalancha inicializado — "
-            f"4 subagentes con modelo {self.MODELO_SUBAGENTES}"
+            f"5 subagentes con modelo {self.MODELO_SUBAGENTES}, "
+            f"prompts {self._version_prompts}"
         )
 
     def generar_boletin(self, nombre_ubicacion: str) -> dict:
         """
         Genera un boletín EAWS completo para una ubicación.
 
-        Ejecuta los 4 subagentes en secuencia, acumulando el contexto
+        Ejecuta los 5 subagentes en secuencia, acumulando el contexto
         de cada uno para el siguiente.
 
         Args:
@@ -156,8 +170,47 @@ class OrquestadorAvalancha:
                 f"{resultado_meteo.get('duracion_segundos', 0)}s"
             )
 
-            # ─── Subagente 4: Integrador ──────────────────────────────────────
-            logger.info("\n--- Subagente 4: Integrador EAWS ---")
+            # ─── Subagente 4: NLP Relatos ─────────────────────────────────────
+            # NLP es no-crítico: si falla, el pipeline continúa con los datos
+            # de los 3 subagentes anteriores + integrador
+            logger.info("\n--- Subagente 4: NLP Relatos ---")
+            try:
+                resultado_nlp = self.subagente_nlp.ejecutar(
+                    nombre_ubicacion=nombre_ubicacion,
+                    contexto_previo=contexto_acumulado
+                )
+                resultados_subagentes["nlp"] = resultado_nlp
+                tools_llamadas_total.extend(resultado_nlp.get("tools_llamadas", []))
+
+                contexto_acumulado = self._construir_contexto(
+                    contexto_previo=contexto_acumulado,
+                    nombre_subagente="ANÁLISIS NLP RELATOS",
+                    analisis=resultado_nlp.get("analisis", "")
+                )
+                logger.info(
+                    f"✓ Subagente NLP completado en "
+                    f"{resultado_nlp.get('duracion_segundos', 0)}s"
+                )
+            except Exception as exc_nlp:
+                logger.warning(
+                    f"⚠ Subagente NLP falló (no-crítico, continuando): {exc_nlp}"
+                )
+                resultados_subagentes["nlp"] = {
+                    "analisis": f"[SubagenteNLP no disponible: {exc_nlp}]",
+                    "tools_llamadas": [],
+                    "iteraciones": 0,
+                    "duracion_segundos": 0,
+                    "error": str(exc_nlp),
+                    "degradado": True,
+                }
+                contexto_acumulado = self._construir_contexto(
+                    contexto_previo=contexto_acumulado,
+                    nombre_subagente="ANÁLISIS NLP RELATOS",
+                    analisis="[No disponible — sin datos históricos de relatos]"
+                )
+
+            # ─── Subagente 5: Integrador ──────────────────────────────────────
+            logger.info("\n--- Subagente 5: Integrador EAWS ---")
             resultado_int = self.subagente_integrador.ejecutar(
                 nombre_ubicacion=nombre_ubicacion,
                 contexto_previo=contexto_acumulado
@@ -191,6 +244,12 @@ class OrquestadorAvalancha:
             f"{'=' * 60}"
         )
 
+        # Detectar si algún subagente operó en modo degradado
+        subagentes_degradados = [
+            nombre for nombre, resultado in resultados_subagentes.items()
+            if resultado.get("degradado")
+        ]
+
         return {
             # Campos principales (compatibles con v1)
             "ubicacion": nombre_ubicacion,
@@ -205,8 +264,10 @@ class OrquestadorAvalancha:
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "modelo": self.MODELO_SUBAGENTES,
             # Campos adicionales v2
-            "arquitectura": "multi_agente_v2",
+            "arquitectura": "multi_agente_v3",
+            "version_prompts": self._version_prompts,
             "subagentes_ejecutados": list(resultados_subagentes.keys()),
+            "subagentes_degradados": subagentes_degradados,
             "duracion_por_subagente": {
                 nombre: resultado.get("duracion_segundos", 0)
                 for nombre, resultado in resultados_subagentes.items()

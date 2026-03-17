@@ -3,14 +3,21 @@ Tool: analizar_dem
 
 Obtiene y enriquece el perfil topográfico DEM (Digital Elevation Model)
 de una ubicación desde BigQuery. Prepara los datos para cálculo PINN.
+
+El gradiente térmico se calcula preferentemente desde datos satelitales
+reales (LST día/noche) cuando están disponibles, con fallback al
+lapse rate estándar (-6.5°C/1000m) estimado desde el DEM.
 """
 
+import logging
 import sys
 import os
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../../../../..'))
 
 from agentes.datos.consultor_bigquery import ConsultorBigQuery
+
+logger = logging.getLogger(__name__)
 
 
 TOOL_ANALIZAR_DEM = {
@@ -66,13 +73,17 @@ def ejecutar_analizar_dem(nombre_ubicacion: str) -> dict:
     aspecto = perfil.get("aspecto_predominante_inicio", "N")
     zona_inicio_ha = perfil.get("zona_inicio_ha", 0)
 
+    # Obtener datos satelitales reales para gradiente térmico (B5)
+    datos_satelitales = _obtener_datos_satelitales_lst(consultor, nombre_ubicacion)
+
     # Calcular métricas físicas para PINN
     metricas_pinn = _calcular_metricas_pinn(
         pendiente=pendiente,
         elevacion_max=elevacion_max,
         elevacion_min=elevacion_min,
         desnivel=desnivel,
-        aspecto=aspecto
+        aspecto=aspecto,
+        datos_satelitales=datos_satelitales
     )
 
     # Clasificación topográfica
@@ -111,27 +122,81 @@ def ejecutar_analizar_dem(nombre_ubicacion: str) -> dict:
     }
 
 
+def _obtener_datos_satelitales_lst(consultor: ConsultorBigQuery, nombre_ubicacion: str) -> dict:
+    """
+    Obtiene datos satelitales LST recientes para calcular el gradiente
+    térmico real del manto nival.
+
+    Consulta imagenes_satelitales para LST día/noche y snow_depth.
+    Si no hay datos, retorna dict vacío (se usará lapse rate estándar).
+
+    Returns:
+        dict con lst_dia_celsius, lst_noche_celsius, era5_snow_depth_m
+        o dict vacío si no hay datos disponibles
+    """
+    try:
+        estado = consultor.obtener_estado_satelital(nombre_ubicacion)
+        if not estado.get("disponible"):
+            return {}
+
+        lst_dia = estado.get("lst_dia_celsius")
+        lst_noche = estado.get("lst_noche_celsius")
+
+        if lst_dia is not None and lst_noche is not None:
+            return {
+                "lst_dia_celsius": lst_dia,
+                "lst_noche_celsius": lst_noche,
+                "era5_snow_depth_m": estado.get("era5_snow_depth_m"),
+            }
+        return {}
+    except Exception as e:
+        logger.warning(f"No se pudo obtener LST satelital para {nombre_ubicacion}: {e}")
+        return {}
+
+
 def _calcular_metricas_pinn(
     pendiente: float,
     elevacion_max: float,
     elevacion_min: float,
     desnivel: float,
-    aspecto: str
+    aspecto: str,
+    datos_satelitales: dict = None
 ) -> dict:
     """
     Calcula las métricas físicas que alimentarían un PINN.
 
-    Deriva variables físicas del manto nival a partir de la topografía:
-    - gradiente_termico: gradiente vertical de temperatura estimado
-    - densidad_kg_m3: densidad nival estimada por elevación/aspecto
-    - indice_metamorfismo: índice de transformación del cristal de nieve
-    - energia_fusion: energía de fusión potencial por pendiente/aspecto
+    Deriva variables físicas del manto nival a partir de la topografía,
+    enriquecidas con datos satelitales reales cuando están disponibles.
+
+    El gradiente térmico se calcula preferentemente desde LST satelital:
+        gradiente = (LST_día - LST_noche) / (snow_depth_m × 100)
+    Con fallback al lapse rate estándar (-6.5°C/1000m) si no hay datos.
 
     Returns:
         dict con métricas físicas PINN
     """
-    # Gradiente térmico: -6.5°C por cada 1000m (lapse rate estándar)
+    # Gradiente térmico: preferir datos satelitales reales sobre lapse rate
+    fuente_gradiente = "lapse_rate_estandar"
     gradiente_termico = round(-6.5 * desnivel / 1000.0, 3)
+
+    if datos_satelitales:
+        lst_dia = datos_satelitales.get("lst_dia_celsius")
+        lst_noche = datos_satelitales.get("lst_noche_celsius")
+        snow_depth = datos_satelitales.get("era5_snow_depth_m")
+
+        if lst_dia is not None and lst_noche is not None:
+            amplitud_diurna = lst_dia - lst_noche
+
+            if snow_depth and snow_depth > 0.05:
+                # Gradiente real: diferencia térmica / profundidad nieve (en cm → /100m)
+                gradiente_termico = round(amplitud_diurna / (snow_depth * 100.0), 3)
+                fuente_gradiente = "lst_satelital_con_snow_depth"
+            else:
+                # Sin snow_depth fiable: usar amplitud diurna como proxy directo
+                # Normalizado por desnivel del terreno para escala comparable
+                if desnivel > 0:
+                    gradiente_termico = round(amplitud_diurna * 100.0 / desnivel, 3)
+                    fuente_gradiente = "lst_satelital_sin_snow_depth"
 
     # Densidad estimada por elevación (nieve a mayor altitud → menor densidad)
     # Rango típico: 150-400 kg/m³
@@ -161,6 +226,7 @@ def _calcular_metricas_pinn(
 
     return {
         "gradiente_termico_C_100m": gradiente_termico,
+        "fuente_gradiente": fuente_gradiente,
         "densidad_kg_m3": densidad_kg_m3,
         "indice_metamorfismo": indice_metamorfismo,
         "energia_fusion_J_kg": energia_fusion,

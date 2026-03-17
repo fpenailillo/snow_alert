@@ -22,6 +22,12 @@ import anthropic
 logger = logging.getLogger(__name__)
 
 
+# Configuración de reintentos para llamadas a la API
+MAX_REINTENTOS_API = 3
+ESPERA_BASE_SEGUNDOS = 2.0
+ESPERA_MAXIMA_SEGUNDOS = 30.0
+
+
 class ErrorSubagente(Exception):
     """Excepción levantada cuando un subagente falla."""
     pass
@@ -120,6 +126,80 @@ class BaseSubagente(ABC):
         prompt += "Usa todas tus tools disponibles para completar el análisis."
         return prompt
 
+    def _llamar_api_con_reintentos(self, mensajes: list) -> object:
+        """
+        Llama a la API de Anthropic con reintentos y backoff exponencial.
+
+        Reintenta en errores transitorios (rate limit, errores de servidor,
+        errores de conexión). No reintenta en errores de cliente (400, 401, 403).
+
+        Args:
+            mensajes: lista de mensajes del agentic loop
+
+        Returns:
+            Respuesta de la API
+
+        Raises:
+            ErrorSubagente: si se agotan los reintentos
+        """
+        ultimo_error = None
+
+        for intento in range(MAX_REINTENTOS_API):
+            try:
+                return self.cliente.messages.create(
+                    model=self.MODELO,
+                    max_tokens=self.MAX_TOKENS,
+                    system=self._obtener_system_prompt(),
+                    tools=self._tools_definicion,
+                    messages=mensajes
+                )
+            except anthropic.RateLimitError as exc:
+                ultimo_error = exc
+                espera = min(
+                    ESPERA_BASE_SEGUNDOS * (2 ** intento),
+                    ESPERA_MAXIMA_SEGUNDOS
+                )
+                logger.warning(
+                    f"{self.NOMBRE}: rate limit (intento {intento + 1}/"
+                    f"{MAX_REINTENTOS_API}), esperando {espera:.1f}s"
+                )
+                time.sleep(espera)
+            except anthropic.APIStatusError as exc:
+                if exc.status_code >= 500:
+                    ultimo_error = exc
+                    espera = min(
+                        ESPERA_BASE_SEGUNDOS * (2 ** intento),
+                        ESPERA_MAXIMA_SEGUNDOS
+                    )
+                    logger.warning(
+                        f"{self.NOMBRE}: error servidor {exc.status_code} "
+                        f"(intento {intento + 1}/{MAX_REINTENTOS_API}), "
+                        f"esperando {espera:.1f}s"
+                    )
+                    time.sleep(espera)
+                else:
+                    raise ErrorSubagente(
+                        f"{self.NOMBRE}: error API no recuperable "
+                        f"(HTTP {exc.status_code}): {exc.message}"
+                    ) from exc
+            except anthropic.APIConnectionError as exc:
+                ultimo_error = exc
+                espera = min(
+                    ESPERA_BASE_SEGUNDOS * (2 ** intento),
+                    ESPERA_MAXIMA_SEGUNDOS
+                )
+                logger.warning(
+                    f"{self.NOMBRE}: error conexión "
+                    f"(intento {intento + 1}/{MAX_REINTENTOS_API}), "
+                    f"esperando {espera:.1f}s"
+                )
+                time.sleep(espera)
+
+        raise ErrorSubagente(
+            f"{self.NOMBRE}: agotados {MAX_REINTENTOS_API} reintentos API — "
+            f"último error: {ultimo_error}"
+        ) from ultimo_error
+
     def ejecutar(
         self,
         nombre_ubicacion: str,
@@ -156,13 +236,7 @@ class BaseSubagente(ABC):
                 f"{self.NOMBRE}: iteración {iteracion} → llamando a {self.MODELO}"
             )
 
-            respuesta = self.cliente.messages.create(
-                model=self.MODELO,
-                max_tokens=self.MAX_TOKENS,
-                system=self._obtener_system_prompt(),
-                tools=self._tools_definicion,
-                messages=mensajes
-            )
+            respuesta = self._llamar_api_con_reintentos(mensajes)
 
             logger.info(
                 f"{self.NOMBRE} it.{iteracion}: "

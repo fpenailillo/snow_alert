@@ -50,7 +50,7 @@ snow_alert/
 │   └── tests/
 │
 ├── relatos/        ← Relatos Andeshandbook
-├── databricks/     ← Notebooks análisis offline
+├── notebooks_validacion/  ← Notebooks validación académica (H1-H4)
 └── docs/           ← Documentación técnica
 ```
 
@@ -120,7 +120,7 @@ En Docker (`Dockerfile`), `analizador_avalanchas/` se copia a `/app/analizador_a
 ```
 Fase -1  Organizar repositorio         ← COMPLETADO (Marzo 2026)
 Fase  0  Diagnosticar datos nulos      ← agentes/diagnostico/revisar_datos.py
-Fase  1  Cargar relatos (manual)       ← ver databricks/02_carga_relatos_bigquery.py
+Fase  1  Cargar relatos (manual)       ← ver datos/relatos/cargar_relatos.py
 Fase  2  Construir SubagenteNLP + upgrade 4→5 subagentes
 Fase  3  Archivos despliegue Cloud Run
 Fase  4  Reemplazar schema_boletines.json (27 campos)

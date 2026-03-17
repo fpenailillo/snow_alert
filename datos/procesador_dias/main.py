@@ -158,16 +158,17 @@ def extraer_valor_seguro(datos: Dict[str, Any], ruta: List[str], predeterminado:
     return actual
 
 
-def extraer_datos_periodo(periodo: Dict[str, Any], prefijo: str) -> Dict[str, Any]:
-    """Extrae datos de un período (día o noche) del pronóstico diario."""
-    return {
+def extraer_datos_periodo(periodo: Dict[str, Any], prefijo: str, dia_data: Dict[str, Any] = None) -> Dict[str, Any]:
+    """Extrae datos de un período (día o noche) del pronóstico diario.
+
+    Las temperaturas max/min y feelsLike están a nivel del día completo
+    (no dentro de daytimeForecast/nighttimeForecast), por eso se extraen
+    de dia_data.
+    """
+    datos = {
         f'{prefijo}_condicion': extraer_valor_seguro(periodo, ['weatherCondition', 'type']),
         f'{prefijo}_descripcion': extraer_valor_seguro(periodo, ['weatherCondition', 'description', 'text']),
         f'{prefijo}_icono_url': extraer_valor_seguro(periodo, ['weatherCondition', 'iconBaseUri']),
-        f'{prefijo}_temp_max': extraer_valor_seguro(periodo, ['temperature', 'max', 'degrees']),
-        f'{prefijo}_temp_min': extraer_valor_seguro(periodo, ['temperature', 'min', 'degrees']),
-        f'{prefijo}_sensacion_max': extraer_valor_seguro(periodo, ['feelsLikeTemperature', 'max', 'degrees']),
-        f'{prefijo}_sensacion_min': extraer_valor_seguro(periodo, ['feelsLikeTemperature', 'min', 'degrees']),
         f'{prefijo}_humedad': periodo.get('relativeHumidity'),
         f'{prefijo}_velocidad_viento': extraer_valor_seguro(periodo, ['wind', 'speed', 'value']),
         f'{prefijo}_direccion_viento': extraer_valor_seguro(periodo, ['wind', 'direction', 'cardinal']),
@@ -177,6 +178,15 @@ def extraer_datos_periodo(periodo: Dict[str, Any], prefijo: str) -> Dict[str, An
         f'{prefijo}_cobertura_nubes': periodo.get('cloudCover'),
         f'{prefijo}_indice_uv': periodo.get('uvIndex'),
     }
+
+    # Temperaturas están a nivel del día, no del período
+    if dia_data:
+        datos[f'{prefijo}_temp_max'] = extraer_valor_seguro(dia_data, ['maxTemperature', 'degrees'])
+        datos[f'{prefijo}_temp_min'] = extraer_valor_seguro(dia_data, ['minTemperature', 'degrees'])
+        datos[f'{prefijo}_sensacion_max'] = extraer_valor_seguro(dia_data, ['feelsLikeMaxTemperature', 'degrees'])
+        datos[f'{prefijo}_sensacion_min'] = extraer_valor_seguro(dia_data, ['feelsLikeMinTemperature', 'degrees'])
+
+    return datos
 
 
 def transformar_dia_para_bigquery(
@@ -209,9 +219,9 @@ def transformar_dia_para_bigquery(
         'mes': display_date.get('month'),
         'dia': display_date.get('day'),
 
-        # Amanecer y atardecer
-        'hora_amanecer': extraer_valor_seguro(dia_data, ['astroEvents', 'sunrise', 'time']),
-        'hora_atardecer': extraer_valor_seguro(dia_data, ['astroEvents', 'sunset', 'time']),
+        # Amanecer y atardecer (sunEvents, no astroEvents)
+        'hora_amanecer': extraer_valor_seguro(dia_data, ['sunEvents', 'sunriseTime']),
+        'hora_atardecer': extraer_valor_seguro(dia_data, ['sunEvents', 'sunsetTime']),
 
         # Temperaturas máximas/mínimas del día completo
         'temp_max_dia': extraer_valor_seguro(dia_data, ['maxTemperature', 'degrees']),
@@ -221,13 +231,13 @@ def transformar_dia_para_bigquery(
     # Extraer datos del período diurno
     periodo_dia = dia_data.get('daytimeForecast', {})
     if periodo_dia:
-        datos_dia = extraer_datos_periodo(periodo_dia, 'diurno')
+        datos_dia = extraer_datos_periodo(periodo_dia, 'diurno', dia_data)
         fila.update(datos_dia)
 
     # Extraer datos del período nocturno
     periodo_noche = dia_data.get('nighttimeForecast', {})
     if periodo_noche:
-        datos_noche = extraer_datos_periodo(periodo_noche, 'nocturno')
+        datos_noche = extraer_datos_periodo(periodo_noche, 'nocturno', dia_data)
         fila.update(datos_noche)
 
     # Metadata

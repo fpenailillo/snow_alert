@@ -163,9 +163,9 @@ VIS_NDSI_SNOW: Dict[str, Any] = {
 
 # MODIS LST
 VIS_LST: Dict[str, Any] = {
-    'bands': ['LST_Day_1km'],
-    'min': 230,
-    'max': 310,
+    'bands': ['LST_Celsius'],
+    'min': -30,
+    'max': 40,
     'palette': [
         '040274', '040281', '0502a3', '0502b8', '0502ce',
         '0602df', '0602ff', '235cb1', '307ef3', '269db1',
@@ -194,7 +194,7 @@ VIS_GOES_TERMICO: Dict[str, Any] = {
 
 # ERA5-Land Snow Depth
 VIS_ERA5_SNOW_DEPTH: Dict[str, Any] = {
-    'bands': ['snow_depth'],
+    'bands': ['snow_depth_m'],
     'min': 0,
     'max': 3,
     'palette': ['ffffff', 'cce5ff', '99ccff', '6699ff', '3366cc', '003399'],
@@ -361,8 +361,8 @@ TIMEOUT_DESCARGA_SEGUNDOS = 60
 ESPERA_ENTRE_REINTENTOS = [2, 4, 8]  # Backoff exponencial
 
 # Batch processing
-TAMANO_LOTE = 10
-ESPERA_ENTRE_LOTES_SEGUNDOS = 2
+TAMANO_LOTE = 5   # 5 ubicaciones por lote → ~100s/lote, margen seguro para timeout 540s
+ESPERA_ENTRE_LOTES_SEGUNDOS = 1
 
 # Dimensiones de imágenes
 DIMENSION_PREVIEW = 768

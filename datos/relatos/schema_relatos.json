@@ -1,0 +1,74 @@
+[
+  {
+    "name": "id_relato",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "Identificador único del relato (hash del título + fecha)"
+  },
+  {
+    "name": "titulo",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "Título del relato o salida"
+  },
+  {
+    "name": "texto_completo",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Texto completo del relato (narrativa del montañista)"
+  },
+  {
+    "name": "fecha_relato",
+    "type": "DATE",
+    "mode": "NULLABLE",
+    "description": "Fecha de la salida/actividad descrita"
+  },
+  {
+    "name": "ubicacion_mencionada",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Ubicación o ruta mencionada en el relato"
+  },
+  {
+    "name": "zona_normalizada",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Zona normalizada para matching con ubicaciones del sistema"
+  },
+  {
+    "name": "url_fuente",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "URL original del relato en Andeshandbook"
+  },
+  {
+    "name": "fuente",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "Fuente del relato (ej: 'andeshandbook')"
+  },
+  {
+    "name": "actividad",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Tipo de actividad (esquí, montañismo, escalada, etc.)"
+  },
+  {
+    "name": "autor",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Autor del relato"
+  },
+  {
+    "name": "fecha_carga",
+    "type": "TIMESTAMP",
+    "mode": "REQUIRED",
+    "description": "Timestamp de carga en BigQuery"
+  },
+  {
+    "name": "contiene_terminos_avalancha",
+    "type": "BOOL",
+    "mode": "NULLABLE",
+    "description": "True si el texto contiene términos relacionados a avalanchas"
+  }
+]

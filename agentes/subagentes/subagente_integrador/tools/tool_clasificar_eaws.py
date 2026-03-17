@@ -13,13 +13,18 @@ _ROOT = os.path.join(os.path.dirname(__file__), '../../../..')  # → snow_alert
 sys.path.insert(0, _ROOT)
 sys.path.insert(0, os.path.join(_ROOT, 'datos'))  # → snow_alert/datos/ (dev local)
 
+import logging
+
 from analizador_avalanchas.eaws_constantes import (
     consultar_matriz_eaws,
+    estimar_tamano_potencial,
     CLASES_ESTABILIDAD,
     CLASES_FRECUENCIA,
     CLASES_TAMANO,
     NIVELES_PELIGRO
 )
+
+logger = logging.getLogger(__name__)
 
 
 TOOL_CLASIFICAR_EAWS_INTEGRADO = {
@@ -57,6 +62,22 @@ TOOL_CLASIFICAR_EAWS_INTEGRADO = {
             "ventanas_criticas_detectadas": {
                 "type": "integer",
                 "description": "Número de ventanas críticas meteorológicas detectadas"
+            },
+            "viento_kmh": {
+                "type": "number",
+                "description": "Velocidad del viento en km/h (para ajuste de frecuencia)"
+            },
+            "desnivel_inicio_deposito_m": {
+                "type": "number",
+                "description": "Desnivel vertical entre zona inicio y depósito en metros (para cálculo dinámico de tamaño)"
+            },
+            "zona_inicio_ha": {
+                "type": "number",
+                "description": "Hectáreas de zona de inicio de avalanchas (para cálculo dinámico de tamaño)"
+            },
+            "pendiente_max_grados": {
+                "type": "number",
+                "description": "Pendiente máxima en grados (para cálculo dinámico de tamaño)"
             }
         },
         "required": [
@@ -87,7 +108,11 @@ def ejecutar_clasificar_riesgo_eaws_integrado(
     estabilidad_satelital: str = None,
     frecuencia_topografica: str = None,
     tamano_eaws: str = None,
-    ventanas_criticas_detectadas: int = 0
+    ventanas_criticas_detectadas: int = 0,
+    viento_kmh: float = None,
+    desnivel_inicio_deposito_m: float = None,
+    zona_inicio_ha: float = None,
+    pendiente_max_grados: float = None
 ) -> dict:
     """
     Clasifica el riesgo EAWS integrando los análisis de todos los subagentes.
@@ -97,8 +122,12 @@ def ejecutar_clasificar_riesgo_eaws_integrado(
         factor_meteorologico: factor del análisis meteorológico
         estabilidad_satelital: clasificación EAWS del análisis satelital
         frecuencia_topografica: frecuencia EAWS del subagente topográfico
-        tamano_eaws: tamaño EAWS de zonas de avalancha
+        tamano_eaws: tamaño EAWS explícito (1-5), se calcula dinámicamente si no se provee
         ventanas_criticas_detectadas: número de ventanas críticas
+        viento_kmh: velocidad del viento en km/h (incrementa frecuencia si >40)
+        desnivel_inicio_deposito_m: desnivel vertical para cálculo dinámico de tamaño
+        zona_inicio_ha: hectáreas de zona de inicio para cálculo dinámico de tamaño
+        pendiente_max_grados: pendiente máxima para cálculo dinámico de tamaño
 
     Returns:
         dict con nivel EAWS 24h/48h/72h, factores y recomendaciones
@@ -115,21 +144,24 @@ def ejecutar_clasificar_riesgo_eaws_integrado(
         frecuencia_topografica=frecuencia_topografica,
         ventanas_criticas=ventanas_criticas_detectadas,
         factor_meteorologico=factor_meteorologico,
-        estabilidad=estabilidad_final
+        estabilidad=estabilidad_final,
+        viento_kmh=viento_kmh
     )
 
-    # ─── 3. Determinar tamaño ────────────────────────────────────────────────
-    tamano_final = tamano_eaws or "2"  # Default: mediano
-    # Validar que esté en el rango
-    if tamano_final not in ["1", "2", "3", "4", "5"]:
-        tamano_final = "2"
+    # ─── 3. Determinar tamaño (dinámico desde topografía si es posible) ──────
+    tamano_final, fuente_tamano = _determinar_tamano(
+        tamano_eaws=tamano_eaws,
+        desnivel_inicio_deposito_m=desnivel_inicio_deposito_m,
+        zona_inicio_ha=zona_inicio_ha,
+        pendiente_max_grados=pendiente_max_grados
+    )
 
     # ─── 4. Consultar matriz EAWS ─────────────────────────────────────────────
     # consultar_matriz_eaws devuelve Tuple[int, Optional[int]] → (D1, D2)
     nivel_d1, nivel_d2 = consultar_matriz_eaws(
         estabilidad=estabilidad_final,
         frecuencia=frecuencia_final,
-        tamano=int(tamano_final)
+        tamano=tamano_final
     )
     nivel_24h = nivel_d1  # Nivel primario
 
@@ -144,8 +176,13 @@ def ejecutar_clasificar_riesgo_eaws_integrado(
     recomendaciones = []
     if ventanas_criticas_detectadas > 0:
         recomendaciones.append(
-            f"⚠️ Se detectaron {ventanas_criticas_detectadas} ventanas críticas "
-            "meteorológicas — monitoreo continuo recomendado"
+            f"Se detectaron {ventanas_criticas_detectadas} ventanas criticas "
+            "meteorologicas — monitoreo continuo recomendado"
+        )
+    if viento_kmh and viento_kmh > 40:
+        recomendaciones.append(
+            f"Viento fuerte detectado ({viento_kmh:.0f} km/h) — "
+            "transporte eolico activo incrementa frecuencia de avalanchas"
         )
 
     return {
@@ -156,7 +193,8 @@ def ejecutar_clasificar_riesgo_eaws_integrado(
         "factores_eaws": {
             "estabilidad": estabilidad_final,
             "frecuencia": frecuencia_final,
-            "tamano": int(tamano_final)
+            "tamano": tamano_final,
+            "fuente_tamano": fuente_tamano
         },
         "fuentes_estabilidad": {
             "topografica_pinn": estabilidad_topografica,
@@ -164,6 +202,7 @@ def ejecutar_clasificar_riesgo_eaws_integrado(
             "ajuste_meteorologico": _obtener_ajuste_meteorologico(factor_meteorologico)
         },
         "factor_meteorologico": factor_meteorologico,
+        "viento_kmh": viento_kmh,
         "recomendaciones": recomendaciones,
         "descripcion_nivel": info_nivel.get("descripcion", "")
     }
@@ -211,9 +250,17 @@ def _determinar_frecuencia(
     frecuencia_topografica: str,
     ventanas_criticas: int,
     factor_meteorologico: str,
-    estabilidad: str
+    estabilidad: str,
+    viento_kmh: float = None
 ) -> str:
-    """Determina la frecuencia EAWS final."""
+    """
+    Determina la frecuencia EAWS final.
+
+    Incorpora viento como factor directo: viento >40 km/h incrementa
+    la clase de frecuencia en 1 (transporte eólico activo redistribuye
+    nieve hacia zonas de acumulación, aumentando probabilidad de
+    desprendimiento).
+    """
     escala = ["nearly_none", "a_few", "some", "many"]
 
     idx_base = escala.index(frecuencia_topografica) if frecuencia_topografica in escala else 1
@@ -221,8 +268,13 @@ def _determinar_frecuencia(
     # Ajuste por ventanas críticas
     if ventanas_criticas >= 3:
         idx_base = min(3, idx_base + 1)
-    elif ventanas_criticas >= 2:
-        idx_base = min(3, idx_base + 0)  # Sin cambio automático, ya está incorporado
+
+    # Ajuste por viento fuerte (C3: >40 km/h → transporte eólico activo)
+    if viento_kmh and viento_kmh > 40:
+        idx_base = min(3, idx_base + 1)
+        if viento_kmh > 70:
+            # Viento extremo → sube otro nivel más
+            idx_base = min(3, idx_base + 1)
 
     # Ajuste por estabilidad: si very_poor → frecuencia sube
     if estabilidad == "very_poor" and idx_base < 2:
@@ -233,6 +285,43 @@ def _determinar_frecuencia(
         idx_base = min(3, idx_base + 1)
 
     return escala[idx_base]
+
+
+def _determinar_tamano(
+    tamano_eaws: str = None,
+    desnivel_inicio_deposito_m: float = None,
+    zona_inicio_ha: float = None,
+    pendiente_max_grados: float = None
+) -> tuple:
+    """
+    Determina el tamaño EAWS dinámicamente usando estimar_tamano_potencial()
+    cuando hay datos topográficos disponibles.
+
+    Returns:
+        tuple: (tamano_int, fuente_str)
+    """
+    # Si se pasó explícitamente un tamaño, usarlo
+    if tamano_eaws and tamano_eaws in ["1", "2", "3", "4", "5"]:
+        return int(tamano_eaws), "explicito"
+
+    # Calcular dinámicamente si hay datos topográficos suficientes
+    if desnivel_inicio_deposito_m is not None and desnivel_inicio_deposito_m > 0:
+        ha = zona_inicio_ha if zona_inicio_ha and zona_inicio_ha > 0 else 25.0
+        pendiente = pendiente_max_grados if pendiente_max_grados and pendiente_max_grados > 0 else 38.0
+
+        tamano = estimar_tamano_potencial(
+            desnivel_inicio_deposito=desnivel_inicio_deposito_m,
+            ha_zona_inicio=ha,
+            pendiente_max=pendiente
+        )
+        logger.info(
+            f"Tamaño EAWS calculado dinámicamente: {tamano} "
+            f"(desnivel={desnivel_inicio_deposito_m}m, ha={ha}, pendiente={pendiente}°)"
+        )
+        return tamano, "estimar_tamano_potencial"
+
+    # Fallback: default 2 (mediano)
+    return 2, "default"
 
 
 def _proyectar_nivel(nivel_24h: int, factor_meteorologico: str, horas: int) -> int:
