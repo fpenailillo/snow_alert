@@ -1,35 +1,74 @@
-# Python cache
+# ─── Python ──────────────────────────────────────────────────────────────────
 __pycache__/
 *.py[cod]
-*.pyc
-
-# Entornos virtuales
-venv/
-env/
-.venv/
-
-# Google Cloud credenciales
-credentials.json
-service-account-key.json
-*.json.key
-
-# IDEs
-.vscode/
-.idea/
-*.swp
-*.swo
-
-# Variables de entorno
-.env
-.env.local
-
-# Logs
+*.pyo
+*.pyd
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+.tox/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
 *.log
 
-# Archivos temporales
+# ─── Entornos virtuales ──────────────────────────────────────────────────────
+.venv/
+venv/
+env/
+ENV/
+
+# ─── Secretos y credenciales ─────────────────────────────────────────────────
+*.json.key
+service_account*.json
+service-account-key.json
+credentials*.json
+credentials.json
+*.env
+.env
+.env.*
+.env.local
+!.env.example
+secrets/
+
+# ─── GCP / Google Earth Engine ───────────────────────────────────────────────
+.earthengine/
+application_default_credentials.json
+gce_credentials.json
+
+# ─── Datos locales (no se versionan) ─────────────────────────────────────────
+datos_locales/
+outputs/
+exports/
+*.geotiff
+*.tiff
+*.tif
+boletines_locales/
+
+# ─── IDE ─────────────────────────────────────────────────────────────────────
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# ─── Archivos temporales ─────────────────────────────────────────────────────
 *.tmp
 tmp/
 
-# OS
-.DS_Store
-Thumbs.db
+# ─── Jupyter / Databricks ────────────────────────────────────────────────────
+.ipynb_checkpoints/
+
+# ─── Terraform ───────────────────────────────────────────────────────────────
+*.tfstate
+*.tfstate.backup
+.terraform/
+
+# ─── Cobertura de tests ──────────────────────────────────────────────────────
+htmlcov/
+.coverage
+coverage.xml

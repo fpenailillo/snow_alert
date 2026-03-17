@@ -1,0 +1,134 @@
+[
+  {
+    "name": "nombre_ubicacion",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "Nombre exacto de la ubicación"
+  },
+  {
+    "name": "fecha_emision",
+    "type": "TIMESTAMP",
+    "mode": "REQUIRED",
+    "description": "Fecha y hora de emisión del boletín (UTC)"
+  },
+  {
+    "name": "nivel_eaws_24h",
+    "type": "INT64",
+    "mode": "NULLABLE",
+    "description": "Nivel de peligro EAWS para las próximas 24 horas (1-5)"
+  },
+  {
+    "name": "nivel_eaws_48h",
+    "type": "INT64",
+    "mode": "NULLABLE",
+    "description": "Nivel de peligro EAWS para 24-48 horas (1-5)"
+  },
+  {
+    "name": "nivel_eaws_72h",
+    "type": "INT64",
+    "mode": "NULLABLE",
+    "description": "Nivel de peligro EAWS para 48-72 horas (1-5)"
+  },
+  {
+    "name": "nombre_nivel_24h",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Nombre del nivel de peligro 24h (Débil, Limitado, Considerable, Alto, Muy Alto)"
+  },
+  {
+    "name": "boletin_texto",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Texto completo del boletín en formato EAWS"
+  },
+  {
+    "name": "tools_llamadas",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "JSON con el registro de tools llamadas y sus inputs (todos los subagentes)"
+  },
+  {
+    "name": "iteraciones",
+    "type": "INT64",
+    "mode": "NULLABLE",
+    "description": "Total de iteraciones del agentic loop entre todos los subagentes"
+  },
+  {
+    "name": "duracion_segundos",
+    "type": "FLOAT64",
+    "mode": "NULLABLE",
+    "description": "Duración total de la generación en segundos"
+  },
+  {
+    "name": "datos_satelitales_disponibles",
+    "type": "BOOL",
+    "mode": "NULLABLE",
+    "description": "Si había datos satelitales recientes (<48h) disponibles"
+  },
+  {
+    "name": "confianza",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Nivel de confianza del boletín (Alta, Media, Baja)"
+  },
+  {
+    "name": "modelo",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "ID del modelo de IA usado (subagentes)"
+  },
+  {
+    "name": "arquitectura",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Versión de arquitectura: v1_single_agent, multi_agente_v2"
+  },
+  {
+    "name": "estado_pinn",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Estado PINN del manto nival: CRITICO, INESTABLE, MARGINAL, ESTABLE"
+  },
+  {
+    "name": "factor_seguridad_pinn",
+    "type": "FLOAT64",
+    "mode": "NULLABLE",
+    "description": "Factor de seguridad Mohr-Coulomb del PINN (>1.5=estable)"
+  },
+  {
+    "name": "estado_vit",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Estado del Vision Transformer: CRITICO, ALERTADO, MODERADO, ESTABLE"
+  },
+  {
+    "name": "score_anomalia_vit",
+    "type": "FLOAT64",
+    "mode": "NULLABLE",
+    "description": "Score de anomalía del Vision Transformer (0-10)"
+  },
+  {
+    "name": "factor_meteorologico",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Factor meteorológico EAWS dominante detectado"
+  },
+  {
+    "name": "ventanas_criticas",
+    "type": "INT64",
+    "mode": "NULLABLE",
+    "description": "Número de ventanas críticas meteorológicas detectadas"
+  },
+  {
+    "name": "subagentes_ejecutados",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "JSON con lista de subagentes ejecutados en el análisis"
+  },
+  {
+    "name": "duracion_por_subagente",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "JSON con duración en segundos por cada subagente"
+  }
+]
