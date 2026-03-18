@@ -100,7 +100,7 @@ def construir_ruta_gcs(datos: Dict[str, Any]) -> str:
         marca_tiempo = datetime.fromisoformat(datos['marca_tiempo_extraccion'].replace('Z', '+00:00'))
 
         ruta = (
-            f"pronostico_horas/{nombre_ubicacion}/"
+            f"{nombre_ubicacion}/pronostico_horas/"
             f"{marca_tiempo.year:04d}/"
             f"{marca_tiempo.month:02d}/"
             f"{marca_tiempo.day:02d}/"

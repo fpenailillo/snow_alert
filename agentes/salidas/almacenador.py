@@ -302,7 +302,7 @@ def guardar_boletin(resultado_boletin: dict) -> dict:
         timestamp_archivo = fecha_emision.strftime("%Y%m%d_%H%M%S")
 
         ruta_gcs = (
-            f"boletines/{ubicacion_normalizada}/"
+            f"{ubicacion_normalizada}/boletines/"
             f"{fecha_path}/"
             f"{timestamp_archivo}.json"
         )

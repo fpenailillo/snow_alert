@@ -92,7 +92,7 @@ def construir_ruta_gcs(
     Construye la ruta de almacenamiento en GCS.
 
     Estructura:
-        satelital/{tipo}/{nombre_ubicacion}/{YYYY-MM-DD}/{archivo}
+        {nombre_ubicacion}/satelital/{tipo}/{YYYY-MM-DD}/{archivo}
 
     Args:
         nombre_ubicacion: Nombre de la ubicación
@@ -120,11 +120,11 @@ def construir_ruta_gcs(
         # Thumbnails se sobrescriben con la más reciente (por producto)
         nombre_archivo = f"{nombre_norm}_{fuente_norm}_ultimo_{DIMENSION_THUMBNAIL}px.{extension}"
         # Para thumbnails, no usamos fecha en la ruta
-        return f"{PREFIJO_SATELITAL}/{directorio}/{nombre_norm}/{nombre_archivo}"
+        return f"{nombre_norm}/satelital/{directorio}/{nombre_archivo}"
     else:
         raise ValueError(f"Tipo de archivo no soportado: {tipo_archivo}")
 
-    return f"{PREFIJO_SATELITAL}/{directorio}/{nombre_norm}/{fecha_str}/{nombre_archivo}"
+    return f"{nombre_norm}/satelital/{directorio}/{fecha_str}/{nombre_archivo}"
 
 
 def crear_roi(latitud: float, longitud: float, radio_metros: int = RADIO_TILE_METROS) -> ee.Geometry:

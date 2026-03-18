@@ -134,7 +134,7 @@ def construir_ruta_gcs(datos: Dict[str, Any]) -> str:
     """
     Construye la ruta de almacenamiento en GCS siguiendo estructura de particiones.
 
-    Formato: {ubicacion}/{AAAA}/{MM}/{DD}/{timestamp}.json
+    Formato: {ubicacion}/clima/{AAAA}/{MM}/{DD}/{timestamp}.json
 
     Args:
         datos: Datos climáticos procesados
@@ -146,9 +146,9 @@ def construir_ruta_gcs(datos: Dict[str, Any]) -> str:
         nombre_ubicacion = datos['nombre_ubicacion'].lower().replace(' ', '_')
         marca_tiempo = datetime.fromisoformat(datos['marca_tiempo_extraccion'].replace('Z', '+00:00'))
 
-        # Construir ruta particionada
+        # Construir ruta particionada por ubicación
         ruta = (
-            f"{nombre_ubicacion}/"
+            f"{nombre_ubicacion}/clima/"
             f"{marca_tiempo.year:04d}/"
             f"{marca_tiempo.month:02d}/"
             f"{marca_tiempo.day:02d}/"
