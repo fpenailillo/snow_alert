@@ -2,7 +2,7 @@
 
 Sistema multi-agente sobre Google Cloud Platform que genera boletines EAWS (niveles 1-5) para zonas de montaña chilenas, combinando análisis topográfico (PINNs + SRTM), monitoreo satelital (Vision Transformers + MODIS/GEE), meteorología (Google Weather API) y conocimiento experto extraído de relatos históricos de montañistas (NLP).
 
-> Tesina de Magíster en Tecnologías de la Información — Francisco Peñailillo — UTFSM — Dr. Mauricio Solar
+> Propuesta Tesina de Magíster en Tecnologías de la Información — Francisco Peñailillo — UTFSM 
 
 **Proyecto GCP:** `climas-chileno` | **Dataset BigQuery:** `clima` | **Región:** `us-central1`
 
