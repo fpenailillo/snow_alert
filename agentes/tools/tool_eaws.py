@@ -15,7 +15,7 @@ import os
 import logging
 
 # Importar desde el módulo existente sin duplicar lógica
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../../analizador_avalanchas'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../../datos/analizador_avalanchas'))
 from eaws_constantes import consultar_matriz_eaws, NIVELES_PELIGRO  # noqa: E402
 
 logger = logging.getLogger(__name__)

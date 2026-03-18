@@ -162,7 +162,6 @@ class ConsultorBigQuery:
                 SELECT
                     temperatura,
                     velocidad_viento,
-                    probabilidad_precipitacion,
                     cantidad_precipitacion,
                     hora_inicio
                 FROM `{proyecto}.{dataset}.pronostico_horas`
@@ -177,7 +176,6 @@ class ConsultorBigQuery:
                 SELECT
                     temperatura,
                     velocidad_viento,
-                    probabilidad_precipitacion,
                     cantidad_precipitacion,
                     hora_inicio
                 FROM `{proyecto}.{dataset}.pronostico_horas`
@@ -223,10 +221,10 @@ class ConsultorBigQuery:
                             hora_viento_max = str(f["hora_inicio"])
                         break
 
-            # Horas con precipitación probable (>50%)
+            # Horas con precipitación (cantidad > 0.5mm)
             horas_con_precipitacion = sum(
                 1 for f in todas_filas
-                if f.get("probabilidad_precipitacion") and f["probabilidad_precipitacion"] > 50
+                if (f.get("cantidad_precipitacion") or 0) > 0.5
             )
 
             # Tendencia de temperatura (últimas vs primeras horas disponibles)
@@ -302,13 +300,17 @@ class ConsultorBigQuery:
                     nocturno_condicion,
                     diurno_prob_precipitacion,
                     nocturno_prob_precipitacion,
-                    diurno_viento_max,
-                    nocturno_viento_max
+                    diurno_velocidad_viento,
+                    nocturno_velocidad_viento
                 FROM `{proyecto}.{dataset}.pronostico_dias`
                 WHERE nombre_ubicacion = @ubicacion
-                  AND fecha_inicio >= DATE_SUB(CURRENT_DATE(), INTERVAL 1 DAY)
+                  AND fecha_inicio >= TIMESTAMP(CURRENT_DATE())
+                QUALIFY ROW_NUMBER() OVER (
+                    PARTITION BY DATE(fecha_inicio)
+                    ORDER BY marca_tiempo_extraccion DESC
+                ) = 1
                 ORDER BY fecha_inicio ASC
-                LIMIT 3
+                LIMIT 5
             """.format(proyecto=self.GCP_PROJECT, dataset=self.DATASET)
 
             parametros = [
@@ -344,8 +346,8 @@ class ConsultorBigQuery:
                     dia["prob_precipitacion_dia"] = prob_noche
 
                 # viento_max (máximo entre diurno y nocturno)
-                viento_dia = dia.get("diurno_viento_max")
-                viento_noche = dia.get("nocturno_viento_max")
+                viento_dia = dia.get("diurno_velocidad_viento")
+                viento_noche = dia.get("nocturno_velocidad_viento")
                 if viento_dia is not None and viento_noche is not None:
                     dia["viento_max"] = max(viento_dia, viento_noche)
                 elif viento_dia is not None:
@@ -550,19 +552,19 @@ class ConsultorBigQuery:
 
     def obtener_relatos_ubicacion(self, ubicacion: str, limite: int = 20) -> dict:
         """
-        Relatos históricos de montañistas para la ubicación o zona cercana.
+        Rutas Andeshandbook para la ubicación o zona cercana.
 
-        Busca por similitud en ubicacion_mencionada con LIKE para encontrar
-        relatos aunque el nombre no sea exacto.
+        Busca por similitud en location/name/sector con LIKE para encontrar
+        rutas aunque el nombre no sea exacto.
 
         Args:
             ubicacion: Nombre de la ubicación (busca coincidencias parciales)
-            limite: Número máximo de relatos a retornar (default: 20)
+            limite: Número máximo de rutas a retornar (default: 20)
 
         Returns:
-            dict con lista de relatos y metadatos de búsqueda
+            dict con lista de rutas y metadatos de búsqueda
         """
-        logger.info(f"Buscando relatos para ubicación: {ubicacion}")
+        logger.info(f"Buscando rutas para ubicación: {ubicacion}")
         try:
             # Extraer palabra clave de la ubicación (ej: "La Parva Sector Bajo" → "La Parva")
             palabras = ubicacion.split()
@@ -570,18 +572,25 @@ class ConsultorBigQuery:
 
             sql = """
                 SELECT
-                    id_relato,
-                    titulo,
-                    SUBSTR(texto_completo, 1, 500) as fragmento_texto,
-                    fecha_relato,
-                    ubicacion_mencionada,
-                    url_fuente,
-                    fuente
+                    route_id,
+                    name,
+                    location,
+                    sector,
+                    SUBSTR(description, 1, 500) as fragmento_descripcion,
+                    avalanche_info,
+                    has_avalanche_info,
+                    is_alta_montana,
+                    llm_nivel_riesgo,
+                    llm_puntuacion_riesgo,
+                    llm_resumen,
+                    url,
+                    scraped_timestamp
                 FROM `{proyecto}.{dataset}.relatos_montanistas`
                 WHERE
-                    LOWER(ubicacion_mencionada) LIKE LOWER(@termino)
-                    OR LOWER(titulo) LIKE LOWER(@termino)
-                ORDER BY fecha_relato DESC
+                    LOWER(location) LIKE LOWER(@termino)
+                    OR LOWER(name) LIKE LOWER(@termino)
+                    OR LOWER(sector) LIKE LOWER(@termino)
+                ORDER BY scraped_timestamp DESC
                 LIMIT @limite
             """.format(proyecto=self.GCP_PROJECT, dataset=self.DATASET)
 
@@ -602,22 +611,23 @@ class ConsultorBigQuery:
                 ]
                 filas = self._ejecutar_query(sql_amplio, parametros_amplio)
 
-            # Serializar fechas
+            # Serializar timestamps
             for fila in filas:
-                if fila.get("fecha_relato") and hasattr(fila["fecha_relato"], "isoformat"):
-                    fila["fecha_relato"] = fila["fecha_relato"].isoformat()
+                if fila.get("scraped_timestamp") and hasattr(fila["scraped_timestamp"], "isoformat"):
+                    fila["scraped_timestamp"] = fila["scraped_timestamp"].isoformat()
 
-            logger.info(f"  {len(filas)} relatos encontrados para: {ubicacion}")
+            logger.info(f"  {len(filas)} rutas encontradas para: {ubicacion}")
             return {
                 "disponible": True,
                 "relatos": filas,
                 "total_encontrados": len(filas),
                 "termino_busqueda": termino_busqueda,
+                "fuente": "andeshandbook_rutas",
             }
 
         except Exception as e:
             tabla_msg = "relatos_montanistas no existe" if "Not found" in str(e) else str(e)
-            logger.warning(f"Error buscando relatos para {ubicacion}: {tabla_msg}")
+            logger.warning(f"Error buscando rutas para {ubicacion}: {tabla_msg}")
             return {
                 "disponible": False,
                 "relatos": [],
@@ -650,16 +660,18 @@ class ConsultorBigQuery:
             for termino in terminos[:8]:  # Limitar a 8 términos para no saturar BQ
                 sql = """
                     SELECT
-                        id_relato,
-                        titulo,
-                        SUBSTR(texto_completo, 1, 300) as fragmento,
-                        fecha_relato,
-                        ubicacion_mencionada,
+                        route_id,
+                        name,
+                        location,
+                        SUBSTR(COALESCE(avalanche_info, description, ''), 1, 300) as fragmento,
+                        scraped_timestamp,
+                        location as ubicacion_mencionada,
                         @termino as termino_encontrado
                     FROM `{proyecto}.{dataset}.relatos_montanistas`
-                    WHERE LOWER(texto_completo) LIKE LOWER(CONCAT('%', @termino, '%'))
-                       OR LOWER(titulo) LIKE LOWER(CONCAT('%', @termino, '%'))
-                    ORDER BY fecha_relato DESC
+                    WHERE LOWER(description) LIKE LOWER(CONCAT('%', @termino, '%'))
+                       OR LOWER(avalanche_info) LIKE LOWER(CONCAT('%', @termino, '%'))
+                       OR LOWER(mountain_characteristics) LIKE LOWER(CONCAT('%', @termino, '%'))
+                    ORDER BY scraped_timestamp DESC
                     LIMIT @limite
                 """.format(proyecto=self.GCP_PROJECT, dataset=self.DATASET)
 
@@ -670,11 +682,11 @@ class ConsultorBigQuery:
 
                 filas = self._ejecutar_query(sql, parametros)
 
-                # Serializar fechas
+                # Serializar timestamps
                 for fila in filas:
-                    if fila.get("fecha_relato") and hasattr(fila["fecha_relato"], "isoformat"):
-                        fila["fecha_relato"] = fila["fecha_relato"].isoformat()
-                    todos_los_ids.add(fila.get("id_relato", ""))
+                    if fila.get("scraped_timestamp") and hasattr(fila["scraped_timestamp"], "isoformat"):
+                        fila["scraped_timestamp"] = fila["scraped_timestamp"].isoformat()
+                    todos_los_ids.add(str(fila.get("route_id", "")))
 
                 if filas:
                     resultados_por_termino[termino] = filas

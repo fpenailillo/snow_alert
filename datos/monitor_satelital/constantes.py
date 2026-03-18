@@ -141,9 +141,10 @@ BANDAS_SENTINEL2 = {
 
 # MODIS True Color (RGB natural)
 VIS_MODIS_TRUE_COLOR: Dict[str, Any] = {
-    'bands': ['sur_refl_b01', 'sur_refl_b04', 'sur_refl_b03'],
-    'min': -100,
-    'max': 8000,
+    'bands': ['R', 'G', 'B'],
+    'min': 0,
+    'max': 3000,
+    'gamma': 1.4,
 }
 
 # MODIS False Color Nieve (nieve = ROJA, nubes = blancas)
@@ -155,7 +156,7 @@ VIS_MODIS_FALSE_COLOR_NIEVE: Dict[str, Any] = {
 
 # MODIS NDSI Snow Cover
 VIS_NDSI_SNOW: Dict[str, Any] = {
-    'bands': ['NDSI_Snow_Cover'],
+    'bands': ['NDSI'],
     'min': 0,
     'max': 100,
     'palette': ['000000', '0dffff', '0524ff', '8f0af4', 'ffffff'],
@@ -178,7 +179,7 @@ VIS_LST: Dict[str, Any] = {
 
 # GOES Pseudo Color Visual
 VIS_GOES_PSEUDO_COLOR: Dict[str, Any] = {
-    'bands': ['CMI_C02', 'CMI_C03', 'CMI_C01'],
+    'bands': ['R', 'G', 'B'],
     'min': 0.0,
     'max': 0.8,
 }
@@ -196,8 +197,8 @@ VIS_GOES_TERMICO: Dict[str, Any] = {
 VIS_ERA5_SNOW_DEPTH: Dict[str, Any] = {
     'bands': ['snow_depth_m'],
     'min': 0,
-    'max': 3,
-    'palette': ['ffffff', 'cce5ff', '99ccff', '6699ff', '3366cc', '003399'],
+    'max': 2,
+    'palette': ['4a4a4a', '99ccff', '6699ff', '3366cc', '003399', 'ffffff'],
 }
 
 # Sentinel-2 True Color
@@ -351,9 +352,9 @@ UMBRAL_NDSI_NIEVE = 40     # NDSI >= 40 = nieve (estándar global)
 
 # Días hacia atrás para buscar imágenes
 DIAS_BUSQUEDA_GOES = 1     # GOES tiene latencia ~1 hora
-DIAS_BUSQUEDA_MODIS = 7    # MODIS tiene latencia 2-7 días
+DIAS_BUSQUEDA_MODIS = 14   # MODIS tiene latencia 2-14 días (MOD11A1 LST puede tardar >7)
 DIAS_BUSQUEDA_ERA5 = 7     # ERA5 tiene latencia ~5 días
-DIAS_BUSQUEDA_SENTINEL2 = 15  # Sentinel-2 tiene baja revisita
+DIAS_BUSQUEDA_SENTINEL2 = 30  # Sentinel-2 tiene baja revisita
 
 # Configuración de reintentos
 MAX_REINTENTOS = 3

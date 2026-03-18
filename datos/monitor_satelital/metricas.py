@@ -473,6 +473,11 @@ def compilar_metricas_completas(
             metricas_ndsi = calcular_metricas_ndsi(imagen_ndsi, roi)
             metricas.update(metricas_ndsi)
 
+            # Porcentaje de nubes desde banda cruda (valor 250 = nube)
+            if producto_ndsi.get('imagen_raw'):
+                pct_nubes = calcular_porcentaje_nubes(producto_ndsi['imagen_raw'], roi)
+                metricas['pct_nubes'] = pct_nubes if pct_nubes >= 0 else None
+
     # LST
     if 'lst' in productos:
         producto_lst = productos['lst']
@@ -536,8 +541,8 @@ def compilar_metricas_completas(
                 roi=roi,
                 latitud=latitud,
                 longitud=longitud,
-                lst_dia=lst_dia,
-                lst_noche=lst_noche,
+                lst_dia_celsius=lst_dia,
+                lst_noche_celsius=lst_noche,
                 fecha_captura=fecha_captura
             )
             # Actualizar solo campos que tienen valor
@@ -569,8 +574,9 @@ def compilar_metricas_completas(
                 metricas['sar_vv_medio_db'] = productos_sar.get('vv_medio_db')
                 metricas['sar_delta_vv_db'] = productos_sar.get('delta_vv_db')
 
+                val = metricas['sar_pct_nieve_humeda']
                 logger.info(
-                    f"SAR: {metricas['sar_pct_nieve_humeda']:.1f}% nieve húmeda"
+                    f"SAR: {val:.1f}% nieve húmeda" if val is not None else "SAR: disponible"
                 )
 
     except Exception as e:

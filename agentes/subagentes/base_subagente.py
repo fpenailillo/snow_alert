@@ -16,7 +16,7 @@ from abc import ABC, abstractmethod
 from datetime import datetime, timezone
 from typing import Optional
 
-import anthropic
+from agentes.datos.cliente_llm import crear_cliente
 
 
 logger = logging.getLogger(__name__)
@@ -42,30 +42,25 @@ class BaseSubagente(ABC):
     y system prompt.
 
     Atributos de clase que las subclases deben definir:
-        NOMBRE: nombre descriptivo del subagente
-        MODELO: modelo de Claude a usar
-        MAX_TOKENS: máximo de tokens por respuesta
+        NOMBRE     : nombre descriptivo del subagente
+        MODELO     : modelo a usar (referencial, el cliente puede ignorarlo)
+        PROVEEDOR  : "databricks" (gratis) | "anthropic" (Claude, validación)
+        MAX_TOKENS : máximo de tokens por respuesta
         MAX_ITERACIONES: límite del loop agentic
     """
 
     NOMBRE = "BaseSubagente"
-    MODELO = "claude-sonnet-4-5"
+    MODELO = "qwen3-next-80b-a3b-instruct"
+    PROVEEDOR = "databricks"
     MAX_TOKENS = 4096
     MAX_ITERACIONES = 10
 
     def __init__(self):
-        """Inicializa el subagente con cliente Anthropic."""
-        token = os.environ.get("CLAUDE_CODE_OAUTH_TOKEN")
-        if token:
-            self.cliente = anthropic.Anthropic(auth_token=token)
-            logger.debug(
-                f"{self.NOMBRE}: cliente inicializado con CLAUDE_CODE_OAUTH_TOKEN"
-            )
-        else:
-            self.cliente = anthropic.Anthropic()
-            logger.debug(
-                f"{self.NOMBRE}: cliente inicializado con ANTHROPIC_API_KEY"
-            )
+        """Inicializa el subagente con el cliente LLM correspondiente al proveedor."""
+        self.cliente = crear_cliente(self.PROVEEDOR)
+        logger.debug(
+            f"{self.NOMBRE}: cliente inicializado — proveedor: {self.PROVEEDOR}"
+        )
 
         self._tools_definicion = self._cargar_tools()
         self._tools_ejecutores = self._cargar_ejecutores()
@@ -143,36 +138,39 @@ class BaseSubagente(ABC):
             ErrorSubagente: si se agotan los reintentos
         """
         ultimo_error = None
+        errores_recuperables = self.cliente.errores_recuperables
+        error_servidor = self.cliente.error_servidor
 
         for intento in range(MAX_REINTENTOS_API):
             try:
-                return self.cliente.messages.create(
+                return self.cliente.crear_mensaje(
                     model=self.MODELO,
                     max_tokens=self.MAX_TOKENS,
                     system=self._obtener_system_prompt(),
                     tools=self._tools_definicion,
-                    messages=mensajes
+                    messages=mensajes,
                 )
-            except anthropic.RateLimitError as exc:
+            except errores_recuperables as exc:
                 ultimo_error = exc
                 espera = min(
                     ESPERA_BASE_SEGUNDOS * (2 ** intento),
                     ESPERA_MAXIMA_SEGUNDOS
                 )
                 logger.warning(
-                    f"{self.NOMBRE}: rate limit (intento {intento + 1}/"
-                    f"{MAX_REINTENTOS_API}), esperando {espera:.1f}s"
+                    f"{self.NOMBRE}: error recuperable (intento {intento + 1}/"
+                    f"{MAX_REINTENTOS_API}), esperando {espera:.1f}s — {exc}"
                 )
                 time.sleep(espera)
-            except anthropic.APIStatusError as exc:
-                if exc.status_code >= 500:
+            except error_servidor as exc:
+                codigo = getattr(exc, "status_code", 0)
+                if codigo >= 500:
                     ultimo_error = exc
                     espera = min(
                         ESPERA_BASE_SEGUNDOS * (2 ** intento),
                         ESPERA_MAXIMA_SEGUNDOS
                     )
                     logger.warning(
-                        f"{self.NOMBRE}: error servidor {exc.status_code} "
+                        f"{self.NOMBRE}: error servidor {codigo} "
                         f"(intento {intento + 1}/{MAX_REINTENTOS_API}), "
                         f"esperando {espera:.1f}s"
                     )
@@ -180,20 +178,8 @@ class BaseSubagente(ABC):
                 else:
                     raise ErrorSubagente(
                         f"{self.NOMBRE}: error API no recuperable "
-                        f"(HTTP {exc.status_code}): {exc.message}"
+                        f"(HTTP {codigo}): {exc}"
                     ) from exc
-            except anthropic.APIConnectionError as exc:
-                ultimo_error = exc
-                espera = min(
-                    ESPERA_BASE_SEGUNDOS * (2 ** intento),
-                    ESPERA_MAXIMA_SEGUNDOS
-                )
-                logger.warning(
-                    f"{self.NOMBRE}: error conexión "
-                    f"(intento {intento + 1}/{MAX_REINTENTOS_API}), "
-                    f"esperando {espera:.1f}s"
-                )
-                time.sleep(espera)
 
         raise ErrorSubagente(
             f"{self.NOMBRE}: agotados {MAX_REINTENTOS_API} reintentos API — "

@@ -43,7 +43,6 @@ TOOL_EXTRAER_PATRONES = {
 
 
 def ejecutar_extraer_patrones(
-    consultor,
     terminos: list = None,
     limite_por_termino: int = 10
 ) -> dict:
@@ -51,16 +50,17 @@ def ejecutar_extraer_patrones(
     Extrae patrones de riesgo de los relatos históricos.
 
     Args:
-        consultor: instancia de ConsultorBigQuery
         terminos: lista de términos a buscar (default: TERMINOS_RIESGO_EAWS)
         limite_por_termino: máximo de relatos por término
 
     Returns:
         dict con resultados por término e índice de riesgo calculado
     """
+    from agentes.datos.consultor_bigquery import ConsultorBigQuery
     if not terminos:
         terminos = TERMINOS_RIESGO_EAWS
 
+    consultor = ConsultorBigQuery()
     return consultor.buscar_relatos_condiciones(
         terminos=terminos,
         limite=limite_por_termino

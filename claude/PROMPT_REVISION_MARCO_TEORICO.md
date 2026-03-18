@@ -7,6 +7,12 @@ Eres Claude Code trabajando en el proyecto **snow_alert** de Francisco Peñailil
 tesina de Magíster en Tecnologías de la Información, Universidad Técnica Federico
 Santa María, bajo supervisión del Dr. Mauricio Solar.
 
+## Estado al 2026-03-18
+
+**Pipeline datos operativo:** 6 Cloud Functions activas. Fixes aplicados: cubicacion.py (12 key mismatches → pendiente_max_inicio calculada correctamente), indicadores_nieve.py (banda NDSI corregida → snowline/pct_cobertura ya no son NULL), procesador-clima-horas (BUCKET_CLIMA configurado). LLM alternativo: ClienteDatabricks (Qwen3-80B) operativo. Pipeline completo funciona con 5/5 subagentes en ~114s.
+
+---
+
 ## Contexto académico
 
 El sistema debe demostrar las siguientes hipótesis:
@@ -231,7 +237,9 @@ cat agentes/despliegue/Dockerfile 2>/dev/null || echo "Dockerfile pendiente"
 ```
 
 **Evaluar:**
-- [ ] ¿Las Cloud Functions de datos están activas?
+- [x] ¿Las Cloud Functions de datos están activas? — 6/6 ACTIVE (2026-03-18)
+  - Nota: entry point `monitor-satelital-nieve` es `monitorear_satelital`
+  - Nota: `procesador-clima-horas` usa `BUCKET_CLIMA=climas-chileno-datos-clima-bronce`
 - [ ] ¿El Cloud Run Job de agentes está desplegado?
 - [ ] ¿El sistema cubre las 57 ubicaciones del proyecto?
 - [ ] ¿El costo es mínimo (pago por uso, sin servidores permanentes)?

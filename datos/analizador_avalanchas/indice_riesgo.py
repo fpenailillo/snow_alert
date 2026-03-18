@@ -375,11 +375,11 @@ def calcular_indice_riesgo_topografico(
 
     # Estimar parámetros EAWS usando funciones de eaws_constantes
     frecuencia = estimar_frecuencia_base(pct_inicio)
-    tamano = estimar_tamano_potencial(desnivel_inicio_deposito)
+    tamano = estimar_tamano_potencial(desnivel_inicio_deposito, ha_inicio, pendiente_max)
 
     # Para el nivel de peligro, asumimos estabilidad "fair" como base
     # (ya que no tenemos datos de condiciones de nieve)
-    peligro = consultar_matriz_eaws('fair', frecuencia, tamano)
+    peligro, _ = consultar_matriz_eaws('fair', frecuencia, tamano)
 
     logger.info(
         f"Índice calculado: {indice_total} ({clasificacion.value}) - "

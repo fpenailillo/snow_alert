@@ -75,6 +75,11 @@ Evalúa por función:
 - ⚠️ Estado `ACTIVE` pero updateTime > 30 días (código desactualizado)
 - ❌ Estado `FAILED`, `DEPLOYING` atascado, o función ausente
 
+**Notas 2026-03-18:**
+- `monitor-satelital-nieve`: entry point correcto es `monitorear_satelital` (no `monitorear_nieve`) — usar `--entry-point=monitorear_satelital` al redesplegar
+- `procesador-clima-horas`: requiere env var `BUCKET_CLIMA=climas-chileno-datos-clima-bronce` (fix aplicado 2026-03-18 vía `gcloud run services update`)
+- `analizador-satelital-zonas-riesgosas-avalanchas`: fix de cubicacion.py desplegado 2026-03-18 — re-ejecutar para regenerar zonas con datos correctos
+
 ---
 
 ## DIMENSIÓN 4 — Cloud Scheduler jobs
@@ -139,12 +144,15 @@ bq query --use_legacy_sql=false --project_id=climas-chileno --format=prettyjson 
 FROM `climas-chileno.clima.imagenes_satelitales`' 2>&1
 
 # Tabla 2: zonas_avalancha — frescura y nulos en pendiente
+# NOTA 2026-03-18: columna correcta es pendiente_media_inicio (no pendiente_media_grados)
 bq query --use_legacy_sql=false --project_id=climas-chileno --format=prettyjson \
 'SELECT
   COUNT(*) AS total_filas,
   COUNTIF(fecha_analisis >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 48 HOUR)) AS filas_ultimas_48h,
-  COUNTIF(pendiente_media_grados IS NULL) AS nulos_pendiente,
-  ROUND(COUNTIF(pendiente_media_grados IS NULL) / COUNT(*) * 100, 1) AS pct_nulos_pendiente,
+  COUNTIF(pendiente_media_inicio IS NULL) AS nulos_pendiente,
+  ROUND(COUNTIF(pendiente_media_inicio IS NULL) / COUNT(*) * 100, 1) AS pct_nulos_pendiente,
+  ROUND(AVG(pendiente_max_inicio), 2) AS pendiente_max_media,
+  ROUND(AVG(indice_riesgo_topografico), 2) AS indice_riesgo_medio,
   MAX(fecha_analisis) AS ultimo_analisis
 FROM `climas-chileno.clima.zonas_avalancha`' 2>&1
 
@@ -169,9 +177,32 @@ bq query --use_legacy_sql=false --project_id=climas-chileno --format=prettyjson 
 FROM `climas-chileno.clima.boletines_riesgo`' 2>&1
 
 # Tabla 5: relatos_montanistas — verificar si existe y tiene datos
+# NOTA 2026-03-18: schema 37 campos — no existe columna fecha_actividad
+# Campos clave: route_id, elevation, avalanche_priority, llm_nivel_riesgo, llm_puntuacion_riesgo
 bq query --use_legacy_sql=false --project_id=climas-chileno --format=prettyjson \
-'SELECT COUNT(*) AS total_relatos, MAX(fecha_actividad) AS relato_mas_reciente
+'SELECT
+  COUNT(*) AS total_relatos,
+  COUNTIF(avalanche_priority = TRUE) AS con_prioridad_avalancha,
+  ROUND(AVG(SAFE_CAST(llm_puntuacion_riesgo AS FLOAT64)), 2) AS riesgo_promedio_llm
 FROM `climas-chileno.clima.relatos_montanistas`' 2>&1
+
+# Tabla 6: pronostico_horas — verificar datos
+bq query --use_legacy_sql=false --project_id=climas-chileno --format=prettyjson \
+'SELECT
+  COUNT(*) AS total_filas,
+  COUNT(DISTINCT nombre_ubicacion) AS ubicaciones,
+  MAX(fecha_inicio) AS ultima_hora,
+  COUNTIF(marca_tiempo_extraccion >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 8 HOUR)) AS filas_8h
+FROM `climas-chileno.clima.pronostico_horas`' 2>&1
+
+# Tabla 7: pronostico_dias — verificar datos
+bq query --use_legacy_sql=false --project_id=climas-chileno --format=prettyjson \
+'SELECT
+  COUNT(*) AS total_filas,
+  COUNT(DISTINCT nombre_ubicacion) AS ubicaciones,
+  MAX(fecha_inicio) AS ultimo_dia,
+  COUNTIF(marca_tiempo_extraccion >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 24 HOUR)) AS filas_24h
+FROM `climas-chileno.clima.pronostico_dias`' 2>&1
 ```
 
 Evalúa por tabla:
@@ -182,8 +213,8 @@ Evalúa por tabla:
 - ❌ Sin filas recientes o pct_nulos_ndsi > 50%
 
 **zonas_avalancha:**
-- ✅ total_filas > 0, pct_nulos_pendiente < 20%
-- ⚠️ pct_nulos_pendiente entre 20-50%
+- ✅ total_filas > 0, pct_nulos_pendiente < 20%, pendiente_max_media > 5° (fix cubicacion.py activo)
+- ⚠️ total_filas > 0 pero pendiente_max_media ≈ 0.0 e indice_riesgo_medio ≈ 25.0 (datos pre-fix — requiere re-ejecutar función)
 - ❌ Sin filas o pct_nulos_pendiente > 50%
 
 **condiciones_actuales:**
@@ -196,10 +227,20 @@ Evalúa por tabla:
 - ⚠️ tabla existe pero boletines_24h = 0 y el sistema lleva >1 día operando
 - ❌ tabla no existe (error en query)
 
-**relatos_montanistas:**
-- ✅ total_relatos >= 100
-- ⚠️ total_relatos entre 1-99 (carga parcial)
-- ❌ tabla no existe (FASE 1 pendiente) — esto es esperado, no bloqueante
+**relatos_montanistas (37 campos, schema 2026-03-18):**
+- ✅ total_relatos >= 3000 (carga completa Andeshandbook), con_prioridad_avalancha > 0
+- ⚠️ total_relatos entre 100-2999 (carga parcial)
+- ❌ tabla no existe o total_relatos < 100
+
+**pronostico_horas:**
+- ✅ filas_8h > 0, ubicaciones >= 50
+- ⚠️ filas_8h = 0 pero filas > 0 (datos viejos)
+- ❌ Sin filas o error en query
+
+**pronostico_dias:**
+- ✅ filas_24h > 0, ubicaciones >= 50
+- ⚠️ filas_24h = 0 pero filas > 0 (datos viejos)
+- ❌ Sin filas o error en query
 
 ---
 
@@ -346,10 +387,12 @@ DIMENSIÓN                        ESTADO   DETALLE
 5. Cloud Run Job (orquestador)     [✅/⚠️/❌]   [existe, última ejecución]
 6. Calidad datos BigQuery          [✅/⚠️/❌]   [por tabla: frescura y % nulos]
    ├─ imagenes_satelitales         [✅/⚠️/❌]   [última captura, % nulos NDSI]
-   ├─ zonas_avalancha              [✅/⚠️/❌]   [última análisis, % nulos pendiente]
+   ├─ zonas_avalancha              [✅/⚠️/❌]   [pendiente_max_media > 0 = fix activo]
    ├─ condiciones_actuales         [✅/⚠️/❌]   [última condición, N ubicaciones]
    ├─ boletines_riesgo             [✅/⚠️/❌]   [total boletines, último]
-   └─ relatos_montanistas          [✅/⚠️/❌]   [N relatos o "FASE 1 pendiente"]
+   ├─ relatos_montanistas          [✅/⚠️/❌]   [N relatos o "FASE 1 pendiente"]
+   ├─ pronostico_horas             [✅/⚠️/❌]   [última hora, N ubicaciones]
+   └─ pronostico_dias              [✅/⚠️/❌]   [último día, N ubicaciones]
 7. Estructura repositorio          [✅/⚠️/❌]   [archivos críticos presentes]
 8. Tests unitarios                 [✅/⚠️/❌]   [N passed / N failed]
 9. Imports Python                  [✅/⚠️/❌]   [módulos OK o errores]
@@ -413,10 +456,18 @@ Recursos del proyecto para referencia durante las verificaciones:
 Fases del proyecto (para contexto al interpretar resultados):
 - ✅ FASE -1: Repositorio reorganizado
 - ✅ FASE 0: Script diagnóstico creado
-- ⬜ FASE 1: Relatos en BigQuery — requiere carga manual desde Databricks
+- ✅ FASE 1: Relatos cargados (3,131 rutas con LLM, 41 avalanche_priority, riesgo promedio 4.56)
 - ✅ FASE 2: 5 subagentes construidos
 - ✅ FASE 3: Archivos despliegue Cloud Run
-- ✅ FASE 4: Schema boletines_riesgo 27 campos
-- ✅ FASE 5: Tests actualizados
+- ✅ FASE 4: Schema boletines_riesgo 34 campos
+- ✅ FASE 5: Tests actualizados (126 passed)
+
+Fixes de pipeline 2026-03-18:
+- cubicacion.py: 12 key mismatches corregidos → indice_riesgo_topografico funciona
+- indicadores_nieve.py: banda NDSI corregida → snowline/pct_cobertura/delta ya no son NULL
+- metricas.py: guard NoneType para SAR
+- procesador-clima-horas: BUCKET_CLIMA configurado
+- Pipeline agentes: consultor_bigquery.py y tools NLP corregidos
+- LLM alternativo: ClienteDatabricks (Qwen3-80B) operativo como fallback a Anthropic
 
 El reporte debe tomar <2 minutos de tiempo de herramientas. Si algún comando GCP tarda >15 segundos, marcarlo ⚠️ con nota "timeout" y continuar.

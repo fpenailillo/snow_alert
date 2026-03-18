@@ -176,7 +176,7 @@ def determinar_tipo_captura(hora_utc: Optional[int] = None) -> str:
         str: 'manana', 'tarde' o 'noche'
     """
     if hora_utc is None:
-        hora_utc = datetime.utcnow().hour
+        hora_utc = datetime.now(timezone.utc).hour
 
     # Horarios aproximados UTC para Chile (UTC-3/-4)
     # Mañana: 08:00 local → ~11-12 UTC
@@ -297,7 +297,7 @@ def procesar_ubicacion(
             fecha_captura=fecha_proceso,
             tipo_captura=tipo_captura,
             timestamp_imagen=timestamp_imagen,
-            timestamp_descarga=datetime.utcnow(),
+            timestamp_descarga=datetime.now(timezone.utc),
             fuente_principal=fuente_principal,
             coleccion_gee=coleccion_gee,
             resolucion_m=resoluciones['visual'],

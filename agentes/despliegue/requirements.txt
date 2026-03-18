@@ -1,8 +1,11 @@
 # Dependencias del sistema multi-agente snow_alert
 # Versiones fijadas para reproducibilidad en Cloud Run
 
-# API de Anthropic (Claude)
+# API de Anthropic (Claude — reservado para validación final)
 anthropic==0.40.0
+
+# OpenAI-compatible (Databricks AI Gateway — uso general gratis)
+openai>=1.30.0
 
 # Google Cloud
 google-cloud-bigquery==3.25.0

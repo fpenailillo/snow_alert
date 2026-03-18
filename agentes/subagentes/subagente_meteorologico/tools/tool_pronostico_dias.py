@@ -70,7 +70,7 @@ def ejecutar_obtener_pronostico_dias(nombre_ubicacion: str) -> dict:
             "temp_min_C": dia.get("temp_min_dia"),
             "precip_diurna_mm": dia.get("diurno_prob_precipitacion"),
             "precip_nocturna_mm": dia.get("nocturno_prob_precipitacion"),
-            "viento_max_diurno_ms": dia.get("diurno_viento_max"),
+            "viento_max_diurno_ms": dia.get("diurno_velocidad_viento"),
             "condicion_diurna": dia.get("diurno_condicion"),
             "condicion_nocturna": dia.get("nocturno_condicion"),
             "evaluacion_riesgo": evaluacion
@@ -102,7 +102,7 @@ def _evaluar_dia(dia: dict) -> dict:
     temp_min = dia.get("temp_min_dia")
     precip_diurna = dia.get("diurno_prob_precipitacion", 0) or 0
     precip_nocturna = dia.get("nocturno_prob_precipitacion", 0) or 0
-    viento_max = dia.get("diurno_viento_max", 0) or 0
+    viento_max = dia.get("diurno_velocidad_viento", 0) or 0
 
     # Temperatura sobre el punto de fusión
     if temp_max is not None and temp_max > 5:

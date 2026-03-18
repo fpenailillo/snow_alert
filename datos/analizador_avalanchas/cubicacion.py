@@ -421,6 +421,9 @@ def cubicar_zonas_completo(
     aspecto_info = calcular_aspecto_predominante(aspecto, zona_inicio, area_buffer, latitud)
 
     # Compilar resultados
+    elev_max_inicio = round(desniveles['elevacion_media_inicio'], 2) if desniveles['elevacion_media_inicio'] != VALOR_NULO_GEE else None
+    elev_min_deposito = round(desniveles['elevacion_media_deposito'], 2) if desniveles['elevacion_media_deposito'] != VALOR_NULO_GEE else None
+
     resultado = {
         'nombre_ubicacion': nombre_ubicacion,
         'latitud': latitud,
@@ -429,29 +432,32 @@ def cubicar_zonas_completo(
         'radio_analisis_km': radio_metros / 1000,
 
         # Áreas en hectáreas
-        'ha_zona_inicio_total': round(ha_inicio_total, 2),
-        'ha_inicio_30_45': round(ha_inicio_30_45, 2),
-        'ha_inicio_45_60': round(ha_inicio_45_60, 2),
-        'ha_inicio_mas_60': round(ha_inicio_mas_60, 2),
-        'ha_zona_transito': round(ha_transito, 2),
-        'ha_zona_deposito': round(ha_deposito, 2),
+        'zona_inicio_ha': round(ha_inicio_total, 2),
+        'inicio_moderado_ha': round(ha_inicio_30_45, 2),
+        'inicio_severo_ha': round(ha_inicio_45_60, 2),
+        'inicio_extremo_ha': round(ha_inicio_mas_60, 2),
+        'zona_transito_ha': round(ha_transito, 2),
+        'zona_deposito_ha': round(ha_deposito, 2),
+        'area_total_ha': round(area_buffer_ha, 2),
 
         # Porcentajes (proxy Frecuencia EAWS)
-        'pct_zona_inicio': round(pct_inicio, 2),
-        'pct_zona_deposito': round(pct_deposito, 2),
+        'zona_inicio_pct': round(pct_inicio, 2),
+        'zona_deposito_pct': round(pct_deposito, 2),
+        'zona_transito_pct': round((ha_transito / area_buffer_ha * 100) if area_buffer_ha > 0 else 0, 2),
 
         # Estadísticas de pendiente
         'pendiente_media_inicio': round(stats_pendiente['media'], 2) if stats_pendiente['media'] != VALOR_NULO_GEE else None,
-        'pendiente_max': round(pendiente_max_buffer, 2) if pendiente_max_buffer != VALOR_NULO_GEE else None,
-        'pendiente_p90': round(stats_pendiente['p90'], 2) if stats_pendiente['p90'] != VALOR_NULO_GEE else None,
+        'pendiente_max_inicio': round(pendiente_max_buffer, 2) if pendiente_max_buffer != VALOR_NULO_GEE else None,
+        'pendiente_p90_inicio': round(stats_pendiente['p90'], 2) if stats_pendiente['p90'] != VALOR_NULO_GEE else None,
 
         # Desniveles y elevaciones (proxy Tamaño EAWS)
         'desnivel_inicio_deposito': round(desniveles['desnivel'], 2) if desniveles['desnivel'] != VALOR_NULO_GEE else None,
-        'elevacion_media_inicio': round(desniveles['elevacion_media_inicio'], 2) if desniveles['elevacion_media_inicio'] != VALOR_NULO_GEE else None,
-        'elevacion_media_deposito': round(desniveles['elevacion_media_deposito'], 2) if desniveles['elevacion_media_deposito'] != VALOR_NULO_GEE else None,
+        'elevacion_max_inicio': elev_max_inicio,
+        'elevacion_min_inicio': elev_max_inicio,
+        'elevacion_min_deposito': elev_min_deposito,
 
         # Aspecto (proxy Estabilidad EAWS)
-        'aspecto_predominante': round(aspecto_info['aspecto_grados'], 2) if aspecto_info['aspecto_grados'] != VALOR_NULO_GEE else None,
+        'aspecto_predominante_inicio': round(aspecto_info['aspecto_grados'], 2) if aspecto_info['aspecto_grados'] != VALOR_NULO_GEE else None,
         'categoria_aspecto': aspecto_info['categoria'],
         'es_aspecto_sombra': aspecto_info['es_sombra']
     }

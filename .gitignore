@@ -72,3 +72,6 @@ tmp/
 htmlcov/
 .coverage
 coverage.xml
+
+# ─── Documentos académicos (solo uso local) ───────────────────────────────────
+docs/*.pdf

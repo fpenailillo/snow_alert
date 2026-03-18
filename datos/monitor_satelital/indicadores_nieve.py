@@ -11,7 +11,7 @@ transforman observaciones puntuales en tendencias de cambio.
 """
 
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, Any, Optional, Tuple, List
 
 import ee
@@ -90,7 +90,7 @@ def calcular_snowline(
         dem = ee.Image(COLECCION_DEM).select('elevation')
 
         # Crear máscara de nieve
-        nieve_mask = imagen_ndsi.select('NDSI_Snow_Cover').gte(umbral_ndsi)
+        nieve_mask = imagen_ndsi.select('NDSI').gte(umbral_ndsi)
 
         # Aplicar máscara de nieve al DEM
         elevacion_nieve = dem.updateMask(nieve_mask)
@@ -115,7 +115,7 @@ def calcular_snowline(
             maxPixels=1e8
         ).getInfo()
 
-        pixeles_nieve = conteo.get('NDSI_Snow_Cover', 0) or 0
+        pixeles_nieve = conteo.get('NDSI', 0) or 0
         tiene_suficientes = pixeles_nieve >= 10  # mínimo 10 píxeles
 
         resultado = {
@@ -227,8 +227,8 @@ def calcular_cambio_cobertura(
     """
     try:
         # Crear máscaras de nieve
-        nieve_actual = imagen_ndsi_actual.select('NDSI_Snow_Cover').gte(umbral_ndsi)
-        nieve_anterior = imagen_ndsi_anterior.select('NDSI_Snow_Cover').gte(umbral_ndsi)
+        nieve_actual = imagen_ndsi_actual.select('NDSI').gte(umbral_ndsi)
+        nieve_anterior = imagen_ndsi_anterior.select('NDSI').gte(umbral_ndsi)
 
         # Calcular cobertura actual
         stats_actual = nieve_actual.reduceRegion(
@@ -237,7 +237,7 @@ def calcular_cambio_cobertura(
             scale=escala,
             maxPixels=1e8
         ).getInfo()
-        pct_actual = (stats_actual.get('NDSI_Snow_Cover', 0) or 0) * 100
+        pct_actual = (stats_actual.get('NDSI', 0) or 0) * 100
 
         # Calcular cobertura anterior
         stats_anterior = nieve_anterior.reduceRegion(
@@ -246,7 +246,7 @@ def calcular_cambio_cobertura(
             scale=escala,
             maxPixels=1e8
         ).getInfo()
-        pct_anterior = (stats_anterior.get('NDSI_Snow_Cover', 0) or 0) * 100
+        pct_anterior = (stats_anterior.get('NDSI', 0) or 0) * 100
 
         # Calcular diferencia pixel a pixel
         # +1 = ganó nieve, -1 = perdió nieve, 0 = sin cambio
@@ -259,7 +259,7 @@ def calcular_cambio_cobertura(
             scale=escala,
             maxPixels=1e8
         ).getInfo()
-        ganancia_pct = (ganancia.get('NDSI_Snow_Cover', 0) or 0) * 100
+        ganancia_pct = (ganancia.get('NDSI', 0) or 0) * 100
 
         # Contar pérdida (píxeles que perdieron nieve)
         perdida = cambio.eq(-1).reduceRegion(
@@ -268,7 +268,7 @@ def calcular_cambio_cobertura(
             scale=escala,
             maxPixels=1e8
         ).getInfo()
-        perdida_pct = (perdida.get('NDSI_Snow_Cover', 0) or 0) * 100
+        perdida_pct = (perdida.get('NDSI', 0) or 0) * 100
 
         # Calcular delta neto
         delta_pct = pct_actual - pct_anterior
@@ -371,7 +371,7 @@ def calcular_ami_desde_lst(
     """
     try:
         if fecha_fin is None:
-            fecha_fin = datetime.utcnow()
+            fecha_fin = datetime.now(timezone.utc)
 
         fecha_inicio = fecha_fin - timedelta(days=dias)
 

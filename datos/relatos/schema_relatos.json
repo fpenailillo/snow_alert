@@ -1,74 +1,218 @@
 [
   {
-    "name": "id_relato",
+    "name": "route_id",
+    "type": "INTEGER",
+    "mode": "REQUIRED",
+    "description": "ID único de la ruta en Andeshandbook"
+  },
+  {
+    "name": "url",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "URL canónica de la ruta en Andeshandbook"
+  },
+  {
+    "name": "scraped_timestamp",
+    "type": "TIMESTAMP",
+    "mode": "NULLABLE",
+    "description": "Timestamp UTC del scraping en Databricks"
+  },
+  {
+    "name": "name",
     "type": "STRING",
     "mode": "REQUIRED",
-    "description": "Identificador único del relato (hash del título + fecha)"
+    "description": "Nombre completo de la ruta/cerro (ej: 'Cerro Plomo (5424m) - Andeshandbook')"
   },
   {
-    "name": "titulo",
-    "type": "STRING",
-    "mode": "REQUIRED",
-    "description": "Título del relato o salida"
-  },
-  {
-    "name": "texto_completo",
+    "name": "location",
     "type": "STRING",
     "mode": "NULLABLE",
-    "description": "Texto completo del relato (narrativa del montañista)"
+    "description": "País y región (ej: 'Chile, Region Metropolitana')"
   },
   {
-    "name": "fecha_relato",
-    "type": "DATE",
-    "mode": "NULLABLE",
-    "description": "Fecha de la salida/actividad descrita"
-  },
-  {
-    "name": "ubicacion_mencionada",
+    "name": "sector",
     "type": "STRING",
     "mode": "NULLABLE",
-    "description": "Ubicación o ruta mencionada en el relato"
+    "description": "Sector o subsector de la ruta"
   },
   {
-    "name": "zona_normalizada",
+    "name": "nearest_city",
     "type": "STRING",
     "mode": "NULLABLE",
-    "description": "Zona normalizada para matching con ubicaciones del sistema"
+    "description": "Ciudad más cercana al acceso"
   },
   {
-    "name": "url_fuente",
+    "name": "elevation",
+    "type": "FLOAT64",
+    "mode": "NULLABLE",
+    "description": "Altitud máxima en metros sobre el nivel del mar"
+  },
+  {
+    "name": "first_ascent_year",
     "type": "STRING",
     "mode": "NULLABLE",
-    "description": "URL original del relato en Andeshandbook"
+    "description": "Año del primer ascenso (STRING por valores 'null', 'desconocido', etc.)"
+  },
+  {
+    "name": "first_ascensionists",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Nombres de los primeros ascensionistas"
+  },
+  {
+    "name": "latitude",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Latitud en formato DMS"
+  },
+  {
+    "name": "longitude",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Longitud en formato DMS"
+  },
+  {
+    "name": "access_type",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Tipo de acceso a la ruta"
+  },
+  {
+    "name": "mountain_characteristics",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Características del cerro (Alta Montaña, Glaciar, Volcán, Área protegida, etc.)"
+  },
+  {
+    "name": "nearby_excursions",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Excursiones o rutas cercanas mencionadas"
+  },
+  {
+    "name": "description",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Descripción completa de la ruta (texto largo de Andeshandbook)"
+  },
+  {
+    "name": "avalanche_info",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Información específica de avalanchas extraída del relato"
+  },
+  {
+    "name": "has_avalanche_info",
+    "type": "BOOL",
+    "mode": "NULLABLE",
+    "description": "True si el relato contiene información específica de avalanchas"
+  },
+  {
+    "name": "is_alta_montana",
+    "type": "BOOL",
+    "mode": "NULLABLE",
+    "description": "True si la ruta es clasificada como Alta Montaña"
+  },
+  {
+    "name": "has_glacier",
+    "type": "BOOL",
+    "mode": "NULLABLE",
+    "description": "True si la ruta involucra glaciar"
+  },
+  {
+    "name": "is_volcano",
+    "type": "BOOL",
+    "mode": "NULLABLE",
+    "description": "True si el cerro es un volcán"
+  },
+  {
+    "name": "avalanche_priority",
+    "type": "BOOL",
+    "mode": "NULLABLE",
+    "description": "True si la ruta es prioritaria para el análisis de avalanchas"
+  },
+  {
+    "name": "llm_tipo_actividad",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Tipo de actividad según análisis LLM (alpinismo, escalada, trekking, esquí, etc.)"
+  },
+  {
+    "name": "llm_modalidad",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Modalidad según LLM (expedicion, dia, travesia, etc.)"
+  },
+  {
+    "name": "llm_nivel_riesgo",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Nivel de riesgo según LLM (bajo, medio, alto, muy_alto)"
+  },
+  {
+    "name": "llm_puntuacion_riesgo",
+    "type": "FLOAT64",
+    "mode": "NULLABLE",
+    "description": "Puntuación numérica de riesgo 0-10 según LLM"
+  },
+  {
+    "name": "llm_experiencia_requerida",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Nivel de experiencia requerido según LLM (principiante, intermedio, avanzado, experto)"
+  },
+  {
+    "name": "llm_resumen",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Descripción breve generada por el LLM"
+  },
+  {
+    "name": "llm_confianza_extraccion",
+    "type": "FLOAT64",
+    "mode": "NULLABLE",
+    "description": "Confianza del LLM en la extracción (0.0 - 1.0)"
+  },
+  {
+    "name": "llm_factores_riesgo",
+    "type": "STRING",
+    "mode": "REPEATED",
+    "description": "Lista de factores de riesgo identificados por el LLM"
+  },
+  {
+    "name": "llm_tipos_terreno",
+    "type": "STRING",
+    "mode": "REPEATED",
+    "description": "Tipos de terreno identificados por el LLM (nieve, hielo, roca, glaciar, etc.)"
+  },
+  {
+    "name": "llm_equipamiento_tecnico",
+    "type": "STRING",
+    "mode": "REPEATED",
+    "description": "Equipamiento técnico requerido según LLM"
+  },
+  {
+    "name": "llm_palabras_clave",
+    "type": "STRING",
+    "mode": "REPEATED",
+    "description": "Palabras clave técnicas identificadas por el LLM"
+  },
+  {
+    "name": "analisis_llm_json",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Análisis completo del LLM en formato JSON serializado (para consultas avanzadas)"
   },
   {
     "name": "fuente",
     "type": "STRING",
     "mode": "REQUIRED",
-    "description": "Fuente del relato (ej: 'andeshandbook')"
-  },
-  {
-    "name": "actividad",
-    "type": "STRING",
-    "mode": "NULLABLE",
-    "description": "Tipo de actividad (esquí, montañismo, escalada, etc.)"
-  },
-  {
-    "name": "autor",
-    "type": "STRING",
-    "mode": "NULLABLE",
-    "description": "Autor del relato"
+    "description": "Fuente de los datos (siempre 'andeshandbook')"
   },
   {
     "name": "fecha_carga",
     "type": "TIMESTAMP",
     "mode": "REQUIRED",
-    "description": "Timestamp de carga en BigQuery"
-  },
-  {
-    "name": "contiene_terminos_avalancha",
-    "type": "BOOL",
-    "mode": "NULLABLE",
-    "description": "True si el texto contiene términos relacionados a avalanchas"
+    "description": "Timestamp UTC de la carga en BigQuery"
   }
 ]

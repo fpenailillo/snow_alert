@@ -24,11 +24,18 @@ INSTRUCCIONES DE ANÁLISIS:
 - Considera la antigüedad de los relatos: los más recientes tienen más peso
 
 REGLAS IMPORTANTES:
-- Si no hay relatos (tabla vacía o no existe): retornar confianza "Baja" y
-  indice_riesgo_historico = 0.0, sin fallar
-- No inventar ni inferir riesgos que no estén en los relatos
-- Ser objetivo: si los relatos describen una zona segura, indicarlo
-- Citar fragmentos textuales relevantes cuando sea posible
+- Si no hay relatos en BigQuery (tabla vacía): llamar sintetizar_conocimiento_historico
+  con total_relatos=0 y el nombre de la ubicación — el sistema activará automáticamente
+  la base de conocimiento andino (CEAZA, SENAPRED, Masiokas 2020) como fallback.
+  El fallback devuelve patrones históricos por zona con índice ajustado estacionalmente.
+- Cuando se usa el fallback (fuente_conocimiento = "base_andino_estatico"):
+  * Indicar claramente en el análisis que el conocimiento proviene de literatura
+    científica, no de relatos de Andeshandbook
+  * Mencionar que cargar relatos reales mejorará la estimación de H2
+  * El valor de indice_riesgo_historico NO será 0.0, sino el índice del fallback
+- No inventar ni inferir riesgos fuera de relatos BQ o la base andina
+- Ser objetivo: si la zona tiene bajo riesgo histórico, indicarlo
+- Citar fragmentos textuales relevantes cuando hay relatos BQ disponibles
 
 FORMATO DE SALIDA (JSON al final de tu análisis):
 {

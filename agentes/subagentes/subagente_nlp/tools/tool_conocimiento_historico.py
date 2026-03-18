@@ -3,7 +3,29 @@ Tool: sintetizar_conocimiento_historico
 
 Sintetiza los patrones históricos extraídos de relatos de montañistas
 en un análisis estructurado de riesgo para la ubicación.
+
+Cuando no hay relatos en BigQuery (tabla vacía / no cargada), activa
+automáticamente el fallback a conocimiento_base_andino.py, que codifica
+patrones documentados en literatura científica y reportes institucionales
+(CEAZA, SENAPRED, CONAF, Masiokas et al. 2020).
 """
+
+import os
+import sys
+
+_TOOL_DIR = os.path.dirname(__file__)
+_AGENTES_ROOT = os.path.normpath(os.path.join(_TOOL_DIR, '../../../../'))
+sys.path.insert(0, _AGENTES_ROOT)
+
+try:
+    from agentes.subagentes.subagente_nlp.conocimiento_base_andino import (
+        consultar_conocimiento_zona,
+        get_indice_estacional,
+    )
+    _BASE_ANDINO_DISPONIBLE = True
+except ImportError:
+    _BASE_ANDINO_DISPONIBLE = False
+
 
 TOOL_CONOCIMIENTO_HISTORICO = {
     "name": "sintetizar_conocimiento_historico",
@@ -11,7 +33,9 @@ TOOL_CONOCIMIENTO_HISTORICO = {
         "Sintetiza el conocimiento experto comunitario a partir de los patrones "
         "extraídos de relatos. Determina el tipo de alud predominante, los meses "
         "de mayor riesgo histórico, y genera una narrativa de síntesis que "
-        "complementa el análisis técnico (PINN + ViT + meteorología)."
+        "complementa el análisis técnico (PINN + ViT + meteorología). "
+        "Si no hay relatos en BigQuery, usa la base de conocimiento andino "
+        "derivada de literatura científica (CEAZA, SENAPRED, Masiokas 2020)."
     ),
     "input_schema": {
         "type": "object",
@@ -28,6 +52,13 @@ TOOL_CONOCIMIENTO_HISTORICO = {
                 "type": "number",
                 "description": "Índice de riesgo calculado (0.0-1.0) desde extraer_patrones"
             },
+            "ubicacion": {
+                "type": "string",
+                "description": (
+                    "Nombre de la ubicación analizada. Necesario para activar "
+                    "el fallback a la base de conocimiento andino."
+                )
+            },
             "contexto_tecnico": {
                 "type": "string",
                 "description": (
@@ -42,42 +73,32 @@ TOOL_CONOCIMIENTO_HISTORICO = {
 
 
 def ejecutar_sintetizar_conocimiento_historico(
-    consultor,
     total_relatos: int,
     frecuencias_terminos: dict,
     indice_riesgo_base: float,
+    ubicacion: str = "",
     contexto_tecnico: str = ""
 ) -> dict:
     """
     Sintetiza el conocimiento histórico de la comunidad montañera.
 
-    No hace consultas adicionales a BigQuery; opera sobre los datos
-    ya extraídos por las tools anteriores.
+    Cuando no hay relatos BQ (total_relatos == 0), activa el fallback a la
+    base de conocimiento andino estático, ajustado por el mes actual.
 
     Args:
-        consultor: instancia de ConsultorBigQuery (no se usa pero se mantiene firma)
-        total_relatos: número de relatos encontrados
+        total_relatos: número de relatos encontrados en BQ
         frecuencias_terminos: dict término → número de menciones
         indice_riesgo_base: índice calculado por extraer_patrones (0.0-1.0)
+        ubicacion: nombre de la ubicación (para fallback a base andina)
         contexto_tecnico: resumen del análisis técnico S1+S2+S3
 
     Returns:
         dict con síntesis del conocimiento histórico
     """
     if total_relatos == 0:
-        return {
-            "disponible": False,
-            "razon": "Sin relatos históricos — tabla vacía o no cargada",
-            "tipo_alud_predominante": "desconocido",
-            "meses_mayor_riesgo": [],
-            "patrones_recurrentes": [],
-            "indice_riesgo_ajustado": 0.0,
-            "confianza": "Baja",
-            "narrativa": (
-                "No hay relatos históricos disponibles para esta ubicación. "
-                "El análisis se basa exclusivamente en datos técnicos (PINN, ViT, meteorología)."
-            )
-        }
+        return _fallback_conocimiento_andino(ubicacion, indice_riesgo_base)
+
+    # ── Análisis desde relatos BQ ─────────────────────────────────────────────
 
     # Clasificar tipo de alud por frecuencia de términos
     menciones_placa = frecuencias_terminos.get("placa", 0)
@@ -139,11 +160,89 @@ def ejecutar_sintetizar_conocimiento_historico(
 
     return {
         "disponible": True,
+        "fuente_conocimiento": "relatos_bigquery",
         "total_relatos_analizados": total_relatos,
         "tipo_alud_predominante": tipo_predominante,
-        "meses_mayor_riesgo": [],  # Requeriría campo fecha_relato agrupado por mes
+        "meses_mayor_riesgo": [],
         "patrones_recurrentes": patrones,
         "indice_riesgo_ajustado": indice_ajustado,
         "confianza": confianza,
         "narrativa": narrativa,
+    }
+
+
+def _fallback_conocimiento_andino(ubicacion: str, indice_riesgo_base: float) -> dict:
+    """
+    Fallback: retorna conocimiento de la base andina cuando no hay relatos BQ.
+
+    El índice se ajusta con el factor estacional del mes actual y el
+    índice de riesgo base proveniente de las tools anteriores.
+    """
+    if not _BASE_ANDINO_DISPONIBLE:
+        return {
+            "disponible": False,
+            "fuente_conocimiento": "sin_datos",
+            "razon": "Sin relatos históricos ni base de conocimiento disponible",
+            "tipo_alud_predominante": "desconocido",
+            "meses_mayor_riesgo": [],
+            "patrones_recurrentes": [],
+            "indice_riesgo_ajustado": 0.0,
+            "confianza": "Baja",
+            "narrativa": (
+                "No hay relatos históricos disponibles para esta ubicación. "
+                "El análisis se basa exclusivamente en datos técnicos (PINN, ViT, meteorología)."
+            ),
+        }
+
+    # Consultar base de conocimiento para la zona
+    conocimiento = consultar_conocimiento_zona(ubicacion)
+
+    # Ajustar índice con factor estacional del mes actual
+    factor_estacional = get_indice_estacional()
+    indice_base_andino = conocimiento.get("indice_riesgo_historico", 0.45)
+
+    # Ponderar: 50% base andina zona + 30% estacional + 20% técnico
+    indice_ajustado = round(
+        0.50 * indice_base_andino
+        + 0.30 * factor_estacional
+        + 0.20 * indice_riesgo_base,
+        3
+    )
+
+    patrones = conocimiento.get("patrones_recurrentes", [])
+    meses = conocimiento.get("meses_mayor_riesgo", [])
+    tipo = conocimiento.get("tipo_alud_predominante", "placa_viento")
+    confianza_base = conocimiento.get("confianza", "Baja")
+
+    # Narrativa enriquecida indicando la fuente secundaria
+    zona_id = conocimiento.get("zona_identificada", "desconocida")
+    narrativa = (
+        f"[Fuente: base de conocimiento andino — sin relatos Andeshandbook cargados] "
+        f"Zona identificada: {zona_id}. "
+        f"Tipo de alud predominante históricamente: {tipo}. "
+        f"Meses de mayor riesgo: {', '.join(meses) if meses else 'julio-septiembre'}. "
+    )
+    if patrones:
+        narrativa += "Patrones documentados: " + patrones[0]
+    nota = conocimiento.get("nota_academica", "")
+    if nota:
+        narrativa += f" Ref. académica: {nota[:120]}..."
+
+    return {
+        "disponible": True,
+        "fuente_conocimiento": "base_andino_estatico",
+        "zona_identificada": zona_id,
+        "total_relatos_analizados": 0,
+        "tipo_alud_predominante": tipo,
+        "meses_mayor_riesgo": meses,
+        "orientaciones_criticas": conocimiento.get("orientaciones_criticas", []),
+        "patrones_recurrentes": patrones,
+        "indice_riesgo_ajustado": indice_ajustado,
+        "factor_estacional": factor_estacional,
+        "confianza": confianza_base,
+        "narrativa": narrativa,
+        "advertencia": (
+            "Conocimiento derivado de literatura científica y reportes institucionales. "
+            "Cargar relatos Andeshandbook mejora la precisión (H2)."
+        ),
     }

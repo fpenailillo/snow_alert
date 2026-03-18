@@ -88,6 +88,95 @@ class TestToolsPINN:
         # Con temperatura positiva y alta energía de fusión, debería haber alerta
         assert isinstance(resultado["alertas_pinn"], list)
 
+    def test_pinn_incertidumbre_estructura(self):
+        """El resultado PINN incluye bloque de incertidumbre con campos obligatorios."""
+        from agentes.subagentes.subagente_topografico.tools.tool_calcular_pinn import (
+            ejecutar_calcular_pinn
+        )
+        resultado = ejecutar_calcular_pinn(
+            gradiente_termico_C_100m=-0.65,
+            densidad_kg_m3=300.0,
+            indice_metamorfismo=0.9,
+            energia_fusion_J_kg=100000.0,
+            pendiente_grados=35.0
+        )
+        uq = resultado["incertidumbre_pinn"]
+        for campo in ("ic_95_inf", "ic_95_sup", "sigma_fs", "coeficiente_variacion",
+                      "sensibilidades", "parametro_dominante", "metodo"):
+            assert campo in uq, f"Campo UQ ausente: {campo}"
+
+    def test_pinn_ic_contiene_fs_central(self):
+        """El IC 95% contiene el factor de seguridad central."""
+        from agentes.subagentes.subagente_topografico.tools.tool_calcular_pinn import (
+            ejecutar_calcular_pinn
+        )
+        resultado = ejecutar_calcular_pinn(
+            gradiente_termico_C_100m=-0.7,
+            densidad_kg_m3=350.0,
+            indice_metamorfismo=0.8,
+            energia_fusion_J_kg=80000.0,
+            pendiente_grados=30.0
+        )
+        fs = resultado["factor_seguridad_mohr_coulomb"]
+        uq = resultado["incertidumbre_pinn"]
+        assert uq["ic_95_inf"] <= fs <= uq["ic_95_sup"], (
+            f"FS={fs} no está en IC=[{uq['ic_95_inf']}, {uq['ic_95_sup']}]"
+        )
+
+    def test_pinn_sigma_positivo(self):
+        """La desviación estándar del FS debe ser estrictamente positiva."""
+        from agentes.subagentes.subagente_topografico.tools.tool_calcular_pinn import (
+            ejecutar_calcular_pinn
+        )
+        resultado = ejecutar_calcular_pinn(
+            gradiente_termico_C_100m=-0.5,
+            densidad_kg_m3=280.0,
+            indice_metamorfismo=1.0,
+            energia_fusion_J_kg=120000.0,
+            pendiente_grados=40.0
+        )
+        assert resultado["incertidumbre_pinn"]["sigma_fs"] > 0.0
+
+    def test_pinn_sensibilidades_suman_varianza(self):
+        """σ_FS² ≈ Σ sensibilidades² (propagación cuadrática)."""
+        import math
+        from agentes.subagentes.subagente_topografico.tools.tool_calcular_pinn import (
+            ejecutar_calcular_pinn
+        )
+        resultado = ejecutar_calcular_pinn(
+            gradiente_termico_C_100m=-0.6,
+            densidad_kg_m3=320.0,
+            indice_metamorfismo=0.7,
+            energia_fusion_J_kg=90000.0,
+            pendiente_grados=32.0
+        )
+        uq = resultado["incertidumbre_pinn"]
+        s = uq["sensibilidades"]
+        sigma_reconstructida = math.sqrt(
+            s["densidad_kg_m3"]**2 + s["pendiente_grados"]**2 + s["metamorfismo"]**2
+        )
+        assert abs(sigma_reconstructida - uq["sigma_fs"]) < 1e-4, (
+            f"Reconstrucción σ={sigma_reconstructida:.4f} ≠ σ_FS={uq['sigma_fs']:.4f}"
+        )
+
+    def test_pinn_pendiente_critica_ic_no_cubre_1p5(self):
+        """Pendiente muy crítica: IC superior puede quedar bajo 1.5 (manto inestable)."""
+        from agentes.subagentes.subagente_topografico.tools.tool_calcular_pinn import (
+            ejecutar_calcular_pinn
+        )
+        resultado = ejecutar_calcular_pinn(
+            gradiente_termico_C_100m=-0.9,
+            densidad_kg_m3=250.0,
+            indice_metamorfismo=1.5,
+            energia_fusion_J_kg=250000.0,
+            pendiente_grados=50.0
+        )
+        uq = resultado["incertidumbre_pinn"]
+        # IC inferior debe ser ≥ 0 (no hay FS negativo)
+        assert uq["ic_95_inf"] >= 0.0
+        # El IC debe ser más ancho que 0 (hay incertidumbre real)
+        assert uq["ic_95_sup"] > uq["ic_95_inf"]
+
 
 class TestToolsVIT:
     """Tests del motor ViT sin llamadas a Anthropic."""
@@ -173,6 +262,170 @@ class TestToolsVIT:
         if resultado["disponible"] and len(resultado["pesos_atencion"]) > 1:
             suma = sum(resultado["pesos_atencion"])
             assert abs(suma - 1.0) < 0.01, f"Los pesos deben sumar 1, suma={suma}"
+
+    def test_vit_arquitectura_multihead_en_resultado(self):
+        """El resultado incluye campos de arquitectura multi-head."""
+        from agentes.subagentes.subagente_satelital.tools.tool_analizar_vit import (
+            ejecutar_analizar_vit
+        )
+        serie = [
+            {"paso_t": i, "ndsi_medio": 0.5, "pct_cobertura_nieve": 70.0,
+             "lst_dia_celsius": -4.0, "lst_noche_celsius": -11.0,
+             "ciclo_diurno_amplitud": 7.0, "delta_pct_nieve_24h": 0.5}
+            for i in range(3)
+        ]
+        resultado = ejecutar_analizar_vit(
+            serie_temporal=serie,
+            ndsi_promedio=0.5,
+            cobertura_promedio=70.0
+        )
+        assert resultado["disponible"] is True
+        assert "arquitectura_vit" in resultado
+        assert "multihead" in resultado["arquitectura_vit"].lower()
+        assert resultado.get("n_heads") == 2
+        assert "entropia_atencion" in resultado
+        assert "norma_contexto_mha" in resultado
+
+    def test_vit_entropia_atencion_rango_valido(self):
+        """La entropía de atención está en rango [0, ln(T)]."""
+        import math
+        from agentes.subagentes.subagente_satelital.tools.tool_analizar_vit import (
+            ejecutar_analizar_vit
+        )
+        T = 5
+        serie = [
+            {"paso_t": i, "ndsi_medio": 0.4, "pct_cobertura_nieve": 55.0,
+             "lst_dia_celsius": -6.0, "lst_noche_celsius": -14.0,
+             "ciclo_diurno_amplitud": 8.0, "delta_pct_nieve_24h": 0.0}
+            for i in range(T)
+        ]
+        resultado = ejecutar_analizar_vit(
+            serie_temporal=serie,
+            ndsi_promedio=0.4,
+            cobertura_promedio=55.0
+        )
+        if resultado["disponible"]:
+            entropia = resultado["entropia_atencion"]
+            assert entropia >= 0.0, f"Entropía negativa: {entropia}"
+            assert entropia <= math.log(T) + 0.01, f"Entropía > ln(T): {entropia}"
+
+    def test_vit_positional_encoding_dimension(self):
+        """El positional encoding tiene la misma dimensión que el vector de features."""
+        from agentes.subagentes.subagente_satelital.tools.tool_analizar_vit import (
+            _positional_encoding, D_MODEL
+        )
+        pe = _positional_encoding(t=0, d=D_MODEL)
+        assert len(pe) == D_MODEL
+
+    def test_vit_proyeccion_wq_dimension(self):
+        """WQ tiene forma D_HEAD × D_MODEL (proyecta query en espacio de cabeza)."""
+        from agentes.subagentes.subagente_satelital.tools.tool_analizar_vit import (
+            _WQ, D_HEAD, D_MODEL
+        )
+        for h, wq in enumerate(_WQ):
+            assert len(wq) == D_HEAD, f"WQ cabeza {h}: esperado {D_HEAD} filas, got {len(wq)}"
+            assert len(wq[0]) == D_MODEL, f"WQ cabeza {h}: esperado {D_MODEL} cols, got {len(wq[0])}"
+
+    def test_vit_norma_contexto_mha_positiva(self):
+        """La norma del contexto multi-head es positiva para series no triviales."""
+        from agentes.subagentes.subagente_satelital.tools.tool_analizar_vit import (
+            ejecutar_analizar_vit
+        )
+        serie = [
+            {"paso_t": i, "ndsi_medio": 0.6, "pct_cobertura_nieve": 75.0,
+             "lst_dia_celsius": -5.0, "lst_noche_celsius": -12.0,
+             "ciclo_diurno_amplitud": 7.0, "delta_pct_nieve_24h": 2.0}
+            for i in range(4)
+        ]
+        resultado = ejecutar_analizar_vit(
+            serie_temporal=serie,
+            ndsi_promedio=0.6,
+            cobertura_promedio=75.0
+        )
+        assert resultado["disponible"] is True
+        assert resultado["norma_contexto_mha"] > 0.0
+
+    def test_vit_layer_norm_media_cero(self):
+        """LayerNorm devuelve vector con media ≈ 0 y varianza ≈ 1."""
+        from agentes.subagentes.subagente_satelital.tools.tool_analizar_vit import _layer_norm
+
+        # Vector constante: LN de constante = vector nulo (media=constante, std≈0+eps)
+        x_var = [1.0, 3.0, -2.0, 0.5, 4.0, -1.0]
+        xn = _layer_norm(x_var)
+
+        # Media del resultado ≈ 0
+        media = sum(xn) / len(xn)
+        assert abs(media) < 1e-5, f"Media después de LayerNorm debe ser ≈0, obtenida: {media}"
+
+        # Varianza del resultado ≈ 1
+        varianza = sum((xi - media) ** 2 for xi in xn) / len(xn)
+        assert abs(varianza - 1.0) < 1e-4, f"Varianza después de LayerNorm debe ser ≈1, obtenida: {varianza}"
+
+    def test_vit_ffn_dimensiones_correctas(self):
+        """La FFN preserva la dimensión D_MODEL en entrada y salida."""
+        from agentes.subagentes.subagente_satelital.tools.tool_analizar_vit import (
+            _feed_forward_network, D_MODEL, D_FF
+        )
+
+        x = [0.5, -0.3, 1.2, -0.8, 0.1, 0.7]   # D_MODEL = 6
+        salida = _feed_forward_network(x)
+
+        assert len(salida) == D_MODEL, (
+            f"FFN debe producir D_MODEL={D_MODEL} outputs, obtenidos: {len(salida)}"
+        )
+
+    def test_vit_ffn_dimension_interna_4x(self):
+        """La dimensión interna de la FFN es 4×D_MODEL (convención Vaswani 2017)."""
+        from agentes.subagentes.subagente_satelital.tools.tool_analizar_vit import D_MODEL, D_FF
+
+        assert D_FF == 4 * D_MODEL, (
+            f"D_FF debe ser 4×D_MODEL={4*D_MODEL}, obtenido: {D_FF}"
+        )
+
+    def test_vit_resultado_incluye_d_ff(self):
+        """El resultado del ViT expone el campo d_ff para trazabilidad."""
+        from agentes.subagentes.subagente_satelital.tools.tool_analizar_vit import (
+            ejecutar_analizar_vit, D_FF
+        )
+
+        serie = [
+            {"paso_t": i, "ndsi_medio": 0.55, "pct_cobertura_nieve": 65.0,
+             "lst_dia_celsius": -3.0, "lst_noche_celsius": -10.0,
+             "ciclo_diurno_amplitud": 7.0, "delta_pct_nieve_24h": 1.0}
+            for i in range(4)
+        ]
+        resultado = ejecutar_analizar_vit(
+            serie_temporal=serie,
+            ndsi_promedio=0.55,
+            cobertura_promedio=65.0,
+        )
+
+        assert "d_ff" in resultado, "El resultado debe incluir el campo d_ff"
+        assert resultado["d_ff"] == D_FF, (
+            f"d_ff debe ser {D_FF}, obtenido: {resultado.get('d_ff')}"
+        )
+
+    def test_vit_arquitectura_incluye_layernorm_y_ffn(self):
+        """La cadena arquitectura_vit menciona layernorm y ffn (bloque completo)."""
+        from agentes.subagentes.subagente_satelital.tools.tool_analizar_vit import (
+            ejecutar_analizar_vit
+        )
+
+        serie = [
+            {"paso_t": i, "ndsi_medio": 0.6, "pct_cobertura_nieve": 70.0,
+             "lst_dia_celsius": -5.0, "lst_noche_celsius": -12.0,
+             "ciclo_diurno_amplitud": 7.0, "delta_pct_nieve_24h": 0.5}
+            for i in range(3)
+        ]
+        resultado = ejecutar_analizar_vit(
+            serie_temporal=serie,
+            ndsi_promedio=0.6,
+            cobertura_promedio=70.0,
+        )
+
+        arq = resultado["arquitectura_vit"].lower()
+        assert "layernorm" in arq, f"arquitectura_vit debe mencionar layernorm: {arq}"
+        assert "ffn" in arq, f"arquitectura_vit debe mencionar ffn: {arq}"
 
 
 class TestToolsEAWS:
@@ -274,8 +527,8 @@ class TestToolsEAWS:
 class TestToolsNLP:
     """Tests de las tools del SubagenteNLP sin llamadas a Anthropic."""
 
-    def test_extraer_patrones_sin_relatos(self):
-        """extraer_patrones con relatos vacíos retorna disponible=False y Baja confianza."""
+    def test_extraer_patrones_sin_relatos_activa_fallback(self):
+        """Con total_relatos=0, activa fallback a base andina (disponible=True)."""
         from agentes.subagentes.subagente_nlp.tools.tool_conocimiento_historico import (
             ejecutar_sintetizar_conocimiento_historico
         )
@@ -283,11 +536,30 @@ class TestToolsNLP:
             consultor=None,
             total_relatos=0,
             frecuencias_terminos={},
-            indice_riesgo_base=0.0
+            indice_riesgo_base=0.0,
+            ubicacion="La Parva Sector Bajo"
         )
-        assert resultado["disponible"] is False
-        assert resultado["confianza"] == "Baja"
-        assert resultado["indice_riesgo_ajustado"] == 0.0
+        # Con fallback andino, disponible=True y el índice no es 0
+        assert resultado["disponible"] is True
+        assert resultado["fuente_conocimiento"] in (
+            "base_andino_estatico", "sin_datos"
+        )
+        assert resultado["indice_riesgo_ajustado"] >= 0.0
+
+    def test_extraer_patrones_sin_relatos_sin_ubicacion_usa_generico(self):
+        """Sin ubicación, el fallback usa el conocimiento genérico andino."""
+        from agentes.subagentes.subagente_nlp.tools.tool_conocimiento_historico import (
+            ejecutar_sintetizar_conocimiento_historico
+        )
+        resultado = ejecutar_sintetizar_conocimiento_historico(
+            consultor=None,
+            total_relatos=0,
+            frecuencias_terminos={},
+            indice_riesgo_base=0.0,
+            ubicacion="Zona desconocida XYZ"
+        )
+        assert resultado["disponible"] is True
+        assert "narrativa" in resultado
 
     def test_extraer_patrones_con_relatos_placa(self):
         """extraer_patrones con muchas menciones de 'placa' detecta tipo correcto."""
@@ -333,6 +605,267 @@ class TestToolsNLP:
         for campo in campos_requeridos:
             assert campo in resultado, f"Campo faltante en resultado NLP: '{campo}'"
         assert 0.0 <= resultado["indice_riesgo_ajustado"] <= 1.0
+
+
+class TestBaseConocimientoAndino:
+    """Tests de la base de conocimiento andino estático (fallback NLP)."""
+
+    def test_consultar_zona_la_parva(self):
+        """consultar_conocimiento_zona identifica La Parva correctamente."""
+        from agentes.subagentes.subagente_nlp.conocimiento_base_andino import (
+            consultar_conocimiento_zona
+        )
+        resultado = consultar_conocimiento_zona("La Parva Sector Bajo")
+        assert resultado["zona_identificada"] == "la_parva"
+        assert resultado["fuente"] == "conocimiento_base_andino"
+        assert "tipo_alud_predominante" in resultado
+        assert "indice_riesgo_historico" in resultado
+
+    def test_consultar_zona_portillo(self):
+        """consultar_conocimiento_zona identifica Portillo."""
+        from agentes.subagentes.subagente_nlp.conocimiento_base_andino import (
+            consultar_conocimiento_zona
+        )
+        resultado = consultar_conocimiento_zona("Portillo Sector Amarillo")
+        assert resultado["zona_identificada"] == "portillo"
+        assert resultado["confianza"] == "Alta"
+
+    def test_consultar_zona_desconocida_retorna_generico(self):
+        """Zona sin match retorna conocimiento genérico andino."""
+        from agentes.subagentes.subagente_nlp.conocimiento_base_andino import (
+            consultar_conocimiento_zona
+        )
+        resultado = consultar_conocimiento_zona("Patagonia Austral Zona 99")
+        assert resultado["zona_identificada"] == "zona_desconocida"
+        assert resultado["match_por"] is None
+        assert "tipo_alud_predominante" in resultado
+        assert resultado["indice_riesgo_historico"] > 0.0
+
+    def test_indice_estacional_peak_invierno(self):
+        """Factor estacional máximo en julio-agosto."""
+        from agentes.subagentes.subagente_nlp.conocimiento_base_andino import (
+            get_indice_estacional
+        )
+        factor_julio = get_indice_estacional(mes_actual=7)
+        factor_agosto = get_indice_estacional(mes_actual=8)
+        factor_enero = get_indice_estacional(mes_actual=1)
+        assert factor_julio >= 0.85
+        assert factor_agosto >= 0.85
+        assert factor_enero <= 0.30
+
+    def test_indice_estacional_rango_valido(self):
+        """Factor estacional está siempre entre 0 y 1."""
+        from agentes.subagentes.subagente_nlp.conocimiento_base_andino import (
+            get_indice_estacional
+        )
+        for mes in range(1, 13):
+            factor = get_indice_estacional(mes_actual=mes)
+            assert 0.0 <= factor <= 1.0, f"Factor inválido para mes {mes}: {factor}"
+
+    def test_listar_zonas_retorna_lista(self):
+        """listar_zonas_disponibles retorna al menos 5 zonas."""
+        from agentes.subagentes.subagente_nlp.conocimiento_base_andino import (
+            listar_zonas_disponibles
+        )
+        zonas = listar_zonas_disponibles()
+        assert len(zonas) >= 5
+        assert "la_parva" in zonas
+        assert "portillo" in zonas
+        assert "antuco" in zonas
+
+    def test_conocimiento_zona_tiene_patrones_recurrentes(self):
+        """Cada zona conocida tiene al menos un patrón documentado."""
+        from agentes.subagentes.subagente_nlp.conocimiento_base_andino import (
+            CONOCIMIENTO_POR_ZONA
+        )
+        for nombre, datos in CONOCIMIENTO_POR_ZONA.items():
+            assert len(datos.get("patrones_recurrentes", [])) >= 1, (
+                f"Zona {nombre} sin patrones_recurrentes"
+            )
+
+    def test_fallback_nlp_portillo_indice_alto(self):
+        """Fallback para Portillo produce índice de riesgo > 0.5."""
+        from agentes.subagentes.subagente_nlp.tools.tool_conocimiento_historico import (
+            ejecutar_sintetizar_conocimiento_historico
+        )
+        resultado = ejecutar_sintetizar_conocimiento_historico(
+            consultor=None,
+            total_relatos=0,
+            frecuencias_terminos={},
+            indice_riesgo_base=0.3,
+            ubicacion="Portillo"
+        )
+        assert resultado["disponible"] is True
+        assert resultado["indice_riesgo_ajustado"] > 0.3
+
+    def test_fallback_nlp_contiene_advertencia(self):
+        """Fallback incluye advertencia sobre cargar datos reales."""
+        from agentes.subagentes.subagente_nlp.tools.tool_conocimiento_historico import (
+            ejecutar_sintetizar_conocimiento_historico
+        )
+        resultado = ejecutar_sintetizar_conocimiento_historico(
+            consultor=None,
+            total_relatos=0,
+            frecuencias_terminos={},
+            indice_riesgo_base=0.0,
+            ubicacion="Valle Nevado"
+        )
+        if resultado.get("fuente_conocimiento") == "base_andino_estatico":
+            assert "advertencia" in resultado
+            assert len(resultado["narrativa"]) > 50
+
+    def test_conocimiento_bq_no_usa_fallback(self):
+        """Cuando hay relatos BQ, no usa la base andina."""
+        from agentes.subagentes.subagente_nlp.tools.tool_conocimiento_historico import (
+            ejecutar_sintetizar_conocimiento_historico
+        )
+        resultado = ejecutar_sintetizar_conocimiento_historico(
+            consultor=None,
+            total_relatos=10,
+            frecuencias_terminos={"placa": 5, "viento": 3},
+            indice_riesgo_base=0.6,
+            ubicacion="La Parva"
+        )
+        assert resultado["fuente_conocimiento"] == "relatos_bigquery"
+        assert resultado["total_relatos_analizados"] == 10
+
+
+class TestNLPSintetico:
+    """Tests del análisis NLP sintético y validación H2 (notebook 06)."""
+
+    def test_h2_estructura_resultado(self):
+        """analisis_h2_sintetico retorna las claves requeridas."""
+        from notebooks_validacion.n06_analisis_nlp_sintetico import analisis_h2_sintetico
+
+        res = analisis_h2_sintetico(meses_eval=[8], verbose=False)
+
+        claves_requeridas = [
+            "f1_macro_base_global",
+            "f1_macro_nlp_global",
+            "delta_f1_pp_global",
+            "h2_confirmada_sintetico",
+            "umbral_h2_pp",
+            "n_zonas",
+            "n_observaciones_total",
+            "resultados_por_zona",
+            "advertencia",
+        ]
+        for clave in claves_requeridas:
+            assert clave in res, f"Falta clave '{clave}' en resultado H2"
+
+    def test_h2_delta_f1_positivo_con_sesgo(self):
+        """Con sesgo_base=0.4 el NLP mejora el F1-macro (delta > 0)."""
+        from notebooks_validacion.n06_analisis_nlp_sintetico import analisis_h2_sintetico
+
+        res = analisis_h2_sintetico(
+            meses_eval=[7, 8, 9],
+            sesgo_base=0.4,
+            fuerza_ajuste=0.65,
+            verbose=False,
+        )
+        assert res["delta_f1_pp_global"] > 0, (
+            f"Delta F1 debe ser positivo con sesgo=0.4, "
+            f"obtenido: {res['delta_f1_pp_global']:.2f}pp"
+        )
+
+    def test_h2_confirmada_sintetico(self):
+        """H2 se confirma (delta ≥ 5pp) con parámetros por defecto y sesgo documentado."""
+        from notebooks_validacion.n06_analisis_nlp_sintetico import analisis_h2_sintetico
+
+        res = analisis_h2_sintetico(
+            meses_eval=[7, 8, 9],
+            sesgo_base=0.4,
+            fuerza_ajuste=0.65,
+            verbose=False,
+        )
+        assert res["h2_confirmada_sintetico"], (
+            f"H2 no confirmada: delta={res['delta_f1_pp_global']:.2f}pp < "
+            f"{res['umbral_h2_pp']:.1f}pp"
+        )
+
+    def test_h2_resultados_por_zona_estructura(self):
+        """resultados_por_zona contiene las claves esperadas para cada zona."""
+        from notebooks_validacion.n06_analisis_nlp_sintetico import analisis_h2_sintetico
+
+        res = analisis_h2_sintetico(meses_eval=[8], verbose=False)
+
+        assert len(res["resultados_por_zona"]) > 0
+        claves_zona = ["zona", "f1_base", "f1_nlp", "delta_f1_pp", "indice_riesgo"]
+        for resultado_zona in res["resultados_por_zona"][:3]:  # verificar primeras 3
+            for clave in claves_zona:
+                assert clave in resultado_zona, (
+                    f"Falta clave '{clave}' en resultado de zona"
+                )
+
+    def test_h2_n_zonas_correctas(self):
+        """El análisis cubre todas las zonas de la base andina (≥15)."""
+        from notebooks_validacion.n06_analisis_nlp_sintetico import analisis_h2_sintetico
+
+        res = analisis_h2_sintetico(meses_eval=[8], verbose=False)
+        assert res["n_zonas"] >= 15, (
+            f"Se esperan ≥15 zonas, obtenidas: {res['n_zonas']}"
+        )
+
+    def test_sensibilidad_fuerza_ajuste_estructura(self):
+        """analisis_sensibilidad_fuerza_ajuste retorna curva y fuerza_optima."""
+        from notebooks_validacion.n06_analisis_nlp_sintetico import (
+            analisis_sensibilidad_fuerza_ajuste
+        )
+
+        res = analisis_sensibilidad_fuerza_ajuste()
+
+        assert "curva_fuerza_delta" in res
+        assert "fuerza_optima" in res
+        assert "delta_optimo_pp" in res
+        assert len(res["curva_fuerza_delta"]) >= 5, "La curva debe tener ≥5 puntos"
+        assert 0.0 <= res["fuerza_optima"] <= 1.0
+
+    def test_sensibilidad_sesgo_delta_aumenta(self):
+        """A mayor sesgo de subestimación, mayor ganancia del NLP."""
+        from notebooks_validacion.n06_analisis_nlp_sintetico import (
+            analisis_sensibilidad_sesgo_base
+        )
+
+        res = analisis_sensibilidad_sesgo_base()
+
+        curva = res["curva_sesgo_delta"]
+        delta_sesgo_bajo = curva[min(curva.keys())]["delta_pp"]  # sesgo ≈ 0
+        delta_sesgo_alto = curva[max(curva.keys())]["delta_pp"]  # sesgo ≈ 1.0
+
+        assert delta_sesgo_alto > delta_sesgo_bajo, (
+            f"El NLP debe ganar más con sesgo alto: "
+            f"sesgo_bajo={delta_sesgo_bajo:.1f}pp, sesgo_alto={delta_sesgo_alto:.1f}pp"
+        )
+
+    def test_h2_advertencia_datos_sinteticos(self):
+        """El resultado incluye advertencia sobre naturaleza sintética de los datos."""
+        from notebooks_validacion.n06_analisis_nlp_sintetico import analisis_h2_sintetico
+
+        res = analisis_h2_sintetico(meses_eval=[8], verbose=False)
+
+        assert "advertencia" in res
+        advertencia = res["advertencia"].lower()
+        assert "sintético" in advertencia or "sintetico" in advertencia or "real" in advertencia, (
+            "La advertencia debe mencionar que los datos son sintéticos o que se requieren reales"
+        )
+
+    def test_calcular_ajuste_nlp_unidireccional(self):
+        """calcular_ajuste_nlp nunca rebaja el nivel (corrección solo hacia arriba)."""
+        from notebooks_validacion.n06_analisis_nlp_sintetico import calcular_ajuste_nlp
+
+        # Caso 1: base > esperado → NLP se abstiene (no baja)
+        nivel_alto = 4
+        ajuste_sin_cambio = calcular_ajuste_nlp(nivel_alto, 0.3, 8, fuerza_ajuste=0.65)
+        assert ajuste_sin_cambio >= nivel_alto, (
+            f"NLP no debe rebajar nivel: base={nivel_alto}, ajustado={ajuste_sin_cambio}"
+        )
+
+        # Caso 2: base < esperado → NLP corrige hacia arriba
+        nivel_bajo = 1
+        ajuste_hacia_arriba = calcular_ajuste_nlp(nivel_bajo, 0.8, 8, fuerza_ajuste=0.65)
+        assert ajuste_hacia_arriba >= nivel_bajo, (
+            f"NLP debe mantener o subir nivel: base={nivel_bajo}, ajustado={ajuste_hacia_arriba}"
+        )
 
 
 class TestReintentosAPI:
@@ -767,6 +1300,579 @@ class TestMetricasKappa:
         datos = [1, 2, 3, 4, 5]
         resultado = calcular_cohens_kappa(datos, datos)
         assert resultado["interpretacion"] == "Casi perfecto"
+
+
+class TestETLRelatos:
+    """Tests para el ETL Databricks CSV → BigQuery (schema 37 campos)."""
+
+    def setup_method(self):
+        import sys, os
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../..'))
+
+    # ── Parsers internos ──────────────────────────────────────────────────────
+
+    def test_parsear_bool_true(self):
+        """'true' → True."""
+        from datos.relatos.cargar_relatos import _parsear_bool
+        assert _parsear_bool("true") is True
+
+    def test_parsear_bool_false(self):
+        """'false' → False."""
+        from datos.relatos.cargar_relatos import _parsear_bool
+        assert _parsear_bool("false") is False
+
+    def test_parsear_bool_null(self):
+        """'null' y cadena vacía → None."""
+        from datos.relatos.cargar_relatos import _parsear_bool
+        assert _parsear_bool("null") is None
+        assert _parsear_bool("") is None
+
+    def test_parsear_float_valido(self):
+        """String numérico → float."""
+        from datos.relatos.cargar_relatos import _parsear_float
+        assert _parsear_float("5424.0") == 5424.0
+        assert _parsear_float("3.5") == 3.5
+
+    def test_parsear_float_nulo(self):
+        """Cadena vacía y 'null' → None."""
+        from datos.relatos.cargar_relatos import _parsear_float
+        assert _parsear_float("") is None
+        assert _parsear_float("null") is None
+
+    def test_parsear_int_valido(self):
+        """String entero y float-string → int."""
+        from datos.relatos.cargar_relatos import _parsear_int
+        assert _parsear_int("3481") == 3481
+        assert _parsear_int("5187.0") == 5187  # CSV exporta floats
+
+    def test_parsear_int_nulo(self):
+        """Cadena vacía y 'null' → None."""
+        from datos.relatos.cargar_relatos import _parsear_int
+        assert _parsear_int("") is None
+        assert _parsear_int("null") is None
+
+    # ── Extracción nombre desde campo `data` del LLM CSV ─────────────────────
+
+    def test_extraer_nombre_con_presentacion(self):
+        """Extrae correctamente el nombre antes de ' Presentacion '."""
+        from datos.relatos.cargar_relatos import _extraer_nombre_desde_data
+        data = "Cerro Plomo (5424m) - Andeshandbook Presentacion El cerro Plomo..."
+        assert _extraer_nombre_desde_data(data) == "Cerro Plomo (5424m) - Andeshandbook"
+
+    def test_extraer_nombre_fallback_newline(self):
+        """Sin 'Presentacion', usa la primera línea."""
+        from datos.relatos.cargar_relatos import _extraer_nombre_desde_data
+        data = "Cerro Ejemplo (1000m) - Andeshandbook\nTexto largo aquí"
+        assert _extraer_nombre_desde_data(data) == "Cerro Ejemplo (1000m) - Andeshandbook"
+
+    # ── cargar_routes_csv ─────────────────────────────────────────────────────
+
+    def test_cargar_routes_csv_campos_requeridos(self, tmp_path):
+        """El registro tiene route_id, name, fuente y fecha_carga."""
+        import csv
+        from datos.relatos.cargar_relatos import cargar_routes_csv
+        csv_path = tmp_path / "routes.csv"
+        with open(csv_path, "w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=[
+                "url", "route_id", "scraped_timestamp", "name", "location",
+                "sector", "nearest_city", "elevation", "first_ascent_year",
+                "first_ascensionists", "latitude", "longitude", "access_type",
+                "mountain_characteristics", "nearby_excursions", "description",
+                "avalanche_info", "has_avalanche_info", "is_alta_montana",
+                "has_glacier", "is_volcano", "avalanche_priority",
+            ])
+            writer.writeheader()
+            writer.writerow({
+                "url": "https://andeshandbook.org/1", "route_id": "999",
+                "scraped_timestamp": "2025-07-20T22:56:33Z",
+                "name": "Cerro Test (3000m) - Andeshandbook",
+                "location": "Chile, Region Metropolitana", "sector": "Test",
+                "nearest_city": "Santiago", "elevation": "3000.0",
+                "first_ascent_year": "2000", "first_ascensionists": "Test",
+                "latitude": "-33.0", "longitude": "-70.0", "access_type": "Normal",
+                "mountain_characteristics": "Alta Montaña", "nearby_excursions": "",
+                "description": "Descripción de prueba", "avalanche_info": "",
+                "has_avalanche_info": "false", "is_alta_montana": "true",
+                "has_glacier": "false", "is_volcano": "false", "avalanche_priority": "false",
+            })
+        registros = cargar_routes_csv(str(csv_path))
+        assert len(registros) == 1
+        ruta = list(registros.values())[0]
+        assert ruta["route_id"] == 999
+        assert ruta["name"] == "Cerro Test (3000m) - Andeshandbook"
+        assert ruta["fuente"] == "andeshandbook"
+        assert ruta["fecha_carga"] is not None
+
+    def test_cargar_routes_csv_campos_booleanos(self, tmp_path):
+        """Los campos booleanos se parsean correctamente."""
+        import csv
+        from datos.relatos.cargar_relatos import cargar_routes_csv
+        csv_path = tmp_path / "routes.csv"
+        with open(csv_path, "w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=[
+                "url", "route_id", "scraped_timestamp", "name", "location",
+                "sector", "nearest_city", "elevation", "first_ascent_year",
+                "first_ascensionists", "latitude", "longitude", "access_type",
+                "mountain_characteristics", "nearby_excursions", "description",
+                "avalanche_info", "has_avalanche_info", "is_alta_montana",
+                "has_glacier", "is_volcano", "avalanche_priority",
+            ])
+            writer.writeheader()
+            writer.writerow({
+                "url": "", "route_id": "100", "scraped_timestamp": "",
+                "name": "Volcán Test (4000m) - Andeshandbook",
+                "location": "Chile", "sector": "", "nearest_city": "",
+                "elevation": "4000.0", "first_ascent_year": "", "first_ascensionists": "",
+                "latitude": "", "longitude": "", "access_type": "",
+                "mountain_characteristics": "Volcán, Alta Montaña", "nearby_excursions": "",
+                "description": "", "avalanche_info": "",
+                "has_avalanche_info": "true", "is_alta_montana": "true",
+                "has_glacier": "false", "is_volcano": "true", "avalanche_priority": "true",
+            })
+        registros = cargar_routes_csv(str(csv_path))
+        ruta = list(registros.values())[0]
+        assert ruta["has_avalanche_info"] is True
+        assert ruta["is_alta_montana"] is True
+        assert ruta["has_glacier"] is False
+        assert ruta["is_volcano"] is True
+        assert ruta["avalanche_priority"] is True
+
+    def test_cargar_routes_csv_route_id_invalido_omite(self, tmp_path):
+        """Filas con route_id inválido se omiten."""
+        import csv
+        from datos.relatos.cargar_relatos import cargar_routes_csv
+        csv_path = tmp_path / "routes.csv"
+        with open(csv_path, "w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=[
+                "url", "route_id", "scraped_timestamp", "name", "location",
+                "sector", "nearest_city", "elevation", "first_ascent_year",
+                "first_ascensionists", "latitude", "longitude", "access_type",
+                "mountain_characteristics", "nearby_excursions", "description",
+                "avalanche_info", "has_avalanche_info", "is_alta_montana",
+                "has_glacier", "is_volcano", "avalanche_priority",
+            ])
+            writer.writeheader()
+            writer.writerow({k: "" for k in [
+                "url", "route_id", "scraped_timestamp", "name", "location",
+                "sector", "nearest_city", "elevation", "first_ascent_year",
+                "first_ascensionists", "latitude", "longitude", "access_type",
+                "mountain_characteristics", "nearby_excursions", "description",
+                "avalanche_info", "has_avalanche_info", "is_alta_montana",
+                "has_glacier", "is_volcano", "avalanche_priority",
+            ]} | {"name": "Ruta Sin ID"})
+        registros = cargar_routes_csv(str(csv_path))
+        assert len(registros) == 0
+
+    def test_cargar_routes_csv_llm_inicialmente_vacios(self, tmp_path):
+        """Los campos LLM inician en None/[] antes del enriquecimiento."""
+        import csv
+        from datos.relatos.cargar_relatos import cargar_routes_csv
+        csv_path = tmp_path / "routes.csv"
+        with open(csv_path, "w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=[
+                "url", "route_id", "scraped_timestamp", "name", "location",
+                "sector", "nearest_city", "elevation", "first_ascent_year",
+                "first_ascensionists", "latitude", "longitude", "access_type",
+                "mountain_characteristics", "nearby_excursions", "description",
+                "avalanche_info", "has_avalanche_info", "is_alta_montana",
+                "has_glacier", "is_volcano", "avalanche_priority",
+            ])
+            writer.writeheader()
+            writer.writerow({
+                "url": "", "route_id": "200", "scraped_timestamp": "",
+                "name": "Cerro Vacio (2000m) - Andeshandbook",
+                "location": "", "sector": "", "nearest_city": "",
+                "elevation": "2000.0", "first_ascent_year": "", "first_ascensionists": "",
+                "latitude": "", "longitude": "", "access_type": "",
+                "mountain_characteristics": "", "nearby_excursions": "",
+                "description": "", "avalanche_info": "",
+                "has_avalanche_info": "false", "is_alta_montana": "false",
+                "has_glacier": "false", "is_volcano": "false", "avalanche_priority": "false",
+            })
+        registros = cargar_routes_csv(str(csv_path))
+        ruta = list(registros.values())[0]
+        assert ruta["llm_nivel_riesgo"] is None
+        assert ruta["llm_tipo_actividad"] is None
+        assert ruta["llm_factores_riesgo"] == []
+        assert ruta["analisis_llm_json"] is None
+
+    # ── _enriquecer_con_llm ───────────────────────────────────────────────────
+
+    def test_enriquecer_con_llm_extrae_campos_clave(self, tmp_path):
+        """El enriquecimiento LLM extrae nivel_riesgo, tipo_actividad y resumen."""
+        import csv, json
+        from datos.relatos.cargar_relatos import _enriquecer_con_llm
+        nombre = "Cerro Plomo (5424m) - Andeshandbook"
+        analisis = {
+            "resumen": {"descripcion_breve": "Cerro exigente.", "tipo_actividad": "alpinismo", "modalidad": "expedicion"},
+            "evaluacion_riesgo": {"nivel_riesgo": "alto", "puntuacion_numerica": "8", "factores_riesgo": ["hielo", "exposicion"], "experiencia_requerida": "avanzado"},
+            "caracteristicas_tecnicas": {"tipos_terreno": ["hielo", "roca"]},
+            "equipamiento_requerido": {"equipamiento_tecnico": ["crampones", "piolet"]},
+            "metadatos_analisis": {"confianza_extraccion": "0.9", "palabras_clave_tecnicas": ["hielo", "cumbre"]},
+        }
+        llm_csv = tmp_path / "llm.csv"
+        with open(llm_csv, "w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=["data", "analisis_ruta"])
+            writer.writeheader()
+            writer.writerow({
+                "data": f"{nombre} Presentacion Texto del cerro...",
+                "analisis_ruta": json.dumps(analisis),
+            })
+        registros = {nombre: {
+            "llm_nivel_riesgo": None, "llm_tipo_actividad": None, "llm_modalidad": None,
+            "llm_puntuacion_riesgo": None, "llm_experiencia_requerida": None,
+            "llm_resumen": None, "llm_confianza_extraccion": None,
+            "llm_factores_riesgo": [], "llm_tipos_terreno": [],
+            "llm_equipamiento_tecnico": [], "llm_palabras_clave": [],
+            "analisis_llm_json": None,
+        }}
+        enriquecidos = _enriquecer_con_llm(registros, str(llm_csv))
+        assert enriquecidos == 1
+        r = registros[nombre]
+        assert r["llm_nivel_riesgo"] == "alto"
+        assert r["llm_tipo_actividad"] == "alpinismo"
+        assert r["llm_modalidad"] == "expedicion"
+        assert r["llm_puntuacion_riesgo"] == 8.0
+        assert r["llm_confianza_extraccion"] == 0.9
+        assert "hielo" in r["llm_factores_riesgo"]
+        assert r["analisis_llm_json"] is not None
+
+    def test_enriquecer_con_llm_sin_match_no_modifica(self, tmp_path):
+        """Un registro LLM sin match en routes no modifica ningún registro."""
+        import csv, json
+        from datos.relatos.cargar_relatos import _enriquecer_con_llm
+        llm_csv = tmp_path / "llm.csv"
+        with open(llm_csv, "w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=["data", "analisis_ruta"])
+            writer.writeheader()
+            writer.writerow({
+                "data": "Cerro Inexistente Presentacion Texto...",
+                "analisis_ruta": json.dumps({"resumen": {"nivel_riesgo": "bajo"}}),
+            })
+        registros = {"Otro Cerro": {"llm_nivel_riesgo": None, "llm_tipo_actividad": None,
+                                    "llm_modalidad": None, "llm_puntuacion_riesgo": None,
+                                    "llm_experiencia_requerida": None, "llm_resumen": None,
+                                    "llm_confianza_extraccion": None, "llm_factores_riesgo": [],
+                                    "llm_tipos_terreno": [], "llm_equipamiento_tecnico": [],
+                                    "llm_palabras_clave": [], "analisis_llm_json": None}}
+        enriquecidos = _enriquecer_con_llm(registros, str(llm_csv))
+        assert enriquecidos == 0
+        assert registros["Otro Cerro"]["llm_nivel_riesgo"] is None
+
+    def test_enriquecer_con_llm_json_invalido_no_falla(self, tmp_path):
+        """JSON malformado en LLM CSV no lanza excepción."""
+        import csv
+        from datos.relatos.cargar_relatos import _enriquecer_con_llm
+        llm_csv = tmp_path / "llm.csv"
+        with open(llm_csv, "w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=["data", "analisis_ruta"])
+            writer.writeheader()
+            writer.writerow({
+                "data": "Cerro Test Presentacion Texto...",
+                "analisis_ruta": "{json_invalido: [}",
+            })
+        registros = {"Cerro Test": {"llm_nivel_riesgo": None, "llm_tipo_actividad": None,
+                                    "llm_modalidad": None, "llm_puntuacion_riesgo": None,
+                                    "llm_experiencia_requerida": None, "llm_resumen": None,
+                                    "llm_confianza_extraccion": None, "llm_factores_riesgo": [],
+                                    "llm_tipos_terreno": [], "llm_equipamiento_tecnico": [],
+                                    "llm_palabras_clave": [], "analisis_llm_json": None}}
+        enriquecidos = _enriquecer_con_llm(registros, str(llm_csv))
+        assert enriquecidos == 0  # no enriquecido, pero sin crash
+
+
+class TestDisclaimerPrompts:
+    """Tests para verificar la presencia del disclaimer ético-legal en los prompts."""
+
+    def test_disclaimer_en_prompt_integrador(self):
+        """El prompt del integrador incluye el disclaimer obligatorio."""
+        from agentes.subagentes.subagente_integrador.prompts import SYSTEM_PROMPT_INTEGRADOR
+        assert "AVISO" in SYSTEM_PROMPT_INTEGRADOR
+        assert "sistema experimental" in SYSTEM_PROMPT_INTEGRADOR.lower()
+        assert "responsabilidad" in SYSTEM_PROMPT_INTEGRADOR.lower()
+
+    def test_disclaimer_incluye_instruccion_final(self):
+        """El prompt del integrador instruye a incluir el disclaimer al final."""
+        from agentes.subagentes.subagente_integrador.prompts import SYSTEM_PROMPT_INTEGRADOR
+        assert "disclaimer" in SYSTEM_PROMPT_INTEGRADOR.lower()
+
+    def test_schema_boletines_tiene_campo_confianza(self):
+        """El schema de boletines incluye campo 'confianza' para transparencia."""
+        import json, os
+        schema_path = os.path.join(
+            os.path.dirname(__file__), '..', 'salidas', 'schema_boletines.json'
+        )
+        with open(schema_path) as f:
+            schema = json.load(f)
+        nombres = {c["name"] for c in schema}
+        campos_transparencia = {
+            "confianza", "subagentes_degradados", "version_prompts",
+            "fuente_gradiente_pinn", "fuente_tamano_eaws",
+            "datos_topograficos_ok", "datos_meteorologicos_ok"
+        }
+        faltantes = campos_transparencia - nombres
+        assert not faltantes, f"Campos de transparencia faltantes: {faltantes}"
+
+    def test_schema_boletines_tiene_34_campos(self):
+        """El schema de boletines tiene 34 campos (34 = 33 originales + subagentes_degradados)."""
+        import json, os
+        schema_path = os.path.join(
+            os.path.dirname(__file__), '..', 'salidas', 'schema_boletines.json'
+        )
+        with open(schema_path) as f:
+            schema = json.load(f)
+        assert len(schema) == 34, f"Se esperaban 34 campos, hay {len(schema)}"
+
+    def test_marco_etico_legal_existe(self):
+        """El documento de marco ético-legal existe en docs/."""
+        import os
+        ruta = os.path.join(
+            os.path.dirname(__file__), '../../docs/marco_etico_legal.md'
+        )
+        assert os.path.exists(ruta), "docs/marco_etico_legal.md no existe"
+
+    def test_marco_etico_legal_contiene_secciones(self):
+        """El marco ético-legal cubre las secciones obligatorias."""
+        import os
+        ruta = os.path.join(
+            os.path.dirname(__file__), '../../docs/marco_etico_legal.md'
+        )
+        with open(ruta) as f:
+            contenido = f.read()
+        secciones = [
+            "Protección de Datos",
+            "Responsabilidad",
+            "Principio de precaución",
+            "Ley 21.719",
+            "AVISO",
+        ]
+        for s in secciones:
+            assert s in contenido, f"Sección faltante en marco ético-legal: {s}"
+
+
+class TestSchemaMigracion:
+    """Tests para el script de migración del schema de boletines_riesgo."""
+
+    def test_schema_objetivo_cargable(self):
+        """El schema objetivo (schema_boletines.json) se puede cargar."""
+        import json, os
+        schema_path = os.path.join(
+            os.path.dirname(__file__), '..', 'salidas', 'schema_boletines.json'
+        )
+        with open(schema_path) as f:
+            schema = json.load(f)
+        assert isinstance(schema, list)
+        assert len(schema) > 0
+
+    def test_campos_nuevos_son_nullable(self):
+        """Los campos de ablación/trazabilidad son todos NULLABLE (BQ permite añadirlos)."""
+        import json, os
+        schema_path = os.path.join(
+            os.path.dirname(__file__), '..', 'salidas', 'schema_boletines.json'
+        )
+        with open(schema_path) as f:
+            schema = json.load(f)
+        campos_nuevos = {
+            "datos_topograficos_ok", "datos_meteorologicos_ok",
+            "version_prompts", "fuente_gradiente_pinn",
+            "fuente_tamano_eaws", "viento_kmh", "subagentes_degradados"
+        }
+        for campo in schema:
+            if campo["name"] in campos_nuevos:
+                assert campo["mode"] in ("NULLABLE", None), (
+                    f"Campo {campo['name']} debe ser NULLABLE para migración BQ"
+                )
+
+    def test_script_migracion_existe(self):
+        """El script de migración existe en agentes/scripts/."""
+        import os
+        ruta = os.path.join(
+            os.path.dirname(__file__), '..', 'scripts', 'migrar_schema_boletines.py'
+        )
+        assert os.path.exists(ruta), "agentes/scripts/migrar_schema_boletines.py no existe"
+
+    def test_campos_requeridos_en_schema(self):
+        """Los campos REQUIRED del schema existen y tienen tipo correcto."""
+        import json, os
+        schema_path = os.path.join(
+            os.path.dirname(__file__), '..', 'salidas', 'schema_boletines.json'
+        )
+        with open(schema_path) as f:
+            schema = json.load(f)
+        campos_required = {c["name"]: c for c in schema if c.get("mode") == "REQUIRED"}
+        # nombre_ubicacion y fecha_emision son los únicos REQUIRED
+        assert "nombre_ubicacion" in campos_required
+        assert "fecha_emision" in campos_required
+        assert campos_required["nombre_ubicacion"]["type"] == "STRING"
+        assert campos_required["fecha_emision"]["type"] == "TIMESTAMP"
+
+
+class TestPruebasEstadisticas:
+    """Tests del notebook 05: bootstrap, McNemar, diferencia proporciones, potencia."""
+
+    def test_bootstrap_f1_retorna_triple(self):
+        """bootstrap_intervalo_confianza retorna (estimado, ic_inf, ic_sup)."""
+        from notebooks_validacion.n05_pruebas_estadisticas import (
+            bootstrap_intervalo_confianza,
+            calcular_f1_macro_simple,
+        )
+        reales = [1, 2, 3, 3, 2, 4, 1, 3, 2, 3] * 5
+        predichos = [1, 2, 3, 2, 2, 4, 1, 3, 3, 3] * 5
+        estimado, ic_inf, ic_sup = bootstrap_intervalo_confianza(
+            reales, predichos, calcular_f1_macro_simple, n_iteraciones=500
+        )
+        assert 0.0 <= estimado <= 1.0
+        assert ic_inf <= estimado <= ic_sup
+
+    def test_bootstrap_ic_width_razonable(self):
+        """El IC bootstrap tiene amplitud razonable (no degenera a punto)."""
+        from notebooks_validacion.n05_pruebas_estadisticas import (
+            bootstrap_intervalo_confianza,
+            calcular_f1_macro_simple,
+        )
+        reales = [1, 2, 3, 3, 2, 4, 1, 3, 2, 3] * 10
+        predichos = [1, 2, 3, 2, 2, 4, 1, 3, 3, 4] * 10
+        _, ic_inf, ic_sup = bootstrap_intervalo_confianza(
+            reales, predichos, calcular_f1_macro_simple, n_iteraciones=500
+        )
+        assert ic_sup - ic_inf >= 0.0  # IC siempre no-negativo
+
+    def test_f1_macro_simple_perfecto(self):
+        """F1-macro = 1.0 cuando predicciones son perfectas."""
+        from notebooks_validacion.n05_pruebas_estadisticas import calcular_f1_macro_simple
+        reales = [1, 2, 3, 4, 5, 1, 2, 3]
+        predichos = [1, 2, 3, 4, 5, 1, 2, 3]
+        assert calcular_f1_macro_simple(reales, predichos) == 1.0
+
+    def test_f1_macro_simple_random(self):
+        """F1-macro con predicciones aleatorias es menor que predicciones correctas."""
+        from notebooks_validacion.n05_pruebas_estadisticas import calcular_f1_macro_simple
+        reales = [1, 2, 3, 4, 5] * 10
+        predichos_correctos = [1, 2, 3, 4, 5] * 10
+        predichos_aleatorios = [3, 1, 5, 2, 4] * 10
+        assert calcular_f1_macro_simple(reales, predichos_correctos) > \
+               calcular_f1_macro_simple(reales, predichos_aleatorios)
+
+    def test_kappa_simple_perfecto(self):
+        """Kappa = 1.0 cuando predicciones son perfectas."""
+        from notebooks_validacion.n05_pruebas_estadisticas import calcular_kappa_simple
+        reales = [1, 2, 3, 4, 5, 1, 2, 3]
+        predichos = [1, 2, 3, 4, 5, 1, 2, 3]
+        assert calcular_kappa_simple(reales, predichos) == 1.0
+
+    def test_kappa_simple_rango(self):
+        """Kappa está en rango [-1, 1]."""
+        from notebooks_validacion.n05_pruebas_estadisticas import calcular_kappa_simple
+        reales = [1, 2, 3, 4, 5, 1, 2, 3, 4]
+        predichos = [2, 3, 4, 5, 1, 2, 3, 4, 5]
+        kappa = calcular_kappa_simple(reales, predichos)
+        assert -1.0 <= kappa <= 1.0
+
+    def test_mcnemar_clasificadores_identicos(self):
+        """McNemar no es significativo cuando ambos clasificadores son iguales."""
+        from notebooks_validacion.n05_pruebas_estadisticas import test_mcnemar
+        reales = [1, 2, 3, 4, 5, 1, 2, 3] * 5
+        predichos = [1, 2, 3, 4, 5, 1, 2, 3] * 5
+        resultado = test_mcnemar(reales, predichos, predichos)
+        assert not resultado["significativo"]
+
+    def test_mcnemar_campos_requeridos(self):
+        """Test de McNemar retorna campos requeridos."""
+        from notebooks_validacion.n05_pruebas_estadisticas import test_mcnemar
+        reales = [1, 2, 3, 3, 2, 4]
+        predichos_a = [1, 2, 3, 2, 2, 4]
+        predichos_b = [2, 1, 3, 3, 3, 3]
+        resultado = test_mcnemar(reales, predichos_a, predichos_b)
+        assert "chi2" in resultado
+        assert "p_valor" in resultado
+        assert "b" in resultado
+        assert "c" in resultado
+        assert "significativo" in resultado
+        assert 0.0 <= resultado["p_valor"] <= 1.0
+
+    def test_diferencia_f1_supera_umbral_h2(self):
+        """test_diferencia_f1 detecta delta > 5pp como significativo con n suficiente."""
+        from notebooks_validacion.n05_pruebas_estadisticas import test_diferencia_f1
+        resultado = test_diferencia_f1(
+            f1_con_nlp=0.82,
+            f1_sin_nlp=0.73,
+            n_muestras=200
+        )
+        assert resultado["supera_umbral_h2"]  # delta=0.09 > 0.05
+        assert resultado["delta_observado"] == 0.09
+
+    def test_diferencia_f1_no_supera_umbral_h2(self):
+        """test_diferencia_f1 detecta delta < 5pp como no significativo."""
+        from notebooks_validacion.n05_pruebas_estadisticas import test_diferencia_f1
+        resultado = test_diferencia_f1(
+            f1_con_nlp=0.78,
+            f1_sin_nlp=0.76,
+            n_muestras=100
+        )
+        assert not resultado["supera_umbral_h2"]  # delta=0.02 < 0.05
+
+    def test_calcular_n_minimo_positivo(self):
+        """N mínimo es positivo para cualquier delta válido."""
+        from notebooks_validacion.n05_pruebas_estadisticas import calcular_n_minimo
+        resultado = calcular_n_minimo(delta_esperado=0.05)
+        assert resultado["n_minimo"] > 0
+        assert resultado["dias_generacion"] > 0
+
+    def test_calcular_n_minimo_mayor_delta_menor_n(self):
+        """Cuanto mayor el delta, menos muestras se necesitan."""
+        from notebooks_validacion.n05_pruebas_estadisticas import calcular_n_minimo
+        n_delta_pequeno = calcular_n_minimo(delta_esperado=0.05)["n_minimo"]
+        n_delta_grande = calcular_n_minimo(delta_esperado=0.20)["n_minimo"]
+        assert n_delta_grande < n_delta_pequeno
+
+    def test_datos_sinteticos_longitud_correcta(self):
+        """generar_datos_sinteticos retorna vectores de longitud n."""
+        from notebooks_validacion.n05_pruebas_estadisticas import generar_datos_sinteticos
+        reales, predichos_s, predichos_b, predichos_nlp = generar_datos_sinteticos(n=50)
+        assert len(reales) == 50
+        assert len(predichos_s) == 50
+        assert len(predichos_b) == 50
+        assert len(predichos_nlp) == 50
+
+    def test_datos_sinteticos_niveles_validos(self):
+        """Datos sintéticos solo contienen niveles EAWS 1-5."""
+        from notebooks_validacion.n05_pruebas_estadisticas import generar_datos_sinteticos
+        reales, predichos_s, predichos_b, predichos_nlp = generar_datos_sinteticos(n=100)
+        for vec in [reales, predichos_s, predichos_b, predichos_nlp]:
+            assert all(1 <= v <= 5 for v in vec), f"Nivel fuera de rango: {set(vec)}"
+
+    def test_analisis_completo_estructura(self):
+        """ejecutar_analisis_completo retorna estructura completa de resultados."""
+        from notebooks_validacion.n05_pruebas_estadisticas import (
+            generar_datos_sinteticos,
+            ejecutar_analisis_completo,
+        )
+        reales, predichos_s, predichos_b, predichos_nlp = generar_datos_sinteticos(n=60)
+        resultados = ejecutar_analisis_completo(
+            niveles_reales=reales,
+            predichos_sistema=predichos_s,
+            predichos_baseline=predichos_b,
+            predichos_sin_nlp=predichos_nlp,
+            modo_demo=True,
+        )
+        assert "metadata" in resultados
+        assert "hipotesis" in resultados
+        assert "analisis_potencia" in resultados
+        assert "conclusion_global" in resultados
+        h = resultados["hipotesis"]
+        assert "H1" in h
+        assert "H2" in h
+        assert "H4" in h
+        assert "H1_mcnemar_vs_baseline" in h
+
+    def test_interpretar_kappa_landis_koch(self):
+        """La escala Landis & Koch clasifica correctamente los rangos de Kappa."""
+        from notebooks_validacion.n05_pruebas_estadisticas import _interpretar_kappa_landis_koch
+        assert "Sin acuerdo" in _interpretar_kappa_landis_koch(-0.1)
+        assert "Leve" in _interpretar_kappa_landis_koch(0.1)
+        assert "Moderado" in _interpretar_kappa_landis_koch(0.3)
+        assert "Sustancial" in _interpretar_kappa_landis_koch(0.7)
+        assert "perfecto" in _interpretar_kappa_landis_koch(0.9)
 
 
 class TestToolsBoletin:

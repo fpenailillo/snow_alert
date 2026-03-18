@@ -359,15 +359,11 @@ def analizar_ubicacion(
 
         # 2. Cubicar zonas
         cubicacion = cubicar_zonas_completo(
-            zona_inicio=resultado_zonas['zona_inicio'],
-            zona_inicio_por_severidad=resultado_zonas['zona_inicio_por_severidad'],
-            zona_transito=resultado_zonas['zona_transito'],
-            zona_deposito=resultado_zonas['zona_deposito'],
-            pendiente=resultado_zonas['pendiente'],
-            aspecto=resultado_zonas['aspecto'],
-            dem=resultado_zonas['dem'],
-            area_buffer=resultado_zonas['area_buffer'],
-            latitud=latitud
+            zonas_analizadas=resultado_zonas,
+            latitud=latitud,
+            longitud=longitud,
+            nombre_ubicacion=nombre,
+            radio_metros=RADIO_ANALISIS
         )
 
         # 3. Calcular índice de riesgo

@@ -163,12 +163,12 @@ def obtener_viento_altura(
             fecha = datetime.utcnow() - timedelta(days=5)
 
         punto = ee.Geometry.Point([longitud, latitud])
-        fecha_inicio = (fecha - timedelta(days=1)).strftime('%Y-%m-%d')
+        fecha_inicio = (fecha - timedelta(days=DIAS_BUSQUEDA_ERA5)).strftime('%Y-%m-%d')
         fecha_fin = fecha.strftime('%Y-%m-%d')
 
-        # Bandas de viento para el nivel especificado
-        banda_u = f'u_component_of_wind'
-        banda_v = f'v_component_of_wind'
+        # Bandas de viento (ERA5/HOURLY single-level: 100m como proxy de altura)
+        banda_u = 'u_component_of_wind_100m'
+        banda_v = 'v_component_of_wind_100m'
 
         # Obtener imagen más reciente
         coleccion = (ee.ImageCollection(COLECCION_ERA5_PRESSURE)
@@ -253,17 +253,19 @@ def obtener_viento_maximo_24h(
         if fecha_fin is None:
             fecha_fin = datetime.utcnow() - timedelta(days=5)
 
-        fecha_inicio = fecha_fin - timedelta(hours=24)
+        # Usar ventana de 7 días (igual que obtener_viento_altura) para
+        # tolerar la latencia variable de ERA5 (puede ser >5 días)
+        fecha_inicio = fecha_fin - timedelta(days=DIAS_BUSQUEDA_ERA5)
         punto = ee.Geometry.Point([longitud, latitud])
 
-        # Obtener todas las horas en las últimas 24h
+        # Obtener horas en la ventana ERA5
         coleccion = (ee.ImageCollection(COLECCION_ERA5_PRESSURE)
             .filterDate(
-                fecha_inicio.strftime('%Y-%m-%dT%H:%M:%S'),
-                fecha_fin.strftime('%Y-%m-%dT%H:%M:%S')
+                fecha_inicio.strftime('%Y-%m-%d'),
+                fecha_fin.strftime('%Y-%m-%d')
             )
             .filterBounds(punto)
-            .select(['u_component_of_wind', 'v_component_of_wind']))
+            .select(['u_component_of_wind_100m', 'v_component_of_wind_100m']))
 
         cantidad = coleccion.size().getInfo()
 
@@ -272,8 +274,8 @@ def obtener_viento_maximo_24h(
 
         # Calcular velocidad para cada imagen
         def agregar_velocidad(imagen):
-            u = imagen.select('u_component_of_wind')
-            v = imagen.select('v_component_of_wind')
+            u = imagen.select('u_component_of_wind_100m')
+            v = imagen.select('v_component_of_wind_100m')
             velocidad = u.pow(2).add(v.pow(2)).sqrt()
             return imagen.addBands(velocidad.rename('wind_speed'))
 
@@ -416,8 +418,8 @@ def obtener_metricas_viento_completas(
             )
             metricas['transporte_eolico_activo'] = transporte.get('transporte_activo')
 
-        # Obtener máximo en 24h
-        viento_max = obtener_viento_maximo_24h(latitud, longitud, NIVEL_DEFAULT, fecha)
+        # Obtener máximo en 24h (pasa None para usar latencia ERA5 interna de 5 días)
+        viento_max = obtener_viento_maximo_24h(latitud, longitud, NIVEL_DEFAULT, None)
 
         if viento_max.get('disponible'):
             metricas['viento_max_24h_ms'] = viento_max.get('viento_max_24h_ms')

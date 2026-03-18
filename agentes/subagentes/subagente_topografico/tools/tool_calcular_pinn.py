@@ -158,10 +158,19 @@ def ejecutar_calcular_pinn(
         factor_temp=factor_temp
     )
 
+    # ─── 6. Propagación de incertidumbre (Taylor 1er orden) ──────────────────
+    uq = _propagar_incertidumbre_pinn(
+        densidad_kg_m3=densidad_kg_m3,
+        pendiente_grados=pendiente_grados,
+        indice_metamorfismo=indice_metamorfismo,
+        fs_base=factor_seguridad,
+    )
+
     return {
         "factor_seguridad_mohr_coulomb": factor_seguridad,
         "estado_manto": estado_manto["estado"],
         "riesgo_falla": estado_manto["riesgo_falla"],
+        "incertidumbre_pinn": uq,
         "metricas_fisicas": {
             "difusividad_termica_m2_s": round(difusividad_termica, 10),
             "conductividad_termica_W_mK": round(conductividad_termica, 4),
@@ -174,6 +183,127 @@ def ejecutar_calcular_pinn(
         },
         "interpretacion": estado_manto["interpretacion"],
         "alertas_pinn": estado_manto["alertas"]
+    }
+
+
+# ─── Incertidumbre PINN (propagación Taylor primer orden) ────────────────────
+
+# Incertidumbres típicas de parámetros de entrada (fuentes documentadas):
+#   ρ: ±50 kg/m³        — Proksch et al. (2015) J. Glaciol., medición de campo
+#   θ: ±2°              — resolución DEM SRTM 30m (Farr et al. 2007)
+#   m: ±0.2             — índice de metamorfismo estimado visualmente
+_SIGMA_DENSIDAD_KG_M3  = 50.0
+_SIGMA_PENDIENTE_GRADOS = 2.0
+_SIGMA_METAMORFISMO     = 0.2
+
+
+def _fs_mohr_coulomb_puro(densidad: float, pendiente_grados: float, metamorfismo: float) -> float:
+    """Calcula solo el factor de seguridad Mohr-Coulomb (sin efectos térmicos).
+
+    Función auxiliar pura para diferenciación numérica.
+    """
+    import math
+    g = 9.81
+    h = 1.0  # espesor referencia
+    pendiente_rad = math.radians(pendiente_grados)
+    cohesion_Pa = max(100.0, (densidad / 200.0) * 1500.0 * (1.5 - metamorfismo))
+    angulo_friccion_rad = math.radians(28.0 + 5.0 * (1.0 - metamorfismo))
+    peso = densidad * g * h
+    tau_normal = peso * math.cos(pendiente_rad)
+    tau_aplicado = peso * math.sin(pendiente_rad)
+    tau_resistencia = cohesion_Pa + tau_normal * math.tan(angulo_friccion_rad)
+    return tau_resistencia / max(tau_aplicado, 1.0)
+
+
+def _propagar_incertidumbre_pinn(
+    densidad_kg_m3: float,
+    pendiente_grados: float,
+    indice_metamorfismo: float,
+    fs_base: float,
+) -> dict:
+    """
+    Propaga la incertidumbre de los parámetros de entrada al factor de seguridad
+    mediante diferencias finitas centradas de primer orden (expansión de Taylor):
+
+        σ_FS² = (∂FS/∂ρ)² σ_ρ² + (∂FS/∂θ)² σ_θ² + (∂FS/∂m)² σ_m²
+
+    IC 95% = FS ± 1.96 × σ_FS   (asumiendo normalidad por teorema central del límite)
+
+    La sensibilidad s_i = |∂FS/∂x_i| × σ_i representa la contribución absoluta
+    de cada parámetro a la incertidumbre total — útil para priorizar mediciones
+    de campo (Saltelli et al. 2008, "Global Sensitivity Analysis").
+
+    References:
+        Proksch et al. (2015) J. Glaciol. 61(225):273-284  — incertidumbre ρ
+        Farr et al. (2007) Rev. Geophys. 45, RG2004        — precisión DEM SRTM
+        Saltelli et al. (2008) "Global Sensitivity Analysis: The Primer"
+
+    Returns:
+        dict con ic_95_inf, ic_95_sup, sigma_fs, sensibilidades, coeficiente_variacion
+    """
+    import math
+
+    # Paso de diferenciación: 1% de cada parámetro (estable numéricamente)
+    delta_rho = max(0.5, densidad_kg_m3 * 0.01)
+    delta_theta = max(0.01, pendiente_grados * 0.01)
+    delta_meta = max(0.001, indice_metamorfismo * 0.01)
+
+    # Derivadas parciales por diferencias finitas centradas
+    dfs_drho = (
+        _fs_mohr_coulomb_puro(densidad_kg_m3 + delta_rho, pendiente_grados, indice_metamorfismo)
+        - _fs_mohr_coulomb_puro(densidad_kg_m3 - delta_rho, pendiente_grados, indice_metamorfismo)
+    ) / (2 * delta_rho)
+
+    dfs_dtheta = (
+        _fs_mohr_coulomb_puro(densidad_kg_m3, pendiente_grados + delta_theta, indice_metamorfismo)
+        - _fs_mohr_coulomb_puro(densidad_kg_m3, pendiente_grados - delta_theta, indice_metamorfismo)
+    ) / (2 * delta_theta)
+
+    # Metamorfismo: clampear para evitar valores negativos
+    meta_hi = min(1.99, indice_metamorfismo + delta_meta)
+    meta_lo = max(0.01, indice_metamorfismo - delta_meta)
+    dfs_dmeta = (
+        _fs_mohr_coulomb_puro(densidad_kg_m3, pendiente_grados, meta_hi)
+        - _fs_mohr_coulomb_puro(densidad_kg_m3, pendiente_grados, meta_lo)
+    ) / (meta_hi - meta_lo)
+
+    # Contribuciones absolutas de cada parámetro: |∂FS/∂xᵢ| × σᵢ
+    contrib_rho   = abs(dfs_drho)   * _SIGMA_DENSIDAD_KG_M3
+    contrib_theta = abs(dfs_dtheta) * _SIGMA_PENDIENTE_GRADOS
+    contrib_meta  = abs(dfs_dmeta)  * _SIGMA_METAMORFISMO
+
+    # Varianza total (independencia asumida → suma cuadrática)
+    sigma_fs = math.sqrt(contrib_rho**2 + contrib_theta**2 + contrib_meta**2)
+
+    # Intervalo de confianza 95% (z=1.96)
+    z95 = 1.96
+    ic_inf = round(max(0.0, fs_base - z95 * sigma_fs), 3)
+    ic_sup = round(fs_base + z95 * sigma_fs, 3)
+
+    # Coeficiente de variación relativa
+    cv = round(sigma_fs / max(fs_base, 0.001), 4)
+
+    # Parámetro dominante (mayor contribución a σ_FS)
+    contribs = {"densidad": contrib_rho, "pendiente": contrib_theta, "metamorfismo": contrib_meta}
+    param_dominante = max(contribs, key=lambda k: contribs[k])
+
+    return {
+        "ic_95_inf": ic_inf,
+        "ic_95_sup": ic_sup,
+        "sigma_fs": round(sigma_fs, 4),
+        "coeficiente_variacion": cv,
+        "sensibilidades": {
+            "densidad_kg_m3":     round(contrib_rho,   4),
+            "pendiente_grados":   round(contrib_theta, 4),
+            "metamorfismo":       round(contrib_meta,  4),
+        },
+        "parametro_dominante": param_dominante,
+        "metodo": "Taylor_1er_orden_diferencias_finitas",
+        "referencias": [
+            "Proksch et al. (2015) J. Glaciol. 61(225):273-284",
+            "Farr et al. (2007) Rev. Geophys. 45, RG2004",
+            "Saltelli et al. (2008) Global Sensitivity Analysis: The Primer",
+        ],
     }
 
 

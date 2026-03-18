@@ -7,7 +7,7 @@ Incluye GeoTIFF, PNG preview y thumbnails.
 
 import logging
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, Any, Optional, Tuple
 import unicodedata
 import re
@@ -114,11 +114,11 @@ def construir_ruta_gcs(
         nombre_archivo = f"{nombre_norm}_{tipo_captura}_{fuente_norm}.{extension}"
     elif tipo_archivo == 'preview':
         directorio = 'preview'
-        nombre_archivo = f"{nombre_norm}_{tipo_captura}_{DIMENSION_PREVIEW}px.{extension}"
+        nombre_archivo = f"{nombre_norm}_{tipo_captura}_{fuente_norm}_{DIMENSION_PREVIEW}px.{extension}"
     elif tipo_archivo == 'thumbnail':
         directorio = 'thumbnail'
-        # Thumbnails se sobrescriben con la más reciente
-        nombre_archivo = f"{nombre_norm}_ultimo_{DIMENSION_THUMBNAIL}px.{extension}"
+        # Thumbnails se sobrescriben con la más reciente (por producto)
+        nombre_archivo = f"{nombre_norm}_{fuente_norm}_ultimo_{DIMENSION_THUMBNAIL}px.{extension}"
         # Para thumbnails, no usamos fecha en la ruta
         return f"{PREFIJO_SATELITAL}/{directorio}/{nombre_norm}/{nombre_archivo}"
     else:
@@ -458,7 +458,7 @@ def guardar_thumbnail(
         str: URI del archivo
     """
     # Para thumbnails usamos fecha ficticia ya que se sobrescriben
-    fecha_dummy = datetime.utcnow()
+    fecha_dummy = datetime.now(timezone.utc)
     ruta = construir_ruta_gcs(
         nombre_ubicacion, fecha_dummy, 'ultimo',
         tipo_producto, 'thumbnail', 'png'
@@ -466,7 +466,7 @@ def guardar_thumbnail(
 
     metadata = {
         'ubicacion': nombre_ubicacion,
-        'ultima_actualizacion': datetime.utcnow().isoformat(),
+        'ultima_actualizacion': datetime.now(timezone.utc).isoformat(),
         'tipo_producto': tipo_producto,
         'dimension': str(DIMENSION_THUMBNAIL),
     }
@@ -492,7 +492,8 @@ def descargar_y_guardar_producto(
     producto: Dict[str, Any],
     tipo_producto: str,
     bandas_geotiff: list,
-    escala: int
+    escala: int,
+    radio_metros: Optional[int] = None,
 ) -> Dict[str, str]:
     """
     Descarga un producto completo y lo guarda en GCS.
@@ -511,12 +512,13 @@ def descargar_y_guardar_producto(
         tipo_producto: 'visual', 'ndsi', 'lst', 'era5'
         bandas_geotiff: Bandas a incluir en el GeoTIFF
         escala: Resolución en metros
+        radio_metros: Radio del ROI en metros (default: RADIO_TILE_METROS)
 
     Returns:
         dict: URIs de los archivos guardados
     """
     uris = {}
-    roi = crear_roi(latitud, longitud)
+    roi = crear_roi(latitud, longitud, radio_metros or RADIO_TILE_METROS)
 
     imagen = producto.get('imagen')
     vis_params = producto.get('vis_params', {})
@@ -639,12 +641,14 @@ def descargar_y_guardar_todos_los_productos(
             'vis_params': productos['era5'].get('vis_params', {}),
             'fuente': 'ERA5-Land',
         }
+        # ERA5-Land es ~9-11km/pixel. ROI de 5km no captura pixeles → usar 25km
         uris = descargar_y_guardar_producto(
             cliente_gcs, bucket_nombre, nombre_ubicacion,
             latitud, longitud, fecha, tipo_captura,
             producto_era5, 'era5',
             ['snow_depth_m', 'swe_m', 'snow_cover_frac'],
-            resoluciones.get('era5', 11000)
+            resoluciones.get('era5', 11000),
+            radio_metros=25000,
         )
         todas_las_uris.update(uris)
 

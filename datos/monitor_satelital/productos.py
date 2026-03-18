@@ -7,7 +7,7 @@ LST (temperatura superficial) y ERA5-Land (gap-filler sin nubes).
 """
 
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, Any, Optional, Tuple, List
 
 import ee
@@ -92,7 +92,7 @@ def obtener_imagen_mas_reciente(
         Tuple: (imagen o None, metadatos dict)
     """
     try:
-        hoy = datetime.utcnow()
+        hoy = datetime.now(timezone.utc)
         desde = (hoy - timedelta(days=dias_atras)).strftime('%Y-%m-%d')
         hasta = (hoy + timedelta(days=1)).strftime('%Y-%m-%d')  # Incluir hoy
 
@@ -122,7 +122,7 @@ def obtener_imagen_mas_reciente(
         imagen = coleccion.first()
         info = imagen.getInfo()
         timestamp_ms = info['properties'].get('system:time_start', 0)
-        fecha_captura = datetime.utcfromtimestamp(timestamp_ms / 1000)
+        fecha_captura = datetime.fromtimestamp(timestamp_ms / 1000, tz=timezone.utc)
 
         # Calcular antigüedad
         antiguedad_horas = (hoy - fecha_captura).total_seconds() / 3600
@@ -328,17 +328,18 @@ def obtener_imagen_modis_ndsi(
 
 def aplicar_mascara_nubes_ndsi(imagen: ee.Image) -> ee.Image:
     """
-    Aplica máscara de nubes al producto NDSI.
-    NDSI_Snow_Cover = 250 indica nubes.
+    Aplica máscara al producto NDSI: retiene solo píxeles con datos válidos (0-100).
+    Valores > 100 son fill/nubes/agua/sin-decisión y se enmascaran.
 
     Args:
         imagen: Imagen MOD10A1/MYD10A1
 
     Returns:
-        ee.Image: Imagen con nubes enmascaradas
+        ee.Image: Imagen con solo píxeles válidos (0-100)
     """
     ndsi = imagen.select(BANDAS_MODIS_NIEVE['ndsi_snow_cover'])
-    mascara = ndsi.neq(NDSI_VALOR_NUBE)
+    # Solo mantener píxeles con valores válidos de cobertura de nieve (0-100)
+    mascara = ndsi.lte(100)
     return imagen.updateMask(mascara)
 
 
@@ -394,7 +395,10 @@ def procesar_modis_lst_celsius(imagen: ee.Image, periodo: str = 'dia') -> ee.Ima
              if periodo == 'dia'
              else BANDAS_MODIS_LST['lst_noche'])
 
-    lst_kelvin = imagen.select([banda]).multiply(LST_FACTOR_ESCALA)
+    # Enmascarar píxeles de relleno (valor 0 = sin datos en MOD11A1)
+    banda_img = imagen.select([banda])
+    mascara_fill = banda_img.gt(0)
+    lst_kelvin = banda_img.updateMask(mascara_fill).multiply(LST_FACTOR_ESCALA)
     lst_celsius = lst_kelvin.subtract(KELVIN_A_CELSIUS)
 
     return lst_celsius.rename(['LST_Celsius'])
@@ -470,7 +474,7 @@ def obtener_vis_params_era5_snow() -> Dict[str, Any]:
 
 def obtener_imagen_sentinel2(
     roi: ee.Geometry,
-    max_nubes: int = 30
+    max_nubes: int = 60
 ) -> Tuple[Optional[ee.Image], Dict[str, Any]]:
     """
     Busca imagen Sentinel-2 reciente de alta resolución.
@@ -603,6 +607,8 @@ def obtener_todos_los_productos(
             imagen_ndsi_masked = aplicar_mascara_nubes_ndsi(imagen_ndsi)
             productos['ndsi'] = {
                 'imagen': procesar_modis_ndsi(imagen_ndsi_masked),
+                # Banda cruda sin máscara para calcular % nubes (valor 250 = nube)
+                'imagen_raw': imagen_ndsi.select([BANDAS_MODIS_NIEVE['ndsi_snow_cover']]),
                 'metadatos': meta_ndsi,
                 'vis_params': obtener_vis_params_ndsi(),
                 'fuente': 'MODIS_Terra',

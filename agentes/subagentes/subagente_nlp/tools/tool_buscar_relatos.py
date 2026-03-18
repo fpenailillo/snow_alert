@@ -31,16 +31,17 @@ TOOL_BUSCAR_RELATOS = {
 }
 
 
-def ejecutar_buscar_relatos(consultor, ubicacion: str, limite: int = 20) -> dict:
+def ejecutar_buscar_relatos(ubicacion: str, limite: int = 20) -> dict:
     """
     Busca relatos históricos de montañistas para la ubicación.
 
     Args:
-        consultor: instancia de ConsultorBigQuery
         ubicacion: nombre de la ubicación
         limite: número máximo de relatos
 
     Returns:
         dict con lista de relatos y metadatos
     """
+    from agentes.datos.consultor_bigquery import ConsultorBigQuery
+    consultor = ConsultorBigQuery()
     return consultor.obtener_relatos_ubicacion(ubicacion=ubicacion, limite=limite)
