@@ -128,9 +128,9 @@ snow_alert/
 | `pronostico_horas` | ✅ ~2.500 filas, 61 ubicaciones | Pronóstico horario 76h |
 | `pronostico_dias` | ✅ ~17.000 filas, 63 ubicaciones | Pronóstico diario 10 días |
 | `imagenes_satelitales` | ✅ 376 filas | Métricas MODIS (NDSI, snowline, pct_cobertura) |
-| `zonas_avalancha` | ⚠️ 37 filas, re-run pendiente | Análisis topográfico SRTM mensual (fix desplegado) |
+| `zonas_avalancha` | ✅ 37 filas | Análisis topográfico SRTM mensual (pendiente_max_media=72.5°, índice_riesgo_medio=63.18) |
 | `relatos_montanistas` | ✅ 3.131 rutas | Relatos Andeshandbook (37 campos) |
-| `boletines_riesgo` | ⬜ Schema listo (34 campos) | Output del sistema multi-agente |
+| `boletines_riesgo` | ✅ 10 boletines | Output del sistema multi-agente (lote piloto 2026-03-18, niveles 1-5) |
 
 ---
 
@@ -138,7 +138,7 @@ snow_alert/
 
 | ID | Hipótesis | Métrica objetivo | Estado |
 |----|-----------|-----------------|--------|
-| H1 | F1-score macro ≥ 75% en predicción EAWS 24-72h | F1-macro | ⬜ Requiere boletines piloto |
+| H1 | F1-score macro ≥ 75% en predicción EAWS 24-72h | F1-macro | ⚠️ 10 boletines generados — requiere ≥50 para calcular métricas |
 | H2 | NLP mejora precisión > 5pp vs sin NLP | Delta F1 ablación | ✅ Confirmada sintéticamente (+7.9pp) |
 | H3 | Transfer learning SLF supera modelo solo chileno | QWK | ⬜ Pendiente datos SLF |
 | H4 | ≥ 75% concordancia con Snowlab Chile | Cohen's Kappa ≥ 0.60 | ⬜ Pendiente datos Snowlab |
@@ -151,7 +151,8 @@ snow_alert/
 # Requisitos
 Python 3.11+
 gcloud CLI autenticado (fpenailillom@correo.uss.cl)
-ANTHROPIC_API_KEY  o  CLAUDE_CODE_OAUTH_TOKEN
+ANTHROPIC_API_KEY  o  CLAUDE_CODE_OAUTH_TOKEN  (local)
+# En producción: Databricks token leído desde GCP Secret Manager automáticamente
 
 # Instalar dependencias
 cd agentes
@@ -196,13 +197,16 @@ gcloud run jobs execute orquestador-avalanchas --region=us-central1
 - 6 Cloud Functions activas recolectando datos 3x/día
 - 5 subagentes implementados con agentic loop (S1–S5)
 - 3.131 relatos Andeshandbook cargados en BigQuery (37 campos)
-- Pipeline completo funciona end-to-end en ~114s con 5/5 subagentes
-- LLM alternativo Databricks/Qwen3-80B operativo como fallback a Anthropic
+- Pipeline completo end-to-end en ~860s por lote de 10 ubicaciones
+- LLM producción: Databricks/Qwen3-80B vía GCP Secret Manager
+- Cloud Run Job `orquestador-avalanchas` desplegado (imagen `74b2359`)
+- 10 boletines piloto en BigQuery + GCS (2026-03-18, niveles 1-5)
+- `zonas_avalancha`: 37 zonas con datos correctos (pendiente_max_media=72.5°)
 - 126 tests unitarios passing
 - Framework de validación académica completo (F1, Kappa, QWK, Techel 2022)
 - H2 confirmada sintéticamente: NLP mejora +7.9pp sobre baseline
 
 ### ⚠️ Pendiente
-- Re-ejecutar `analizador-satelital-zonas-riesgosas-avalanchas` para regenerar `zonas_avalancha` con pendientes correctas
-- Desplegar Cloud Run Job `orquestador-avalanchas` en producción
-- Generar ≥ 50 boletines piloto para calcular métricas reales H1/H4
+- Generar ≥ 50 boletines piloto para calcular métricas reales H1/H4 (10/50 completados)
+- Obtener ground truth para calcular F1-score real (H1: ≥75%)
+- Comparación con Snowlab Chile para H4 (Kappa ≥ 0.60)

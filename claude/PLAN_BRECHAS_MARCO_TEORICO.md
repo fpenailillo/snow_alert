@@ -80,12 +80,10 @@
 - **Estado:** ✅ 2026-03-17 — `tool_clasificar_eaws.py` llama `estimar_tamano_potencial()`, fallback=2
 - **Ajuste viento:** >40km/h → +1 frecuencia, >70km/h → +2 (C3)
 
-#### B7. ⚠️ PARCIAL — Tabla `zonas_avalancha` con 37 filas pero datos incorrectos pre-fix
-- **Estado 2026-03-18:** 37 filas presentes, pero `pendiente_max_inicio=0.0` e `indice_riesgo_topografico=25.0` fijos para todas las ubicaciones
-- **Causa raíz:** Bug en `datos/analizador_avalanchas/cubicacion.py` — 12 key mismatches en el dict de salida de `cubicar_zonas_completo()` → `pendiente_max_inicio` siempre leído como 0 → componente pendiente=0.0 → índice siempre 25.0 (solo componente área)
-- **Fix desplegado 2026-03-18:** Claves corregidas (`pendiente_max→pendiente_max_inicio`, `aspecto_predominante→aspecto_predominante_inicio`, `ha_zona_inicio_total→zona_inicio_ha`, etc.) y re-deploy de `analizador-satelital-zonas-riesgosas-avalanchas`
-- **Pendiente:** Re-ejecutar función para regenerar datos con valores correctos: `gcloud functions call analizador-satelital-zonas-riesgosas-avalanchas --gen2 --region=us-central1`
-- **Mitigación:** Fallbacks robustos en C1/C2 — el pipeline nunca falla
+#### B7. ✅ CERRADA — Tabla `zonas_avalancha` regenerada con datos correctos (2026-03-18)
+- **Estado:** ✅ 37/37 zonas con datos correctos: `pendiente_max_media=72.5°`, `indice_riesgo_medio=63.18`
+- **Fix aplicado:** `datos/analizador_avalanchas/cubicacion.py` — 12 key mismatches corregidos + función re-ejecutada
+- **Resultado EAWS S1:** `indice_riesgo_topografico` ahora varía por zona (antes fijo en 25.0 para todas)
 
 ### BRECHAS JUSTIFICABLES ✅ TODAS DOCUMENTADAS
 
@@ -206,17 +204,20 @@ Con API Key:  A2 → A3 → métricas H1/H2/H4
 ### Pendiente GCP (prioridad 1 — desbloquean todo lo demás)
 - [x] **Cargar 3,138 rutas** en `relatos_montanistas` (37 campos) — ✅ 2026-03-18 (3,131 con LLM, 41 avalancha, riesgo promedio 4.56)
 - [ ] **Migración schema** `boletines_riesgo` 27→34 campos — `python migrar_schema_boletines.py`
-- [ ] **Re-poblar `zonas_avalancha` post-fix** — `gcloud functions call analizador-satelital-zonas-riesgosas-avalanchas --gen2 --region=us-central1` (fix cubicacion.py desplegado 2026-03-18 — datos actuales tienen pendiente=0 y índice=25.0)
-- [ ] **Desplegar Cloud Run Job** `orquestador-avalanchas` — `gcloud run jobs create ...`
+- [x] **Re-poblar `zonas_avalancha` post-fix** — ✅ 2026-03-18 — 37/37 zonas correctas (`pendiente_max_media=72.5°`, `indice_riesgo_medio=63.18`)
+- [x] **Desplegar Cloud Run Job** `orquestador-avalanchas` — ✅ 2026-03-18 — imagen `74b2359`, LLM Databricks, `--guardar` activo
 - [ ] **Verificar imágenes diurnas** NDSI/visual/pct_nubes (próxima captura 10-16 UTC Chile)
 
-### Pendiente ANTHROPIC_API_KEY (prioridad 2 — métricas de la tesina)
-- [ ] Tabla `boletines_riesgo` con ≥50 boletines generados
+### Pendiente (métricas de la tesina)
+- [ ] Tabla `boletines_riesgo` con ≥50 boletines generados — ⚠️ 10/50 (lote piloto 2026-03-18, ejecutar job nuevamente para más ubicaciones)
 - [ ] F1-score macro calculado y reportado (H1: ≥75%)
 - [ ] Análisis de ablación con/sin NLP (H2: >5pp — H2 sintética ya confirmada +7.9pp)
 - [ ] Comparación con Snowlab si datos disponibles (H4: Kappa≥0.60)
 
 ### Completado ✅
+- [x] **Fix almacenador.py** — NameError `resultado→resultado_boletin` en insert BigQuery (2026-03-18) + `--guardar` en Dockerfile ENTRYPOINT
+- [x] **Cloud Run Job desplegado** — `orquestador-avalanchas` en producción (imagen `74b2359`, Databricks LLM)
+- [x] **10 boletines piloto** en BigQuery `clima.boletines_riesgo` + GCS (2026-03-18, niveles 1-5, nivel medio 3.3)
 - [x] **Fix cubicacion.py** — 12 key mismatches corregidos (2026-03-18): `pendiente_max→pendiente_max_inicio`, `aspecto_predominante→aspecto_predominante_inicio`, `ha_zona_inicio_total→zona_inicio_ha`, etc. → `indice_riesgo_topografico` ya no está fijo en 25.0
 - [x] **Fix indicadores_nieve.py** — banda `NDSI_Snow_Cover→NDSI` en `calcular_snowline()` y `calcular_cambio_cobertura()` (2026-03-18) → snowline, pct_cobertura_nieve, delta_pct_nieve ya no son NULL en BigQuery
 - [x] **Fix metricas.py** — guard NoneType para `sar_pct_nieve_humeda` (2026-03-18)

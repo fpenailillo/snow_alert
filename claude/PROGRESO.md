@@ -1,6 +1,6 @@
 # PROGRESO — snow_alert Sistema Multi-Agente
 
-## Última actualización: 2026-03-18
+## Última actualización: 2026-03-18 (despliegue producción)
 
 ## Fases
 
@@ -122,6 +122,18 @@
 - ✅ `notebooks_validacion/06_analisis_nlp_sintetico.py` — H2 sintética confirmada: delta F1 = +7.9pp (>5pp umbral) con modelo NLP unidireccional (corrección solo upward, principio precaución, Techel & Schweizer 2017)
 - ✅ `notebooks_validacion/n06_analisis_nlp_sintetico.py` — copia importable (mismo patrón que n05)
 - ✅ Tests: 135 passed — TestNLPSintetico ×9 (H2 estructura, delta>0, H2 confirmada, zonas, sensibilidad, unidireccional)
+
+## Despliegue producción (2026-03-18)
+
+- ✅ `zonas_avalancha` regenerada — 37/37 zonas con datos correctos: `pendiente_max_media=72.5°`, `indice_riesgo_medio=63.18` (antes 0° y 25.0 fijo pre-fix)
+- ✅ `Cloud Run Job orquestador-avalanchas` desplegado — imagen `gcr.io/climas-chileno/snow-alert-agentes:74b2359`, LLM Databricks/Qwen3-80B vía Secret Manager
+- ✅ `cloudbuild.yaml` — create-or-update automático, sin dependencia del secret `claude-oauth-token`
+- ✅ `Dockerfile` — `--guardar` añadido al ENTRYPOINT (siempre guarda en BQ + GCS al ejecutar en producción)
+- ✅ `almacenador.py` — fix NameError línea 275: `resultado` → `resultado_boletin` al insertar en BigQuery
+- ✅ **10 boletines piloto** generados y guardados — BigQuery `clima.boletines_riesgo` + GCS `boletines/*/2026/03/18/*.json`
+  - Niveles: Antuco=5, Cerro Bayo=5, Cerro Castor=5, Antillanca=4, Bariloche=4, Brian Head=3, Aspen=2, Banff=2, Arizona Snowbowl=2, Cerro Catedral=2 (Nivel medio: 3.3)
+  - Confianza: Alta/Media/Baja según disponibilidad de datos satelitales y topográficos
+  - Tiempo de ejecución: ~859s por lote de 10 ubicaciones
 
 ## Estado de tests
 
