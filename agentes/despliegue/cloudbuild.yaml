@@ -20,21 +20,26 @@ steps:
       - '--all-tags'
       - 'gcr.io/$PROJECT_ID/snow-alert-agentes'
 
-  # Paso 3: Actualizar el Cloud Run Job con la nueva imagen
+  # Paso 3: Crear o actualizar el Cloud Run Job con la nueva imagen
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
-    id: 'actualizar-job'
-    entrypoint: 'gcloud'
+    id: 'crear-o-actualizar-job'
+    entrypoint: 'bash'
     args:
-      - 'run'
-      - 'jobs'
-      - 'update'
-      - 'orquestador-avalanchas'
-      - '--image=gcr.io/$PROJECT_ID/snow-alert-agentes:$COMMIT_SHA'
-      - '--region=us-central1'
-      - '--project=$PROJECT_ID'
-
-substitutions:
-  _REGION: us-central1
+      - '-c'
+      - |
+        gcloud run jobs describe orquestador-avalanchas \
+          --region=us-central1 --project=$PROJECT_ID > /dev/null 2>&1 \
+        && gcloud run jobs update orquestador-avalanchas \
+            --image=gcr.io/$PROJECT_ID/snow-alert-agentes:$COMMIT_SHA \
+            --region=us-central1 --project=$PROJECT_ID \
+        || gcloud run jobs create orquestador-avalanchas \
+            --image=gcr.io/$PROJECT_ID/snow-alert-agentes:$COMMIT_SHA \
+            --region=us-central1 --project=$PROJECT_ID \
+            --memory=4Gi --cpu=2 \
+            --task-timeout=3600 \
+            --max-retries=1 \
+            --service-account=funciones-clima-sa@climas-chileno.iam.gserviceaccount.com \
+            --set-env-vars=ID_PROYECTO=climas-chileno,DATASET_ID=clima,REGION=us-central1
 
 options:
   logging: CLOUD_LOGGING_ONLY

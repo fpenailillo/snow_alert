@@ -25,12 +25,8 @@ spec:
                   value: clima
                 - name: REGION
                   value: us-central1
-                # Token OAuth para la API de Claude (desde Secret Manager)
-                - name: CLAUDE_CODE_OAUTH_TOKEN
-                  valueFrom:
-                    secretKeyRef:
-                      name: claude-oauth-token
-                      key: latest
+                # LLM: usa Databricks por defecto (token leído desde Secret Manager en runtime)
+                # Secret: projects/climas-chileno/secrets/databricks-token
               # Tiempo máximo de ejecución: 60 minutos
               # (5 subagentes × ~20 ubicaciones × ~3 min/ubicación ≈ 50 min)
           timeoutSeconds: 3600

@@ -36,5 +36,5 @@ RUN useradd --create-home --shell /bin/bash appuser && \
     chown -R appuser:appuser /app
 USER appuser
 
-# El Job de Cloud Run ejecuta generar_todos.py
-ENTRYPOINT ["python", "agentes/scripts/generar_todos.py"]
+# El Job de Cloud Run ejecuta generar_todos.py y guarda en BigQuery + GCS
+ENTRYPOINT ["python", "agentes/scripts/generar_todos.py", "--guardar"]

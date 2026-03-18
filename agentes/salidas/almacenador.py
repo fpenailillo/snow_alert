@@ -272,7 +272,7 @@ def guardar_boletin(resultado_boletin: dict) -> dict:
             "fuente_tamano_eaws": resultado_boletin.get("fuente_tamano_eaws"),
             "viento_kmh": res_meteo.get("viento_kmh"),
             "subagentes_degradados": json.dumps(
-                resultado.get("subagentes_degradados", [])
+                resultado_boletin.get("subagentes_degradados", [])
             ),
         }
 
