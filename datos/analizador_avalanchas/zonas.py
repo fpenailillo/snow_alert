@@ -422,7 +422,7 @@ def exportar_mapa_gcs(
         image=imagen.clip(area_buffer),
         description=f'mapa_zonas_{nombre_archivo}',
         bucket=bucket,
-        fileNamePrefix=f'topografia/mapas_riesgo/{nombre_archivo}',
+        fileNamePrefix=f'{nombre_archivo}/topografia/mapas_riesgo/{nombre_archivo}',
         scale=escala,
         region=area_buffer,
         fileFormat='GeoTIFF',

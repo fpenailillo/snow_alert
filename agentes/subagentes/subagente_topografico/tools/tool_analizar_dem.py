@@ -62,8 +62,23 @@ def ejecutar_analizar_dem(nombre_ubicacion: str) -> dict:
             "disponible": False,
             "ubicacion": nombre_ubicacion,
             "mensaje": "Sin datos topográficos en BigQuery (pipeline mensual aún no ejecutado)",
-            "metricas_pinn": _calcular_metricas_pinn_defecto()
+            "metricas_pinn": _calcular_metricas_pinn_defecto(),
+            "pendientes_detalladas": {"disponible": False}
         }
+
+    # Enriquecer con datos de pendientes detalladas (NASADEM)
+    pendientes = consultor.obtener_pendientes_detalladas(nombre_ubicacion)
+    if pendientes.get("disponible"):
+        logger.info(
+            f"[AnalizarDEM] {nombre_ubicacion} → datos de pendientes detalladas disponibles "
+            f"(índice_riesgo={pendientes.get('indice_riesgo_topografico')}, "
+            f"pct_optimo={pendientes.get('pct_optimo_avalancha')}%)"
+        )
+    else:
+        logger.info(
+            f"[AnalizarDEM] {nombre_ubicacion} → sin datos de pendientes detalladas, "
+            f"usando solo perfil topográfico base"
+        )
 
     # Enriquecer con métricas para PINN
     pendiente = perfil.get("pendiente_media_inicio", 35.0)
@@ -118,7 +133,8 @@ def ejecutar_analizar_dem(nombre_ubicacion: str) -> dict:
             "tamano_estimado_eaws": perfil.get("tamano_estimado_eaws")
         },
         "metricas_pinn": metricas_pinn,
-        "interpretacion_zonas": interpretacion_zonas
+        "interpretacion_zonas": interpretacion_zonas,
+        "pendientes_detalladas": pendientes if pendientes.get("disponible") else {"disponible": False}
     }
 
 

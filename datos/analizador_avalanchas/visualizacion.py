@@ -467,7 +467,7 @@ def guardar_visualizaciones_gcs(
     timestamp_str = fecha_analisis.strftime('%Y%m%d_%H%M%S')
 
     bucket = cliente_gcs.bucket(bucket_nombre)
-    prefijo = f'topografia/visualizaciones/{fecha_str}'
+    prefijo = f'{nombre_norm}/topografia/visualizaciones/{fecha_str}'
 
     try:
         # Guardar mapa PNG

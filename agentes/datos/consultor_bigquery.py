@@ -521,6 +521,95 @@ class ConsultorBigQuery:
             logger.error(f"Error consultando perfil topográfico para {ubicacion}: {e}")
             return {"error": str(e)}
 
+    def obtener_pendientes_detalladas(self, ubicacion: str) -> dict:
+        """
+        Última fila de pendientes_detalladas para la ubicación.
+
+        Contiene métricas detalladas de pendiente y aspecto calculadas con
+        NASADEM via Earth Engine: distribución EAWS, histograma, índice de
+        riesgo compuesto y áreas en hectáreas.
+
+        Args:
+            ubicacion: Nombre exacto de la ubicación
+
+        Returns:
+            dict con campos enriquecidos para el subagente topográfico,
+            o {"disponible": False, "razon": "..."} si no hay datos
+        """
+        logger.info(f"Consultando pendientes detalladas para: {ubicacion}")
+        try:
+            sql = """
+                SELECT
+                    pct_optimo_avalancha,
+                    pct_laderas_sur,
+                    indice_riesgo_topografico,
+                    pendiente_media,
+                    pendiente_max,
+                    pendiente_p90,
+                    histograma_pendientes,
+                    area_avalancha_ha,
+                    pct_area_avalancha,
+                    pct_terreno_moderado,
+                    pct_inicio_posible,
+                    pct_severo,
+                    pct_paredes,
+                    pendiente_p50,
+                    elevacion_min,
+                    elevacion_max,
+                    elevacion_media,
+                    desnivel_m,
+                    aspecto_predominante,
+                    area_total_ha,
+                    fuente_dem,
+                    resolucion_m,
+                    radio_analisis_m,
+                    fecha_analisis
+                FROM `{proyecto}.{dataset}.pendientes_detalladas`
+                WHERE nombre_ubicacion = @ubicacion
+                ORDER BY fecha_analisis DESC
+                LIMIT 1
+            """.format(proyecto=self.GCP_PROJECT, dataset=self.DATASET)
+
+            parametros = [
+                bigquery.ScalarQueryParameter("ubicacion", "STRING", ubicacion)
+            ]
+
+            filas = self._ejecutar_query(sql, parametros)
+
+            if not filas:
+                return {
+                    "disponible": False,
+                    "razon": "Sin análisis de pendientes detalladas disponible"
+                }
+
+            resultado = filas[0]
+            resultado["disponible"] = True
+
+            # Serializar fecha
+            if resultado.get("fecha_analisis") and hasattr(resultado["fecha_analisis"], "isoformat"):
+                resultado["fecha_analisis"] = resultado["fecha_analisis"].isoformat()
+
+            # Deserializar histograma_pendientes (almacenado como JSON string)
+            histograma_raw = resultado.get("histograma_pendientes")
+            if histograma_raw and isinstance(histograma_raw, str):
+                try:
+                    import json
+                    resultado["histograma_pendientes"] = json.loads(histograma_raw)
+                except (ValueError, TypeError) as e_json:
+                    logger.warning(
+                        f"No se pudo deserializar histograma_pendientes para {ubicacion}: {e_json}"
+                    )
+                    resultado["histograma_pendientes"] = None
+
+            return resultado
+
+        except (google_exceptions.DeadlineExceeded, concurrent.futures.TimeoutError):
+            logger.error(f"Timeout al consultar pendientes detalladas para: {ubicacion}")
+            return {"error": f"Timeout después de {self.TIMEOUT_SEGUNDOS}s"}
+        except Exception as e:
+            logger.error(f"Error consultando pendientes detalladas para {ubicacion}: {e}")
+            return {"error": str(e)}
+
     def listar_ubicaciones_con_datos(self) -> list:
         """
         Ubicaciones con condiciones_actuales en las últimas 24h.

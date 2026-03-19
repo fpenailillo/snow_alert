@@ -1,0 +1,164 @@
+[
+  {
+    "name": "nombre_ubicacion",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "Nombre de la ubicación analizada (ej. Portillo, Valle Nevado)"
+  },
+  {
+    "name": "latitud",
+    "type": "FLOAT",
+    "mode": "NULLABLE",
+    "description": "Latitud en grados decimales (negativo = hemisferio sur)"
+  },
+  {
+    "name": "longitud",
+    "type": "FLOAT",
+    "mode": "NULLABLE",
+    "description": "Longitud en grados decimales (negativo = oeste)"
+  },
+  {
+    "name": "fecha_analisis",
+    "type": "TIMESTAMP",
+    "mode": "REQUIRED",
+    "description": "Fecha y hora UTC en que se realizó el análisis"
+  },
+  {
+    "name": "fuente_dem",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Fuente del modelo digital de elevación: NASADEM o SRTM"
+  },
+  {
+    "name": "resolucion_m",
+    "type": "INTEGER",
+    "mode": "NULLABLE",
+    "description": "Resolución espacial del DEM en metros (típicamente 30)"
+  },
+  {
+    "name": "radio_analisis_m",
+    "type": "INTEGER",
+    "mode": "NULLABLE",
+    "description": "Radio del buffer circular de análisis en metros"
+  },
+  {
+    "name": "elevacion_min",
+    "type": "FLOAT",
+    "mode": "NULLABLE",
+    "description": "Elevación mínima dentro del área de análisis (metros sobre nivel del mar)"
+  },
+  {
+    "name": "elevacion_max",
+    "type": "FLOAT",
+    "mode": "NULLABLE",
+    "description": "Elevación máxima dentro del área de análisis (metros sobre nivel del mar)"
+  },
+  {
+    "name": "elevacion_media",
+    "type": "FLOAT",
+    "mode": "NULLABLE",
+    "description": "Elevación media dentro del área de análisis (metros sobre nivel del mar)"
+  },
+  {
+    "name": "desnivel_m",
+    "type": "FLOAT",
+    "mode": "NULLABLE",
+    "description": "Desnivel total (elevacion_max - elevacion_min) en metros"
+  },
+  {
+    "name": "pendiente_media",
+    "type": "FLOAT",
+    "mode": "NULLABLE",
+    "description": "Pendiente media en grados sobre toda el área de análisis"
+  },
+  {
+    "name": "pendiente_max",
+    "type": "FLOAT",
+    "mode": "NULLABLE",
+    "description": "Pendiente máxima en grados encontrada en el área de análisis"
+  },
+  {
+    "name": "pendiente_p50",
+    "type": "FLOAT",
+    "mode": "NULLABLE",
+    "description": "Percentil 50 (mediana) de pendiente en grados"
+  },
+  {
+    "name": "pendiente_p90",
+    "type": "FLOAT",
+    "mode": "NULLABLE",
+    "description": "Percentil 90 de pendiente en grados (indica terreno empinado relevante)"
+  },
+  {
+    "name": "pct_terreno_moderado",
+    "type": "FLOAT",
+    "mode": "NULLABLE",
+    "description": "Porcentaje del área con pendiente menor a 30° (terreno no avalanchoide)"
+  },
+  {
+    "name": "pct_inicio_posible",
+    "type": "FLOAT",
+    "mode": "NULLABLE",
+    "description": "Porcentaje del área con pendiente entre 30° y 35° (inicio posible)"
+  },
+  {
+    "name": "pct_optimo_avalancha",
+    "type": "FLOAT",
+    "mode": "NULLABLE",
+    "description": "Porcentaje del área con pendiente entre 35° y 45° (rango óptimo EAWS para avalanchas)"
+  },
+  {
+    "name": "pct_severo",
+    "type": "FLOAT",
+    "mode": "NULLABLE",
+    "description": "Porcentaje del área con pendiente entre 45° y 60° (terreno severo)"
+  },
+  {
+    "name": "pct_paredes",
+    "type": "FLOAT",
+    "mode": "NULLABLE",
+    "description": "Porcentaje del área con pendiente mayor a 60° (paredes rocosas, poca acumulación)"
+  },
+  {
+    "name": "aspecto_predominante",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Dirección predominante del terreno: N, NE, E, SE, S, SW, W o NW"
+  },
+  {
+    "name": "pct_laderas_sur",
+    "type": "FLOAT",
+    "mode": "NULLABLE",
+    "description": "Porcentaje del área con aspecto entre 135° y 225° (laderas sur, más soleadas en hemisferio sur)"
+  },
+  {
+    "name": "indice_riesgo_topografico",
+    "type": "FLOAT",
+    "mode": "NULLABLE",
+    "description": "Índice compuesto de susceptibilidad topográfica para avalanchas (0-100): pendiente 50%, aspecto 25%, elevación 25%"
+  },
+  {
+    "name": "histograma_pendientes",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "JSON con distribución porcentual de pendientes por rangos de 5° (0-5, 5-10, ..., 85-90)"
+  },
+  {
+    "name": "area_total_ha",
+    "type": "FLOAT",
+    "mode": "NULLABLE",
+    "description": "Área total del buffer de análisis en hectáreas"
+  },
+  {
+    "name": "area_avalancha_ha",
+    "type": "FLOAT",
+    "mode": "NULLABLE",
+    "description": "Área con pendiente de inicio de avalancha (30°-60°) en hectáreas"
+  },
+  {
+    "name": "pct_area_avalancha",
+    "type": "FLOAT",
+    "mode": "NULLABLE",
+    "description": "Porcentaje del área total que corresponde a terreno de inicio de avalancha (30°-60°)"
+  }
+]

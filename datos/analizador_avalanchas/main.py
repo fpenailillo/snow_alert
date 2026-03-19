@@ -61,7 +61,7 @@ TABLA_ZONAS = 'zonas_avalancha'
 
 # GCS
 BUCKET_BRONCE = f'{ID_PROYECTO}-datos-clima-bronce'
-PREFIJO_TOPOGRAFIA = 'topografia/mapas_riesgo'
+PREFIJO_TOPOGRAFIA = 'topografia/mapas_riesgo'  # prefijo relativo, se antepone {ubicacion}/
 
 # Procesamiento por lotes
 TAMANO_LOTE = 10
@@ -296,7 +296,7 @@ def guardar_resultado_json_gcs(
     fecha_str = fecha_analisis.strftime('%Y/%m/%d')
     timestamp_str = fecha_analisis.strftime('%Y%m%d_%H%M%S')
 
-    ruta_archivo = f'{PREFIJO_TOPOGRAFIA}/{fecha_str}/{nombre_normalizado}_{timestamp_str}.json'
+    ruta_archivo = f'{nombre_normalizado}/{PREFIJO_TOPOGRAFIA}/{fecha_str}/{nombre_normalizado}_{timestamp_str}.json'
 
     blob = bucket.blob(ruta_archivo)
 

@@ -1,157 +1,94 @@
-# CLAUDE.md — Guía para Claude Code — snow_alert
+# CLAUDE.md — snow_alert — Sistema Multi-Agente Predicción Avalanchas
 
-## Lectura obligatoria al inicio de cada sesión
+> **Skills disponibles**:
+> - `snow-alert-dev/SKILL.md` — Framework de desarrollo (7 flujos)
+> - `eaws-methodology/SKILL.md` — Metodología EAWS 2025 (matriz, factores, workflow)
+> **Log**: `log_claude.md` — Registro detallado de todo lo hecho por sesión.
+
+---
+
+## Inicio rápido de sesión
 
 ```bash
-# 1. Leer estado del proyecto
-cat PROGRESO.md 2>/dev/null || echo "PROGRESO.md no existe aún"
+# 1. Leer log de progreso (últimas 60 líneas)
+tail -60 log_claude.md 2>/dev/null || echo "log_claude.md no existe aún"
 
-# 2. Ver archivos Python en agentes/
-find agentes/ -name "*.py" | sort 2>/dev/null | head -40
+# 2. Leer skill si la tarea lo requiere
+cat snow-alert-dev/SKILL.md 2>/dev/null | head -80
 
-# 3. Correr tests existentes
-python -m pytest agentes/tests/ -v --tb=short -q 2>/dev/null || echo "tests aún no configurados"
+# 3. Tests
+cd snow_alert && python -m pytest agentes/tests/test_subagentes.py -v --tb=short -q 2>&1 | tail -10
 
-# 4. Reportar estado antes de escribir código
+# 4. Reportar estado ANTES de escribir código
 ```
 
 ---
 
-## Estructura del proyecto
+## Proyecto
+
+| Campo | Valor |
+|-------|-------|
+| Proyecto GCP | `climas-chileno` |
+| Dataset BQ | `clima` |
+| Bucket GCS | `climas-chileno-datos-clima-bronce` |
+| Región | `us-central1` |
+| Cloud Run Job | `orquestador-avalanchas` |
+| LLM producción | Databricks/Qwen3-80B (Secret Manager) |
+
+---
+
+## Estructura
 
 ```
 snow_alert/
-├── datos/          ← Cloud Functions GCP (NO modificar sin razón crítica)
-│   ├── extractor/
-│   ├── procesador/
-│   ├── procesador_horas/
-│   ├── procesador_dias/
-│   ├── monitor_satelital/
-│   ├── analizador_avalanchas/   ← eaws_constantes.py aquí
-│   └── desplegar.sh
-│
-├── agentes/        ← Aquí trabajamos
-│   ├── datos/consultor_bigquery.py     # Acceso a las 6 tablas BQ
-│   ├── subagentes/base_subagente.py    # Clase base agentic loop
-│   ├── subagentes/subagente_topografico/
-│   ├── subagentes/subagente_satelital/
-│   ├── subagentes/subagente_meteorologico/
-│   ├── subagentes/subagente_nlp/       ← NUEVO (FASE 2)
-│   ├── subagentes/subagente_integrador/
+├── claude/CLAUDE.md           ← ESTE ARCHIVO (guía de sesión)
+├── log_claude.md              ← Log de progreso detallado por sesión
+├── snow-alert-dev/            ← Skill: desarrollo (7 flujos, scripts health-check)
+│   ├── SKILL.md               ← 7 flujos (diagnóstico, agentes, datos, validación, despliegue, docs, tesina)
+│   ├── references/            ← 7 guías especializadas (bajo demanda)
+│   └── scripts/               ← verificar_proyecto.py, actualizar_progreso.py
+├── eaws-methodology/          ← Skill: metodología EAWS 2025 (matriz, factores, workflow)
+│   ├── SKILL.md               ← 3 factores, 5 niveles, workflow 7 pasos, mapeo AndesAI
+│   └── references/            ← eaws_matrix_2025.md, evidencia_estabilidad.md
+├── datos/                     ← Cloud Functions GCP (NO modificar sin confirmación)
+├── agentes/                   ← Sistema multi-agente (aquí trabajamos)
+│   ├── datos/consultor_bigquery.py
+│   ├── subagentes/{topografico,satelital,meteorologico,nlp,integrador}/
 │   ├── orquestador/agente_principal.py
-│   ├── salidas/almacenador.py
-│   ├── salidas/schema_boletines.json
-│   ├── diagnostico/revisar_datos.py   ← FASE 0
-│   ├── despliegue/Dockerfile           ← FASE 3
-│   ├── despliegue/cloudbuild.yaml
-│   ├── despliegue/job_cloud_run.yaml
-│   ├── scripts/generar_boletin.py
-│   ├── scripts/generar_todos.py
+│   ├── salidas/almacenador.py + schema_boletines.json (33 campos)
+│   ├── validacion/metricas_eaws.py
+│   ├── despliegue/Dockerfile + cloudbuild.yaml
 │   └── tests/
-│
-├── relatos/        ← Relatos Andeshandbook
-├── notebooks_validacion/  ← Notebooks validación académica (H1-H4)
-└── docs/           ← Documentación técnica
+├── notebooks_validacion/      ← H1-H4
+└── docs/                      ← Decisiones de diseño, ética, arquitectura
 ```
 
 ---
 
-## GCP
+## Reglas de código
 
-| Recurso | Valor |
-|---------|-------|
-| Proyecto | `climas-chileno` |
-| Cuenta | `fpenailillom@correo.uss.cl` |
-| Dataset BigQuery | `clima` |
-| Bucket GCS | `climas-chileno-datos-clima-bronce` |
-| Service Account | `funciones-clima-sa@climas-chileno.iam.gserviceaccount.com` |
-| Secret (Claude) | `claude-oauth-token` en Secret Manager |
-| Cloud Run Job | `orquestador-avalanchas` en `us-central1` |
-
----
-
-## Autenticación
-
-```bash
-# GCP: Application Default Credentials
-gcloud auth application-default login
-
-# Claude API
-export CLAUDE_CODE_OAUTH_TOKEN="..."  # desde Secret Manager
-# o
-export ANTHROPIC_API_KEY="..."
-```
+- **Todo en español**: variables, funciones, clases, comentarios, docstrings, logs
+- `ConsultorBigQuery` retorna `dict` (nunca DataFrame)
+- Logging: `[NombreSubagente] operación → resultado`
+- Nulos: nunca fallar silenciosamente → `{"dato_nulo": True, "razon_nulo": "..."}`
+- EAWS: importar de `datos/analizador_avalanchas/eaws_constantes.py` (no duplicar)
+- Credenciales: Secret Manager o env vars (nunca hardcodeadas)
+- Tests: deben correr sin GCP auth ni API key
+- `log_claude.md`: **SIEMPRE** actualizar al terminar cada tarea significativa
 
 ---
 
-## Convenciones de código
+## Pipeline: S1→S2→S3→S4→S5
 
-- **Todo en español**: variables, funciones, clases, comentarios, docstrings, logs, mensajes de error
-- Tipo de retorno de métodos `ConsultorBigQuery`: siempre `dict`, nunca `DataFrame`
-- Excepciones: `ErrorSubagente`, `ErrorOrquestador`, `ErrorConexionBigQuery`, `ErrorAlmacenamiento`
-- Formato de logging: `[NombreSubagente] operación → resultado`
-- Manejo explícito de nulos: nunca fallar silenciosamente, siempre documentar con `"dato_nulo": True`
-- Timeout 30s por query BigQuery
-- No duplicar `EAWS_MATRIX` — importar de `datos/analizador_avalanchas/eaws_constantes.py`
+| # | Subagente | Técnica | Output |
+|---|-----------|---------|--------|
+| S1 | Topográfico | PINNs + DEM SRTM + UQ Taylor | `clase_estabilidad_eaws`, IC 95% FS |
+| S2 | Satelital | ViT (H=2, MHA) + MODIS | `alertas_satelitales`, `anomalia_score` |
+| S3 | Meteorológico | Google Weather API | `ventanas_criticas` |
+| S4 | NLP | Relatos + base andina 15 zonas | `indice_riesgo_historico` |
+| S5 | Integrador | Matriz EAWS 2025 | Boletín 24h/48h/72h |
 
----
-
-## Import path para eaws_constantes.py
-
-Después de FASE -1, `analizador_avalanchas/` está en `datos/analizador_avalanchas/`.
-En todos los archivos que lo importan usar:
-
-```python
-import sys
-import os
-_ROOT = os.path.join(os.path.dirname(__file__), '../../../..')  # ajustar niveles
-sys.path.insert(0, _ROOT)
-sys.path.insert(0, os.path.join(_ROOT, 'datos'))
-from analizador_avalanchas.eaws_constantes import consultar_matriz_eaws, NIVELES_PELIGRO
-```
-
-En Docker (`Dockerfile`), `analizador_avalanchas/` se copia a `/app/analizador_avalanchas/`
-(al mismo nivel que `agentes/`), por lo que el path funciona sin `datos/`.
-
----
-
-## Orden de ejecución de Fases
-
-```
-Fase -1  Organizar repositorio         ← COMPLETADO (Marzo 2026)
-Fase  0  Diagnosticar datos nulos      ← agentes/diagnostico/revisar_datos.py
-Fase  1  Cargar relatos (manual)       ← ver datos/relatos/cargar_relatos.py
-Fase  2  Construir SubagenteNLP + upgrade 4→5 subagentes
-Fase  3  Archivos despliegue Cloud Run
-Fase  4  Reemplazar schema_boletines.json (27 campos)
-Fase  5  Tests actualizados (5 subagentes)
-```
-
-**Regla de oro: no avanzar de fase sin que los tests de la anterior pasen.**
-
----
-
-## Pipeline de 5 subagentes
-
-| # | Subagente | Tools | Output clave |
-|---|-----------|-------|--------------|
-| S1 | Topográfico | dem, pinn, zonas, estabilidad | `clase_estabilidad_eaws`, `frecuencia_estimada_eaws` |
-| S2 | Satelital | ndsi, vit, anomalias, snowline | `alertas_satelitales`, `confianza_datos` |
-| S3 | Meteorológico | condiciones, tendencia, pronostico, ventanas | `ventanas_criticas`, `alertas_meteorologicas` |
-| S4 | NLP Relatos | buscar_relatos, extraer_patrones, conocimiento_historico | `indice_riesgo_historico`, `tipo_alud_predominante` |
-| S5 | Integrador | clasificar_eaws, generar_boletin, explicar_factores | Boletín EAWS completo |
-
----
-
-## Reglas importantes
-
-1. **NUNCA** modificar archivos dentro de `datos/` sin confirmación explícita
-2. **NUNCA** hardcodear credenciales — usar Secret Manager o variables de entorno
-3. **SIEMPRE** actualizar `PROGRESO.md` al terminar cada fase
-4. **SIEMPRE** hacer commit y push al terminar cada fase
-5. **NUNCA** avanzar de fase sin confirmar que los tests de la anterior pasan
-6. Los boletines deben tener **todas** las secciones del formato aunque falten datos
-7. El nivel 72h es siempre ≥ nivel 24h (degradación conservadora de la incertidumbre)
+S4 es no-crítico: si falla, pipeline continúa con `subagentes_degradados`.
 
 ---
 
@@ -159,21 +96,66 @@ Fase  5  Tests actualizados (5 subagentes)
 
 ```bash
 # Tests
-cd snow_alert && python -m pytest agentes/tests/test_subagentes.py -v -k "TestTools"
-python -m pytest agentes/tests/test_sistema_completo.py -v -s
+python -m pytest agentes/tests/test_subagentes.py -v -k "TestTools"
 
-# Boletín de prueba
-cd agentes && python scripts/generar_boletin.py --ubicacion "La Parva Sector Bajo"
+# Boletín
+python agentes/scripts/generar_boletin.py --ubicacion "La Parva Sector Bajo"
 
-# Diagnóstico de datos
-python agentes/diagnostico/revisar_datos.py
+# Desplegar agentes
+gcloud builds submit --config agentes/despliegue/cloudbuild.yaml --project=climas-chileno
 
-# Forzar Cloud Functions
-gcloud functions call monitor-satelital-nieve --gen2 --region=us-central1
-gcloud functions call analizador-satelital-zonas-riesgosas-avalanchas --gen2 --region=us-central1
+# Ejecutar job
+gcloud run jobs execute orquestador-avalanchas --region=us-central1
 
-# Ver boletines en BigQuery
+# Health check rápido
+python snow-alert-dev/scripts/verificar_proyecto.py --solo-local
+
+# Ver boletines
 bq query --use_legacy_sql=false \
-  "SELECT nombre_ubicacion, fecha_emision, nivel_eaws_24h, confianza
+  "SELECT nombre_ubicacion, nivel_eaws_24h, confianza
    FROM climas-chileno.clima.boletines_riesgo ORDER BY fecha_emision DESC LIMIT 10"
 ```
+
+---
+
+## Hipótesis
+
+| ID | Métrica | Umbral | Estado |
+|----|---------|--------|--------|
+| H1 | F1-macro EAWS | ≥75% | Pendiente ≥50 boletines |
+| H2 | Delta NLP | >5pp | ✅ +7.9pp (sintético, notebook 06) |
+| H3 | Transfer SLF | QWK Techel 2022 | Pendiente datos |
+| H4 | vs Snowlab | Kappa≥0.60 | Pendiente datos |
+
+## Marco Teórico — Auditoría (2026-03-17)
+
+| Dimensión | Score | Estado |
+|-----------|-------|--------|
+| 1. Arquitectura Multi-Agente | 10/10 | ✅ |
+| 2. PINNs (manto nival) | 9/10 | ✅ gradiente LST real + UQ Taylor IC 95% |
+| 3. Vision Transformers | 8/10 | ✅ MHA H=2, Xavier, PE sinusoidal |
+| 4. Escala EAWS + Matriz | 9/10 | ✅ tamaño dinámico + ajuste viento |
+| 5. NLP Relatos | 8/10 | ✅ fallback 15 zonas andinas + H2 sintética |
+| 6. Infraestructura Serverless | 9/10 | ✅ |
+| 7. Métricas de Validación | 9/10 | ✅ F1, Kappa, QWK, Techel, bootstrap |
+| 8. Marco Ético-Legal | 9/10 | ✅ docs/marco_etico_legal.md + D12 |
+| **Total** | **71/80** | **ALTA** |
+
+Brechas B1–B11: todas cerradas. Pendiente solo: ≥50 boletines reales para H1/H4.
+
+---
+
+## Fases
+
+```
+✅ Fase -1  Reorganizar repositorio
+✅ Fase  0  Diagnosticar datos nulos
+✅ Fase  1  Cargar relatos (3,131 rutas)
+✅ Fase  2  5 subagentes construidos
+✅ Fase  3  Archivos despliegue Cloud Run
+✅ Fase  4  Schema boletines 33 campos (confirmado BQ 2026-03-18)
+✅ Fase  5  Tests actualizados (135+ passed)
+⬜ Fase  6  Generar ≥50 boletines para métricas H1/H4
+```
+
+**Regla de oro: no avanzar de fase sin que los tests pasen.**
