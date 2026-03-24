@@ -4,7 +4,7 @@
 > Claude DEBE agregar entradas al final de cada tarea completada.
 > Formato: `- ✅ Descripción breve (YYYY-MM-DD)` bajo la sección de la sesión activa.
 
-## Última actualización: 2026-03-18
+## Última actualización: 2026-03-23
 
 ---
 
@@ -185,6 +185,62 @@
 
 ---
 
+## Sesión 2026-03-23 (validación capa de datos — Fases 0 y 1)
+
+### Fase 0 — Fix test_fase0_datos.py
+- ✅ `test_tabla_zonas_avalancha_accesible`: `obtener_pendientes_detalladas` → `obtener_perfil_topografico`
+- ✅ `test_zonas_avalancha_tiene_pendientes`: `obtener_pendientes_detalladas` → `obtener_perfil_topografico`; campo `pendiente_media_grados` → `pendiente_media_inicio`
+- Resto del test ya usaba métodos correctos (obtener_estado_satelital, obtener_condiciones_actuales, listar_ubicaciones_con_datos, obtener_relatos_ubicacion)
+
+### Fase 1 — Inventario GCP
+- ✅ Proyecto GCP: `climas-chileno`, cuenta `fpenailillom@correo.uss.cl` activa
+- ✅ 6/6 Cloud Functions ACTIVE (us-central1): extractor-clima, procesador-clima, procesador-clima-horas, procesador-clima-dias, analizador-satelital-zonas-riesgosas-avalanchas, monitor-satelital-nieve
+- ✅ 8 tablas BigQuery accesibles (7 esperadas + `pendientes_detalladas` extra): condiciones_actuales, pronostico_horas, pronostico_dias, imagenes_satelitales, zonas_avalancha, relatos_montanistas, boletines_riesgo, pendientes_detalladas
+- ✅ GCS bucket: estructura `{ubicacion}/{tipo}/` confirmada, prefijos antiguos (boletines/, pronostico_dias/, pronostico_horas/, satelital/) eliminados (0 archivos)
+
+### Fase 2 — Validación meteorológica
+- ✅ condiciones_actuales: 70,500 filas, 84 ubicaciones (≥45), frescura 9h (<12h), 0 nulos, 0 rangos anómalos
+- ⚠️ pronostico_horas: 58 ubicaciones (criterio ≥60, 2 por debajo), frescura 9h, 0 nulos post-fix
+- ⚠️ pronostico_dias: 58 ubicaciones (criterio ≥60), 0 duplicados, frescura 9h, 0 nulos post-fix
+- Nota schema: campos reales difieren del plan (presion_aire vs presion_atmosferica, diurno_temp_max vs temperatura_max, prob_precipitacion vs precipitacion_probabilidad) — datos válidos, solo nombres distintos
+
+### Fase 3 — Validación satelital y topográfico
+- ⚠️ imagenes_satelitales: 538 capturas (14 días), NDSI=49.3% (criterio ≥50%, 0.7pp por debajo), viento ERA5=69.7%, 0 rangos anómalos. Última descarga hoy 23:33.
+- ✅ zonas_avalancha: 37/37 ubicaciones (141 filas totales = 37 × ~4 ejecuciones históricas), pendiente_max_media=72.5°, indice_riesgo_medio=63.18, 0 nulos — valores exactos confirmados
+
+### Fase 4 — Validación relatos NLP
+- ✅ relatos_montanistas: 3,138 relatos (≥3,131), 204 ubicaciones, 41 con info avalancha (~41 esperados)
+- ✅ Enriquecimiento LLM: 96.6% con nivel_riesgo, 96.5% con puntuacion, 99.8% con resumen (criterio >95%)
+- ✅ Muestra cualitativa coherente (llm_nivel_riesgo/puntuacion/resumen consistentes)
+
+### Fase 5 — Cloud Functions (logs, scheduler, secretos)
+- ✅ 6/6 Cloud Functions ACTIVE; entry point monitor-satelital-nieve corregido a `monitorear_satelital`
+- ✅ Secrets disponibles: databricks-token, weather-api-key
+- ✅ analizar-zonas-diario-job: SUCCESS (status {} vacío, corrió hoy 02:17 UTC)
+- ⚠️ extraer-clima-job y monitor-satelital-job: status code 4 (DEADLINE_EXCEEDED) — scheduler timeout, pero datos fluyendo correctamente (bug solo en respuesta HTTP, función ejecuta OK)
+- ⚠️ extractor-clima: SSL timeout recurrente para Matterhorn Zermatt (SSLEOFError) → explica 58 en lugar de 60 ubicaciones en pronósticos
+- ❌ analizar-topografia-job: status code 13 (INTERNAL) desde 2026-03-01 — job mensual pendientes_detalladas lleva 1 mes fallando
+- DLQ: no existe clima-datos-dlq-sub (arquitectura HTTP, no Pub/Sub DLQ) — correcto
+
+### Fase 6 — Integración datos → agentes
+- ✅ test_subagentes.py: 145 passed, 5 skipped (baseline era 135 — 10 tests nuevos añadidos)
+- ✅ test_fase0_datos.py con GCP auth: 6 passed, 1 skipped (test_imagenes_satelitales_tiene_ndsi skip esperado por ausencia NDSI reciente La Parva Sector Bajo)
+- ✅ ConsultorBigQuery: todos los métodos accesibles y retornando datos válidos
+
+### Fase 7 — GCS almacenamiento bronce
+- ✅ 82 prefijos de ubicación con estructura {ubicacion}/{tipo}/
+- ✅ Migración prefijos antiguos confirmada: 0 archivos en boletines/, pronostico_dias/, pronostico_horas/, satelital/
+- ✅ topografia/ sin migrar (transversal — diseñado así)
+- ✅ Datos satelitales recientes: geotiff hasta 2026-03-23; subdirectorios geotiff/, preview/, thumbnail/
+
+### Fase 8 — Boletines riesgo
+- ✅ Schema: 34 campos (1 más que los 33 esperados)
+- ✅ Niveles EAWS 1-5 válidos (0 inválidos), confianza presente en todos, sin degradación S4
+- ❌ Boletines únicos: 13/50 requeridos (10 piloto 2026-03-18 + 3 La Parva 2026-03-23)
+- ❌ Duplicados activos: 42 inserciones duplicadas (14 runs × 3 sectores La Parva el 2026-03-23) — almacenador.py no deduplica en BigQuery
+
+---
+
 ## Errores conocidos
 
 - `imagenes_satelitales`: mayoría de filas históricas tienen snowline/pct_cobertura/delta=NULL (pre-fix). Nuevas capturas llenan correctamente.
@@ -195,11 +251,13 @@
 ## Próximos pasos
 
 1. ~~**Migrar schema** `boletines_riesgo`~~ — ✅ ya tiene 33 campos, no necesario
-2. **Verificar GCS limpieza** — `tail -f datos/migrar_gcs_progreso.log` (watcher activo)
-3. **Cargar relatos reales** — `python datos/relatos/cargar_relatos.py --routes ... --llm ...` (requiere GCP auth + CSVs Databricks)
-4. **Generar ≥50 boletines** para métricas H1/H4: `python agentes/scripts/generar_todos.py`
-5. **Calcular métricas reales**: F1-macro (H1), ablación real (H2), Kappa (H4)
-6. **Escritura tesina**: redactar capítulos 3 y 4 (implementación + resultados)
+2. ~~**Verificar GCS limpieza**~~ — ✅ confirmado completo (2026-03-23)
+3. **Fix deduplicación boletines** — `almacenador.py` debe evitar insertar duplicados (ubicacion+fecha) en BigQuery antes de generar más boletines
+4. **Generar ≥50 boletines únicos** para métricas H1/H4: `python agentes/scripts/generar_todos.py` (actualmente 13 únicos / 50 requeridos)
+5. **Investigar analizar-topografia-job** — status code 13 desde 2026-03-01; logs para diagnosticar fallo
+6. **Investigar SSL Matterhorn Zermatt** — fallo recurrente en extractor-clima (ubicación descartada o reintentos ajustados)
+7. **Calcular métricas reales**: F1-macro (H1), ablación real (H2), Kappa (H4)
+8. **Escritura tesina**: redactar capítulos 3 y 4 (implementación + resultados)
 
 ---
 

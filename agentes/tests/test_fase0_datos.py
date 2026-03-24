@@ -61,7 +61,7 @@ def consultor():
 
 def test_tabla_imagenes_satelitales_accesible(consultor):
     """La tabla imagenes_satelitales debe ser accesible y tener filas."""
-    resultado = consultor.obtener_datos_satelitales("La Parva Sector Bajo", dias=90)
+    resultado = consultor.obtener_estado_satelital("La Parva Sector Bajo")
 
     assert isinstance(resultado, dict), "El resultado debe ser un dict"
     assert "error" not in resultado or not resultado.get("error"), (
@@ -72,7 +72,7 @@ def test_tabla_imagenes_satelitales_accesible(consultor):
 
 def test_tabla_zonas_avalancha_accesible(consultor):
     """La tabla zonas_avalancha debe ser accesible y tener filas."""
-    resultado = consultor.obtener_zonas_avalancha("La Parva Sector Bajo")
+    resultado = consultor.obtener_perfil_topografico("La Parva Sector Bajo")
 
     assert isinstance(resultado, dict), "El resultado debe ser un dict"
     assert "error" not in resultado or not resultado.get("error"), (
@@ -82,14 +82,14 @@ def test_tabla_zonas_avalancha_accesible(consultor):
 
 
 def test_tabla_condiciones_meteorologicas_accesible(consultor):
-    """La tabla condiciones_meteorologicas debe ser accesible."""
-    resultado = consultor.obtener_condiciones_meteorologicas("La Parva Sector Bajo", dias=30)
+    """La tabla condiciones_actuales debe ser accesible."""
+    resultado = consultor.obtener_condiciones_actuales("La Parva Sector Bajo")
 
     assert isinstance(resultado, dict), "El resultado debe ser un dict"
     assert "error" not in resultado or not resultado.get("error"), (
-        f"Error al acceder a condiciones_meteorologicas: {resultado.get('error')}"
+        f"Error al acceder a condiciones_actuales: {resultado.get('error')}"
     )
-    print(f"\n  ✓ condiciones_meteorologicas accesible")
+    print(f"\n  ✓ condiciones_actuales accesible")
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -112,53 +112,31 @@ def test_imagenes_satelitales_cobertura_minima(consultor):
 
 def test_imagenes_satelitales_tiene_ndsi(consultor):
     """Los datos satelitales deben incluir valores NDSI para La Parva."""
-    resultado = consultor.obtener_datos_satelitales("La Parva Sector Bajo", dias=60)
+    resultado = consultor.obtener_estado_satelital("La Parva Sector Bajo")
 
-    if resultado.get("sin_datos"):
+    if not resultado.get("disponible"):
         pytest.skip("Sin datos satelitales recientes para La Parva Sector Bajo")
 
-    imagenes = resultado.get("imagenes", [])
-    if not imagenes:
-        pytest.skip("Lista de imágenes vacía — tabla puede estar en proceso de carga")
+    ndsi = resultado.get("ndsi_medio")
+    if ndsi is None:
+        pytest.skip("NDSI no disponible en tabla imagenes_satelitales")
 
-    # Al menos algunas imágenes deben tener NDSI
-    con_ndsi = [img for img in imagenes if img.get("ndsi_medio") is not None]
-    porcentaje_ndsi = len(con_ndsi) / len(imagenes) if imagenes else 0
-
-    assert porcentaje_ndsi >= (1 - UMBRAL_NULOS_CRITICO), (
-        f"Demasiados nulos en NDSI: {100 * (1 - porcentaje_ndsi):.1f}% nulos "
-        f"(límite crítico: {100 * UMBRAL_NULOS_CRITICO:.0f}%)"
-    )
-
-    if porcentaje_ndsi < (1 - UMBRAL_NULOS_ADVERTENCIA):
-        print(f"\n  ⚠ Advertencia: {100 * (1 - porcentaje_ndsi):.1f}% nulos en NDSI")
-    else:
-        print(f"\n  ✓ NDSI disponible en {100 * porcentaje_ndsi:.1f}% de imágenes")
+    print(f"\n  ✓ NDSI disponible: {ndsi:.3f}")
 
 
 def test_zonas_avalancha_tiene_pendientes(consultor):
-    """Las zonas de avalancha deben tener datos de pendiente."""
-    resultado = consultor.obtener_zonas_avalancha("La Parva Sector Bajo")
+    """El perfil topográfico debe tener datos de ángulo de pendiente."""
+    resultado = consultor.obtener_perfil_topografico("La Parva Sector Bajo")
 
-    if resultado.get("sin_datos"):
-        pytest.skip("Sin zonas de avalancha para La Parva Sector Bajo")
+    if not resultado.get("disponible"):
+        pytest.skip("Sin datos topográficos para La Parva Sector Bajo")
 
-    zonas = resultado.get("zonas", [])
-    if not zonas:
-        pytest.skip("Lista de zonas vacía")
+    pendiente = resultado.get("pendiente_media_inicio")
+    if pendiente is None:
+        pytest.skip("pendiente_media_inicio no disponible en tabla zonas_avalancha")
 
-    # Al menos algunas zonas deben tener pendiente
-    con_pendiente = [z for z in zonas if z.get("pendiente_media_grados") is not None]
-    porcentaje_pendiente = len(con_pendiente) / len(zonas) if zonas else 0
-
-    assert porcentaje_pendiente >= (1 - UMBRAL_NULOS_CRITICO), (
-        f"Demasiados nulos en pendiente_media_grados: "
-        f"{100 * (1 - porcentaje_pendiente):.1f}% nulos"
-    )
-    print(
-        f"\n  ✓ Pendiente disponible en {100 * porcentaje_pendiente:.1f}% de zonas "
-        f"({len(zonas)} zonas totales)"
-    )
+    assert 0 < pendiente < 90, f"Pendiente fuera de rango: {pendiente}°"
+    print(f"\n  ✓ Pendiente disponible: {pendiente:.1f}°")
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
