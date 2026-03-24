@@ -15,6 +15,7 @@ import base64
 import json
 import logging
 import os
+import unicodedata
 from datetime import datetime, timezone
 from typing import Dict, Any, Optional, List
 
@@ -143,7 +144,7 @@ def construir_ruta_gcs(datos: Dict[str, Any]) -> str:
         str: Ruta del archivo en GCS
     """
     try:
-        nombre_ubicacion = datos['nombre_ubicacion'].lower().replace(' ', '_')
+        nombre_ubicacion = unicodedata.normalize('NFKD', datos['nombre_ubicacion']).encode('ASCII', 'ignore').decode('ASCII').lower().replace(' ', '_')
         marca_tiempo = datetime.fromisoformat(datos['marca_tiempo_extraccion'].replace('Z', '+00:00'))
 
         # Construir ruta particionada por ubicación

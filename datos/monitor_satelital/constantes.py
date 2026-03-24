@@ -369,6 +369,16 @@ ESPERA_ENTRE_LOTES_SEGUNDOS = 1
 DIMENSION_PREVIEW = 768
 DIMENSION_THUMBNAIL = 256
 
+# Validación de completitud de imágenes por tipo de producto.
+# GeoTIFFs: umbral calibrado según resolución y tipo de dato de cada producto.
+#   - NDSI (UINT8, 500m, 10km tile): 20×20px × 1B ≈ 400B raw, muy comprimible → umbral bajo
+#   - LST/Visual (FLOAT32, 500m-1km): umbral estándar, 927B = patrón canónico vacío
+#   - ERA5 (3 bandas FLOAT32, 11km, 25km ROI): archivos válidos > 2KB, umbral estándar
+# PNGs: 1200-1500B = PNG transparente (todo enmascarado, sin datos útiles)
+MIN_BYTES_GEOTIFF_NDSI = 450    # NDSI UINT8: < 450B → tile con cero píxeles válidos
+MIN_BYTES_GEOTIFF = 1024        # LST/Visual/ERA5: < 1KB → vacío, patrón 927B = sin datos
+MIN_BYTES_PNG = 2500            # < 2.5KB → PNG mayormente transparente, sin contenido útil
+
 
 # =============================================================================
 # VALORES ESPECIALES

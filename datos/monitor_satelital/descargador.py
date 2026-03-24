@@ -27,6 +27,9 @@ from constantes import (
     DIMENSION_PREVIEW,
     DIMENSION_THUMBNAIL,
     RADIO_TILE_METROS,
+    MIN_BYTES_GEOTIFF,
+    MIN_BYTES_GEOTIFF_NDSI,
+    MIN_BYTES_PNG,
 )
 
 
@@ -532,11 +535,18 @@ def descargar_y_guardar_producto(
         # 1. GeoTIFF
         logger.info(f"Descargando GeoTIFF {tipo_producto}...")
         contenido_tiff = descargar_geotiff(imagen, roi, bandas_geotiff, escala)
-        uri_tiff = guardar_geotiff(
-            cliente_gcs, bucket_nombre, nombre_ubicacion,
-            fecha, tipo_captura, fuente, contenido_tiff, tipo_producto
-        )
-        uris[f'geotiff_{tipo_producto}'] = uri_tiff
+        umbral_tiff = MIN_BYTES_GEOTIFF_NDSI if tipo_producto == 'ndsi' else MIN_BYTES_GEOTIFF
+        if len(contenido_tiff) < umbral_tiff:
+            logger.warning(
+                f"GeoTIFF {tipo_producto} demasiado pequeño ({len(contenido_tiff)} bytes < {umbral_tiff}): "
+                f"sin datos válidos (pixels enmascarados o colección vacía). Descarte."
+            )
+        else:
+            uri_tiff = guardar_geotiff(
+                cliente_gcs, bucket_nombre, nombre_ubicacion,
+                fecha, tipo_captura, fuente, contenido_tiff, tipo_producto
+            )
+            uris[f'geotiff_{tipo_producto}'] = uri_tiff
 
     except (ErrorDescargaGEE, ErrorSubidaGCS) as e:
         logger.error(f"Error en GeoTIFF {tipo_producto}: {str(e)}")
@@ -545,11 +555,17 @@ def descargar_y_guardar_producto(
         # 2. Preview PNG
         logger.info(f"Generando preview {tipo_producto}...")
         contenido_preview = generar_preview_png(imagen, roi, vis_params)
-        uri_preview = guardar_preview(
-            cliente_gcs, bucket_nombre, nombre_ubicacion,
-            fecha, tipo_captura, contenido_preview, tipo_producto
-        )
-        uris[f'preview_{tipo_producto}'] = uri_preview
+        if len(contenido_preview) < MIN_BYTES_PNG:
+            logger.warning(
+                f"Preview PNG {tipo_producto} demasiado pequeño ({len(contenido_preview)} bytes < {MIN_BYTES_PNG}): "
+                f"sin datos válidos. Descarte."
+            )
+        else:
+            uri_preview = guardar_preview(
+                cliente_gcs, bucket_nombre, nombre_ubicacion,
+                fecha, tipo_captura, contenido_preview, tipo_producto
+            )
+            uris[f'preview_{tipo_producto}'] = uri_preview
 
     except (ErrorDescargaGEE, ErrorSubidaGCS) as e:
         logger.error(f"Error en preview {tipo_producto}: {str(e)}")
@@ -558,11 +574,16 @@ def descargar_y_guardar_producto(
         # 3. Thumbnail (siempre la más reciente)
         logger.info(f"Generando thumbnail {tipo_producto}...")
         contenido_thumb = generar_thumbnail(imagen, roi, vis_params)
-        uri_thumb = guardar_thumbnail(
-            cliente_gcs, bucket_nombre, nombre_ubicacion,
-            contenido_thumb, tipo_producto
-        )
-        uris[f'thumbnail_{tipo_producto}'] = uri_thumb
+        if len(contenido_thumb) < MIN_BYTES_PNG:
+            logger.warning(
+                f"Thumbnail {tipo_producto} demasiado pequeño ({len(contenido_thumb)} bytes): sin datos. Descarte."
+            )
+        else:
+            uri_thumb = guardar_thumbnail(
+                cliente_gcs, bucket_nombre, nombre_ubicacion,
+                contenido_thumb, tipo_producto
+            )
+            uris[f'thumbnail_{tipo_producto}'] = uri_thumb
 
     except (ErrorDescargaGEE, ErrorSubidaGCS) as e:
         logger.error(f"Error en thumbnail {tipo_producto}: {str(e)}")
