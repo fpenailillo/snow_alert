@@ -36,5 +36,6 @@ RUN useradd --create-home --shell /bin/bash appuser && \
     chown -R appuser:appuser /app
 USER appuser
 
-# El Job de Cloud Run ejecuta generar_todos.py y guarda en BigQuery + GCS
-ENTRYPOINT ["python", "agentes/scripts/generar_todos.py", "--guardar"]
+# El Job de Cloud Run genera boletines de validación (La Parva + Suiza)
+# Para generar todas las ubicaciones: agregar --ubicaciones o quitar --preset validacion
+ENTRYPOINT ["python", "agentes/scripts/generar_todos.py", "--guardar", "--preset", "validacion"]

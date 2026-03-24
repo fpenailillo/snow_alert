@@ -7,6 +7,8 @@ Continúa aunque alguna ubicación falle.
 Uso:
     python agentes/scripts/generar_todos.py
     python agentes/scripts/generar_todos.py --guardar
+    python agentes/scripts/generar_todos.py --guardar --ubicaciones "La Parva Sector Bajo,Matterhorn Zermatt"
+    python agentes/scripts/generar_todos.py --guardar --preset validacion
 """
 
 import argparse
@@ -33,6 +35,17 @@ logger = logging.getLogger(__name__)
 
 PAUSA_ENTRE_UBICACIONES = 3  # segundos entre cada ubicación
 
+# Ubicaciones de validación: La Parva (Chile) + Suiza
+# Usadas para calcular métricas H1/H4 sin necesitar el LLM de producción
+UBICACIONES_VALIDACION = [
+    "La Parva Sector Alto",
+    "La Parva Sector Bajo",
+    "La Parva Sector Medio",
+    "Matterhorn Zermatt",
+    "Interlaken",
+    "St Moritz",
+]
+
 
 def parsear_argumentos() -> argparse.Namespace:
     """Parsea los argumentos de línea de comando."""
@@ -48,6 +61,18 @@ def parsear_argumentos() -> argparse.Namespace:
         '--json',
         action='store_true',
         help='Imprimir resumen en formato JSON al finalizar'
+    )
+    parser.add_argument(
+        '--ubicaciones',
+        type=str,
+        default=None,
+        help='Lista de ubicaciones separadas por coma (sobreescribe la lista automática)'
+    )
+    parser.add_argument(
+        '--preset',
+        choices=['validacion'],
+        default=None,
+        help='Preset de ubicaciones: "validacion" → La Parva + Suiza (6 ubicaciones)'
     )
     return parser.parse_args()
 
@@ -66,13 +91,21 @@ def main() -> int:
         print(f"✗ Error fatal: {e}", file=sys.stderr)
         return 1
 
-    try:
-        consultor = ConsultorBigQuery()
-        ubicaciones = consultor.listar_ubicaciones_con_datos()[:50]
-    except Exception as e:
-        logger.error(f"Error obteniendo ubicaciones: {e}")
-        print(f"✗ Error fatal: {e}", file=sys.stderr)
-        return 1
+    # Determinar lista de ubicaciones
+    if args.preset == 'validacion':
+        ubicaciones = UBICACIONES_VALIDACION
+        logger.info(f"Preset 'validacion': {len(ubicaciones)} ubicaciones (La Parva + Suiza)")
+    elif args.ubicaciones:
+        ubicaciones = [u.strip() for u in args.ubicaciones.split(',') if u.strip()]
+        logger.info(f"Ubicaciones explícitas: {ubicaciones}")
+    else:
+        try:
+            consultor = ConsultorBigQuery()
+            ubicaciones = consultor.listar_ubicaciones_con_datos()[:50]
+        except Exception as e:
+            logger.error(f"Error obteniendo ubicaciones: {e}")
+            print(f"✗ Error fatal: {e}", file=sys.stderr)
+            return 1
 
     total = len(ubicaciones)
     logger.info(f"Procesando {total} ubicaciones")
