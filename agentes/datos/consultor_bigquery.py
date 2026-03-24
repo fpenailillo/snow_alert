@@ -13,6 +13,7 @@ Reglas:
 """
 
 import logging
+import os
 import time
 from datetime import datetime, timezone
 from typing import Optional
@@ -31,6 +32,44 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+# Variable global de fecha de referencia para consultas históricas.
+# El orquestador puede establecerla antes de ejecutar subagentes para que
+# ConsultorBigQuery use esa fecha en lugar de CURRENT_TIMESTAMP().
+# Las tools de subagentes instancian ConsultorBigQuery sin pasar fecha_referencia,
+# pero si esta variable está establecida, se usará automáticamente.
+_fecha_referencia_global: Optional[datetime] = None
+
+
+def establecer_fecha_referencia_global(fecha: Optional[datetime]) -> None:
+    """
+    Establece la fecha de referencia global para todas las instancias de ConsultorBigQuery.
+
+    Úsala en el orquestador antes de ejecutar subagentes para análisis histórico.
+    Llama con None para restablecer al comportamiento normal (CURRENT_TIMESTAMP).
+
+    Args:
+        fecha: datetime de referencia, o None para usar la fecha actual
+    """
+    global _fecha_referencia_global
+    _fecha_referencia_global = fecha
+    if fecha is not None:
+        logger.info(
+            f"ConsultorBigQuery: fecha de referencia global establecida → {fecha.isoformat()}"
+        )
+    else:
+        logger.info("ConsultorBigQuery: fecha de referencia global restablecida a None (actual)")
+
+
+def obtener_fecha_referencia_global() -> Optional[datetime]:
+    """
+    Retorna la fecha de referencia global actualmente establecida.
+
+    Returns:
+        datetime de referencia o None si se usa la fecha actual
+    """
+    return _fecha_referencia_global
+
+
 class ErrorConexionBigQuery(Exception):
     """Excepción para errores de conexión con BigQuery."""
     pass
@@ -44,8 +83,8 @@ class ConsultorBigQuery:
     Nunca lanzan excepciones: errores se retornan como {"error": "mensaje"}.
     """
 
-    GCP_PROJECT = "climas-chileno"
-    DATASET = "clima"
+    GCP_PROJECT = os.environ.get("GCP_PROJECT") or os.environ.get("ID_PROYECTO", "climas-chileno")
+    DATASET = os.environ.get("DATASET_ID", "clima")
     TIMEOUT_SEGUNDOS = 30
 
     def __init__(self):
@@ -83,42 +122,81 @@ class ConsultorBigQuery:
         logger.info(f"Query ejecutada en {duracion}s — {len(filas)} filas obtenidas")
         return [dict(fila) for fila in filas]
 
-    def obtener_condiciones_actuales(self, ubicacion: str) -> dict:
+    def obtener_condiciones_actuales(
+        self,
+        ubicacion: str,
+        fecha_referencia: Optional[datetime] = None
+    ) -> dict:
         """
         Última fila de condiciones_actuales para la ubicación. Max antigüedad: 12h.
 
         Args:
             ubicacion: Nombre exacto de la ubicación
+            fecha_referencia: datetime de referencia para datos históricos.
+                Si es None, usa CURRENT_TIMESTAMP() (comportamiento normal).
+                Si se provee, filtra datos respecto a esa fecha.
 
         Returns:
             dict con campos climáticos actuales, o {"disponible": False, "razon": "..."}
         """
         logger.info(f"Consultando condiciones actuales para: {ubicacion}")
+        # Resolver fecha de referencia: parámetro explícito tiene prioridad sobre global
+        fecha_referencia = fecha_referencia or _fecha_referencia_global
         try:
-            sql = """
-                SELECT
-                    temperatura,
-                    sensacion_termica,
-                    velocidad_viento,
-                    direccion_viento,
-                    precipitacion_acumulada,
-                    probabilidad_precipitacion,
-                    humedad_relativa,
-                    presion_aire,
-                    cobertura_nubes,
-                    condicion_clima,
-                    hora_actual,
-                    es_dia
-                FROM `{proyecto}.{dataset}.condiciones_actuales`
-                WHERE nombre_ubicacion = @ubicacion
-                  AND hora_actual >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 12 HOUR)
-                ORDER BY hora_actual DESC
-                LIMIT 1
-            """.format(proyecto=self.GCP_PROJECT, dataset=self.DATASET)
+            if fecha_referencia is None:
+                sql = """
+                    SELECT
+                        temperatura,
+                        sensacion_termica,
+                        velocidad_viento,
+                        direccion_viento,
+                        precipitacion_acumulada,
+                        probabilidad_precipitacion,
+                        humedad_relativa,
+                        presion_aire,
+                        cobertura_nubes,
+                        condicion_clima,
+                        hora_actual,
+                        es_dia
+                    FROM `{proyecto}.{dataset}.condiciones_actuales`
+                    WHERE nombre_ubicacion = @ubicacion
+                      AND hora_actual >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 12 HOUR)
+                    ORDER BY hora_actual DESC
+                    LIMIT 1
+                """.format(proyecto=self.GCP_PROJECT, dataset=self.DATASET)
 
-            parametros = [
-                bigquery.ScalarQueryParameter("ubicacion", "STRING", ubicacion)
-            ]
+                parametros = [
+                    bigquery.ScalarQueryParameter("ubicacion", "STRING", ubicacion)
+                ]
+            else:
+                sql = """
+                    SELECT
+                        temperatura,
+                        sensacion_termica,
+                        velocidad_viento,
+                        direccion_viento,
+                        precipitacion_acumulada,
+                        probabilidad_precipitacion,
+                        humedad_relativa,
+                        presion_aire,
+                        cobertura_nubes,
+                        condicion_clima,
+                        hora_actual,
+                        es_dia
+                    FROM `{proyecto}.{dataset}.condiciones_actuales`
+                    WHERE nombre_ubicacion = @ubicacion
+                      AND hora_actual >= TIMESTAMP_SUB(TIMESTAMP(@fecha_ref), INTERVAL 12 HOUR)
+                      AND hora_actual <= TIMESTAMP(@fecha_ref)
+                    ORDER BY hora_actual DESC
+                    LIMIT 1
+                """.format(proyecto=self.GCP_PROJECT, dataset=self.DATASET)
+
+                parametros = [
+                    bigquery.ScalarQueryParameter("ubicacion", "STRING", ubicacion),
+                    bigquery.ScalarQueryParameter(
+                        "fecha_ref", "TIMESTAMP", fecha_referencia
+                    ),
+                ]
 
             filas = self._ejecutar_query(sql, parametros)
 
@@ -145,49 +223,94 @@ class ConsultorBigQuery:
             logger.error(f"Error consultando condiciones actuales para {ubicacion}: {e}")
             return {"error": str(e)}
 
-    def obtener_tendencia_meteorologica(self, ubicacion: str) -> dict:
+    def obtener_tendencia_meteorologica(
+        self,
+        ubicacion: str,
+        fecha_referencia: Optional[datetime] = None
+    ) -> dict:
         """
         Resumen estadístico de las últimas 72h de pronostico_horas + próximas 48h.
 
         Args:
             ubicacion: Nombre exacto de la ubicación
+            fecha_referencia: datetime de referencia para datos históricos.
+                Si es None, usa CURRENT_TIMESTAMP() (comportamiento normal).
+                Si se provee, calcula el intervalo respecto a esa fecha.
 
         Returns:
             dict con estadísticas resumidas de temperatura, viento, precipitación y alertas
         """
         logger.info(f"Consultando tendencia meteorológica para: {ubicacion}")
+        # Resolver fecha de referencia: parámetro explícito tiene prioridad sobre global
+        fecha_referencia = fecha_referencia or _fecha_referencia_global
         try:
-            # Query de las últimas 72h
-            sql_pasado = """
-                SELECT
-                    temperatura,
-                    velocidad_viento,
-                    cantidad_precipitacion,
-                    hora_inicio
-                FROM `{proyecto}.{dataset}.pronostico_horas`
-                WHERE nombre_ubicacion = @ubicacion
-                  AND hora_inicio >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 72 HOUR)
-                  AND hora_inicio <= CURRENT_TIMESTAMP()
-                ORDER BY hora_inicio ASC
-            """.format(proyecto=self.GCP_PROJECT, dataset=self.DATASET)
+            if fecha_referencia is None:
+                # Query de las últimas 72h
+                sql_pasado = """
+                    SELECT
+                        temperatura,
+                        velocidad_viento,
+                        cantidad_precipitacion,
+                        hora_inicio
+                    FROM `{proyecto}.{dataset}.pronostico_horas`
+                    WHERE nombre_ubicacion = @ubicacion
+                      AND hora_inicio >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 72 HOUR)
+                      AND hora_inicio <= CURRENT_TIMESTAMP()
+                    ORDER BY hora_inicio ASC
+                """.format(proyecto=self.GCP_PROJECT, dataset=self.DATASET)
 
-            # Query de las próximas 48h
-            sql_futuro = """
-                SELECT
-                    temperatura,
-                    velocidad_viento,
-                    cantidad_precipitacion,
-                    hora_inicio
-                FROM `{proyecto}.{dataset}.pronostico_horas`
-                WHERE nombre_ubicacion = @ubicacion
-                  AND hora_inicio > CURRENT_TIMESTAMP()
-                  AND hora_inicio <= TIMESTAMP_ADD(CURRENT_TIMESTAMP(), INTERVAL 48 HOUR)
-                ORDER BY hora_inicio ASC
-            """.format(proyecto=self.GCP_PROJECT, dataset=self.DATASET)
+                # Query de las próximas 48h
+                sql_futuro = """
+                    SELECT
+                        temperatura,
+                        velocidad_viento,
+                        cantidad_precipitacion,
+                        hora_inicio
+                    FROM `{proyecto}.{dataset}.pronostico_horas`
+                    WHERE nombre_ubicacion = @ubicacion
+                      AND hora_inicio > CURRENT_TIMESTAMP()
+                      AND hora_inicio <= TIMESTAMP_ADD(CURRENT_TIMESTAMP(), INTERVAL 48 HOUR)
+                    ORDER BY hora_inicio ASC
+                """.format(proyecto=self.GCP_PROJECT, dataset=self.DATASET)
 
-            parametros = [
-                bigquery.ScalarQueryParameter("ubicacion", "STRING", ubicacion)
-            ]
+                parametros = [
+                    bigquery.ScalarQueryParameter("ubicacion", "STRING", ubicacion)
+                ]
+            else:
+                # Query de las últimas 72h respecto a fecha_referencia
+                sql_pasado = """
+                    SELECT
+                        temperatura,
+                        velocidad_viento,
+                        cantidad_precipitacion,
+                        hora_inicio
+                    FROM `{proyecto}.{dataset}.pronostico_horas`
+                    WHERE nombre_ubicacion = @ubicacion
+                      AND hora_inicio >= TIMESTAMP_SUB(TIMESTAMP(@fecha_ref), INTERVAL 72 HOUR)
+                      AND hora_inicio <= TIMESTAMP(@fecha_ref)
+                    ORDER BY hora_inicio ASC
+                """.format(proyecto=self.GCP_PROJECT, dataset=self.DATASET)
+
+                # Query de las próximas 48h respecto a fecha_referencia
+                sql_futuro = """
+                    SELECT
+                        temperatura,
+                        velocidad_viento,
+                        cantidad_precipitacion,
+                        hora_inicio
+                    FROM `{proyecto}.{dataset}.pronostico_horas`
+                    WHERE nombre_ubicacion = @ubicacion
+                      AND hora_inicio > TIMESTAMP(@fecha_ref)
+                      AND hora_inicio <= TIMESTAMP_ADD(TIMESTAMP(@fecha_ref), INTERVAL 48 HOUR)
+                    ORDER BY hora_inicio ASC
+                """.format(proyecto=self.GCP_PROJECT, dataset=self.DATASET)
+
+                parametros = [
+                    bigquery.ScalarQueryParameter("ubicacion", "STRING", ubicacion),
+                    bigquery.ScalarQueryParameter(
+                        "fecha_ref", "TIMESTAMP", fecha_referencia
+                    ),
+                ]
 
             filas_pasado = self._ejecutar_query(sql_pasado, parametros)
             filas_futuro = self._ejecutar_query(sql_futuro, parametros)
@@ -278,44 +401,84 @@ class ConsultorBigQuery:
             logger.error(f"Error consultando tendencia meteorológica para {ubicacion}: {e}")
             return {"error": str(e)}
 
-    def obtener_pronostico_proximos_dias(self, ubicacion: str) -> dict:
+    def obtener_pronostico_proximos_dias(
+        self,
+        ubicacion: str,
+        fecha_referencia: Optional[datetime] = None
+    ) -> dict:
         """
         Próximos 3 días de pronostico_dias.
 
         Args:
             ubicacion: Nombre exacto de la ubicación
+            fecha_referencia: datetime de referencia para datos históricos.
+                Si es None, usa CURRENT_DATE() (comportamiento normal).
+                Si se provee, filtra desde esa fecha.
 
         Returns:
             dict con lista de 3 días de pronóstico
         """
         logger.info(f"Consultando pronóstico de días para: {ubicacion}")
+        # Resolver fecha de referencia: parámetro explícito tiene prioridad sobre global
+        fecha_referencia = fecha_referencia or _fecha_referencia_global
         try:
-            sql = """
-                SELECT
-                    fecha_inicio,
-                    fecha_fin,
-                    temp_max_dia,
-                    temp_min_dia,
-                    diurno_condicion,
-                    nocturno_condicion,
-                    diurno_prob_precipitacion,
-                    nocturno_prob_precipitacion,
-                    diurno_velocidad_viento,
-                    nocturno_velocidad_viento
-                FROM `{proyecto}.{dataset}.pronostico_dias`
-                WHERE nombre_ubicacion = @ubicacion
-                  AND fecha_inicio >= TIMESTAMP(CURRENT_DATE())
-                QUALIFY ROW_NUMBER() OVER (
-                    PARTITION BY DATE(fecha_inicio)
-                    ORDER BY marca_tiempo_extraccion DESC
-                ) = 1
-                ORDER BY fecha_inicio ASC
-                LIMIT 5
-            """.format(proyecto=self.GCP_PROJECT, dataset=self.DATASET)
+            if fecha_referencia is None:
+                sql = """
+                    SELECT
+                        fecha_inicio,
+                        fecha_fin,
+                        temp_max_dia,
+                        temp_min_dia,
+                        diurno_condicion,
+                        nocturno_condicion,
+                        diurno_prob_precipitacion,
+                        nocturno_prob_precipitacion,
+                        diurno_velocidad_viento,
+                        nocturno_velocidad_viento
+                    FROM `{proyecto}.{dataset}.pronostico_dias`
+                    WHERE nombre_ubicacion = @ubicacion
+                      AND fecha_inicio >= TIMESTAMP(CURRENT_DATE())
+                    QUALIFY ROW_NUMBER() OVER (
+                        PARTITION BY DATE(fecha_inicio)
+                        ORDER BY marca_tiempo_extraccion DESC
+                    ) = 1
+                    ORDER BY fecha_inicio ASC
+                    LIMIT 5
+                """.format(proyecto=self.GCP_PROJECT, dataset=self.DATASET)
 
-            parametros = [
-                bigquery.ScalarQueryParameter("ubicacion", "STRING", ubicacion)
-            ]
+                parametros = [
+                    bigquery.ScalarQueryParameter("ubicacion", "STRING", ubicacion)
+                ]
+            else:
+                sql = """
+                    SELECT
+                        fecha_inicio,
+                        fecha_fin,
+                        temp_max_dia,
+                        temp_min_dia,
+                        diurno_condicion,
+                        nocturno_condicion,
+                        diurno_prob_precipitacion,
+                        nocturno_prob_precipitacion,
+                        diurno_velocidad_viento,
+                        nocturno_velocidad_viento
+                    FROM `{proyecto}.{dataset}.pronostico_dias`
+                    WHERE nombre_ubicacion = @ubicacion
+                      AND fecha_inicio >= TIMESTAMP(DATE(@fecha_ref))
+                    QUALIFY ROW_NUMBER() OVER (
+                        PARTITION BY DATE(fecha_inicio)
+                        ORDER BY marca_tiempo_extraccion DESC
+                    ) = 1
+                    ORDER BY fecha_inicio ASC
+                    LIMIT 5
+                """.format(proyecto=self.GCP_PROJECT, dataset=self.DATASET)
+
+                parametros = [
+                    bigquery.ScalarQueryParameter("ubicacion", "STRING", ubicacion),
+                    bigquery.ScalarQueryParameter(
+                        "fecha_ref", "TIMESTAMP", fecha_referencia
+                    ),
+                ]
 
             filas = self._ejecutar_query(sql, parametros)
 
@@ -372,45 +535,87 @@ class ConsultorBigQuery:
             logger.error(f"Error consultando pronóstico de días para {ubicacion}: {e}")
             return {"error": str(e)}
 
-    def obtener_estado_satelital(self, ubicacion: str) -> dict:
+    def obtener_estado_satelital(
+        self,
+        ubicacion: str,
+        fecha_referencia: Optional[datetime] = None
+    ) -> dict:
         """
         Última fila de imagenes_satelitales. Max antigüedad: 48h.
 
         Args:
             ubicacion: Nombre exacto de la ubicación
+            fecha_referencia: datetime de referencia para datos históricos.
+                Si es None, usa CURRENT_DATE() (comportamiento normal).
+                Si se provee, filtra datos respecto a esa fecha.
 
         Returns:
             dict con estado del manto nival, o {"disponible": False, "razon": "..."}
         """
         logger.info(f"Consultando estado satelital para: {ubicacion}")
+        # Resolver fecha de referencia: parámetro explícito tiene prioridad sobre global
+        fecha_referencia = fecha_referencia or _fecha_referencia_global
         try:
-            sql = """
-                SELECT
-                    pct_cobertura_nieve,
-                    ndsi_medio,
-                    lst_dia_celsius,
-                    lst_noche_celsius,
-                    ciclo_diurno_amplitud,
-                    snowline_elevacion_m,
-                    delta_pct_nieve_24h,
-                    tipo_cambio_nieve,
-                    ami_7d,
-                    ami_3d,
-                    sar_disponible,
-                    sar_pct_nieve_humeda,
-                    transporte_eolico_activo,
-                    viento_altura_vel_kmh,
-                    fecha_captura
-                FROM `{proyecto}.{dataset}.imagenes_satelitales`
-                WHERE nombre_ubicacion = @ubicacion
-                  AND fecha_captura >= DATE_SUB(CURRENT_DATE(), INTERVAL 2 DAY)
-                ORDER BY fecha_captura DESC
-                LIMIT 1
-            """.format(proyecto=self.GCP_PROJECT, dataset=self.DATASET)
+            if fecha_referencia is None:
+                sql = """
+                    SELECT
+                        pct_cobertura_nieve,
+                        ndsi_medio,
+                        lst_dia_celsius,
+                        lst_noche_celsius,
+                        ciclo_diurno_amplitud,
+                        snowline_elevacion_m,
+                        delta_pct_nieve_24h,
+                        tipo_cambio_nieve,
+                        ami_7d,
+                        ami_3d,
+                        sar_disponible,
+                        sar_pct_nieve_humeda,
+                        transporte_eolico_activo,
+                        viento_altura_vel_kmh,
+                        fecha_captura
+                    FROM `{proyecto}.{dataset}.imagenes_satelitales`
+                    WHERE nombre_ubicacion = @ubicacion
+                      AND fecha_captura >= DATE_SUB(CURRENT_DATE(), INTERVAL 2 DAY)
+                    ORDER BY fecha_captura DESC
+                    LIMIT 1
+                """.format(proyecto=self.GCP_PROJECT, dataset=self.DATASET)
 
-            parametros = [
-                bigquery.ScalarQueryParameter("ubicacion", "STRING", ubicacion)
-            ]
+                parametros = [
+                    bigquery.ScalarQueryParameter("ubicacion", "STRING", ubicacion)
+                ]
+            else:
+                sql = """
+                    SELECT
+                        pct_cobertura_nieve,
+                        ndsi_medio,
+                        lst_dia_celsius,
+                        lst_noche_celsius,
+                        ciclo_diurno_amplitud,
+                        snowline_elevacion_m,
+                        delta_pct_nieve_24h,
+                        tipo_cambio_nieve,
+                        ami_7d,
+                        ami_3d,
+                        sar_disponible,
+                        sar_pct_nieve_humeda,
+                        transporte_eolico_activo,
+                        viento_altura_vel_kmh,
+                        fecha_captura
+                    FROM `{proyecto}.{dataset}.imagenes_satelitales`
+                    WHERE nombre_ubicacion = @ubicacion
+                      AND fecha_captura >= DATE_SUB(DATE(@fecha_ref), INTERVAL 2 DAY)
+                      AND fecha_captura <= DATE(@fecha_ref)
+                    ORDER BY fecha_captura DESC
+                    LIMIT 1
+                """.format(proyecto=self.GCP_PROJECT, dataset=self.DATASET)
+
+                parametros = [
+                    bigquery.ScalarQueryParameter("ubicacion", "STRING", ubicacion),
+                    bigquery.ScalarQueryParameter(
+                        "fecha_ref", "TIMESTAMP", fecha_referencia
+                    ),
+                ]
 
             filas = self._ejecutar_query(sql, parametros)
 
@@ -494,7 +699,7 @@ class ConsultorBigQuery:
             # Computar campos derivados desde eaws_constantes
             import sys
             import os
-            sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../../analizador_avalanchas'))
+            sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../../datos/analizador_avalanchas'))
             try:
                 from eaws_constantes import categorizar_aspecto, es_aspecto_sombra, detectar_hemisferio
                 aspecto = resultado.get("aspecto_predominante_inicio")

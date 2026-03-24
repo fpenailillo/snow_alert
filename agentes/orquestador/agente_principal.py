@@ -22,6 +22,11 @@ import time
 from datetime import datetime, timezone
 from typing import Optional
 
+from agentes.datos.consultor_bigquery import (
+    establecer_fecha_referencia_global,
+    obtener_fecha_referencia_global,
+)
+
 from agentes.subagentes.subagente_topografico.agente import SubagenteTopografico
 from agentes.subagentes.subagente_satelital.agente import SubagenteSatelital
 from agentes.subagentes.subagente_meteorologico.agente import SubagenteMeteorologico
@@ -83,7 +88,11 @@ class OrquestadorAvalancha:
             f"prompts {self._version_prompts}"
         )
 
-    def generar_boletin(self, nombre_ubicacion: str) -> dict:
+    def generar_boletin(
+        self,
+        nombre_ubicacion: str,
+        fecha_referencia: Optional[datetime] = None
+    ) -> dict:
         """
         Genera un boletín EAWS completo para una ubicación.
 
@@ -92,6 +101,10 @@ class OrquestadorAvalancha:
 
         Args:
             nombre_ubicacion: nombre exacto de la ubicación en BigQuery
+            fecha_referencia: datetime de referencia para análisis histórico.
+                Si es None, usa datos actuales (comportamiento normal).
+                Si se provee, propaga a ConsultorBigQuery para consultar
+                datos históricos de esa fecha.
 
         Returns:
             dict con boletín completo, nivel EAWS, metadata y resultados
@@ -101,6 +114,16 @@ class OrquestadorAvalancha:
             ErrorOrquestador: si algún subagente falla
         """
         inicio_total = time.time()
+
+        # Establecer fecha de referencia global para que ConsultorBigQuery
+        # la use en todas las consultas de los subagentes
+        establecer_fecha_referencia_global(fecha_referencia)
+        if fecha_referencia is not None:
+            logger.info(
+                f"ORQUESTADOR: análisis histórico — fecha de referencia: "
+                f"{fecha_referencia.isoformat()}"
+            )
+
         logger.info(
             f"\n{'=' * 60}\n"
             f"ORQUESTADOR: iniciando análisis para '{nombre_ubicacion}'\n"
@@ -227,6 +250,9 @@ class OrquestadorAvalancha:
             raise ErrorOrquestador(
                 f"Fallo en el sistema multi-agente para '{nombre_ubicacion}': {exc}"
             ) from exc
+        finally:
+            # Restablecer la fecha de referencia global al finalizar (éxito o error)
+            establecer_fecha_referencia_global(None)
 
         # ─── Extraer boletín y nivel del integrador ───────────────────────────
         boletin_texto = resultado_int.get("analisis", "")
@@ -261,7 +287,7 @@ class OrquestadorAvalancha:
                 for r in resultados_subagentes.values()
             ),
             "duracion_segundos": duracion_total,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": (fecha_referencia or datetime.now(timezone.utc)).isoformat(),
             "modelo": self.MODELO_SUBAGENTES,
             # Campos adicionales v2
             "arquitectura": "multi_agente_v3",
@@ -279,19 +305,24 @@ class OrquestadorAvalancha:
                     "duracion_segundos": resultado.get("duracion_segundos")
                 }
                 for nombre, resultado in resultados_subagentes.items()
-            }
+            },
+            # Campo de trazabilidad para análisis histórico
+            "fecha_referencia": fecha_referencia.isoformat() if fecha_referencia else None,
         }
 
     def generar_boletines_masivos(
         self,
-        ubicaciones: Optional[list] = None
+        ubicaciones: Optional[list] = None,
+        limite: int = 50
     ) -> list:
         """
         Genera boletines para múltiples ubicaciones.
 
         Args:
-            ubicaciones: lista de ubicaciones. Si None, usa las primeras
-                         10 ubicaciones con datos recientes.
+            ubicaciones: lista de ubicaciones. Si None, usa hasta `limite`
+                         ubicaciones con datos recientes en condiciones_actuales.
+            limite: número máximo de ubicaciones a procesar cuando `ubicaciones`
+                    es None (default: 50).
 
         Returns:
             lista de dicts con resultados de cada boletín
@@ -300,8 +331,8 @@ class OrquestadorAvalancha:
 
         if ubicaciones is None:
             consultor = ConsultorBigQuery()
-            ubicaciones = consultor.listar_ubicaciones_con_datos()[:10]
-            logger.info(f"Usando primeras {len(ubicaciones)} ubicaciones con datos recientes")
+            ubicaciones = consultor.listar_ubicaciones_con_datos()[:limite]
+            logger.info(f"Usando primeras {len(ubicaciones)} ubicaciones con datos recientes (límite={limite})")
 
         if not ubicaciones:
             logger.warning("No hay ubicaciones disponibles para generar boletines")

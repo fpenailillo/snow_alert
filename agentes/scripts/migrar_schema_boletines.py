@@ -36,8 +36,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-GCP_PROJECT = "climas-chileno"
-DATASET = "clima"
+GCP_PROJECT = os.environ.get("GCP_PROJECT") or os.environ.get("ID_PROYECTO", "climas-chileno")
+DATASET = os.environ.get("DATASET_ID", "clima")
 TABLA = "boletines_riesgo"
 TABLA_COMPLETA = f"{GCP_PROJECT}.{DATASET}.{TABLA}"
 

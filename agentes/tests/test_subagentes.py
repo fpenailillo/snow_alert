@@ -533,7 +533,6 @@ class TestToolsNLP:
             ejecutar_sintetizar_conocimiento_historico
         )
         resultado = ejecutar_sintetizar_conocimiento_historico(
-            consultor=None,
             total_relatos=0,
             frecuencias_terminos={},
             indice_riesgo_base=0.0,
@@ -552,7 +551,6 @@ class TestToolsNLP:
             ejecutar_sintetizar_conocimiento_historico
         )
         resultado = ejecutar_sintetizar_conocimiento_historico(
-            consultor=None,
             total_relatos=0,
             frecuencias_terminos={},
             indice_riesgo_base=0.0,
@@ -573,7 +571,6 @@ class TestToolsNLP:
             "viento": 2,
         }
         resultado = ejecutar_sintetizar_conocimiento_historico(
-            consultor=None,
             total_relatos=15,
             frecuencias_terminos=frecuencias,
             indice_riesgo_base=0.6
@@ -589,7 +586,6 @@ class TestToolsNLP:
             ejecutar_sintetizar_conocimiento_historico
         )
         resultado = ejecutar_sintetizar_conocimiento_historico(
-            consultor=None,
             total_relatos=5,
             frecuencias_terminos={"avalancha": 3, "viento": 4},
             indice_riesgo_base=0.4
@@ -689,7 +685,6 @@ class TestBaseConocimientoAndino:
             ejecutar_sintetizar_conocimiento_historico
         )
         resultado = ejecutar_sintetizar_conocimiento_historico(
-            consultor=None,
             total_relatos=0,
             frecuencias_terminos={},
             indice_riesgo_base=0.3,
@@ -704,7 +699,6 @@ class TestBaseConocimientoAndino:
             ejecutar_sintetizar_conocimiento_historico
         )
         resultado = ejecutar_sintetizar_conocimiento_historico(
-            consultor=None,
             total_relatos=0,
             frecuencias_terminos={},
             indice_riesgo_base=0.0,
@@ -720,7 +714,6 @@ class TestBaseConocimientoAndino:
             ejecutar_sintetizar_conocimiento_historico
         )
         resultado = ejecutar_sintetizar_conocimiento_historico(
-            consultor=None,
             total_relatos=10,
             frecuencias_terminos={"placa": 5, "viento": 3},
             indice_riesgo_base=0.6,
@@ -1093,6 +1086,76 @@ class TestAlmacenadorHelpers:
         from agentes.salidas.almacenador import _extraer_nivel
         assert _extraer_nivel("", r'(\d)') is None
         assert _extraer_nivel(None, r'(\d)') is None
+
+    def test_extraer_resultado_tool_encuentra(self):
+        """_extraer_resultado_tool retorna el resultado de la tool indicada."""
+        from agentes.salidas.almacenador import _extraer_resultado_tool
+        tools = [
+            {"tool": "calcular_pinn", "resultado": {"factor_seguridad_mohr_coulomb": 1.25}},
+            {"tool": "analizar_vit", "resultado": {"estado_vit": "ALERTADO"}},
+        ]
+        res = _extraer_resultado_tool(tools, "calcular_pinn")
+        assert res["factor_seguridad_mohr_coulomb"] == 1.25
+
+    def test_extraer_resultado_tool_no_encontrado(self):
+        """_extraer_resultado_tool retorna {} si el tool no existe."""
+        from agentes.salidas.almacenador import _extraer_resultado_tool
+        tools = [{"tool": "otro_tool", "resultado": {"x": 1}}]
+        assert _extraer_resultado_tool(tools, "calcular_pinn") == {}
+
+    def test_extraer_resultado_tool_sin_resultado(self):
+        """_extraer_resultado_tool retorna {} si no hay campo resultado."""
+        from agentes.salidas.almacenador import _extraer_resultado_tool
+        tools = [{"tool": "calcular_pinn", "inputs": {"pendiente": 35}}]
+        assert _extraer_resultado_tool(tools, "calcular_pinn") == {}
+
+    def test_extraer_resultado_tool_ultima_ocurrencia(self):
+        """_extraer_resultado_tool retorna la última llamada al tool."""
+        from agentes.salidas.almacenador import _extraer_resultado_tool
+        tools = [
+            {"tool": "calcular_pinn", "resultado": {"factor_seguridad_mohr_coulomb": 1.1}},
+            {"tool": "calcular_pinn", "resultado": {"factor_seguridad_mohr_coulomb": 1.4}},
+        ]
+        res = _extraer_resultado_tool(tools, "calcular_pinn")
+        assert res["factor_seguridad_mohr_coulomb"] == 1.4
+
+    def test_construir_campos_subagentes_campos_presentes(self):
+        """_construir_campos_subagentes retorna todos los campos esperados."""
+        from agentes.salidas.almacenador import _construir_campos_subagentes
+        tools = [
+            {"tool": "calcular_pinn", "resultado": {
+                "factor_seguridad_mohr_coulomb": 1.2,
+                "estado_manto": "INESTABLE"
+            }},
+            {"tool": "analizar_vit", "resultado": {
+                "estado_vit": "ALERTADO",
+                "score_anomalia": 0.7
+            }},
+            {"tool": "detectar_ventanas_criticas", "resultado": {
+                "factor_meteorologico_eaws": "NEVADA_RECIENTE",
+                "num_ventanas_criticas": 2
+            }},
+        ]
+        campos = _construir_campos_subagentes(tools, {})
+        assert campos["estado_pinn"] == "INESTABLE"
+        assert campos["factor_seguridad_pinn"] == 1.2
+        assert campos["estado_vit"] == "ALERTADO"
+        assert campos["score_anomalia_vit"] == 0.7
+        assert campos["factor_meteorologico"] == "NEVADA_RECIENTE"
+        assert campos["ventanas_criticas"] == 2
+
+    def test_construir_campos_nombre_nivel_24h(self):
+        """guardar_boletin extrae nombre_nivel_24h (no nombre_nivel) del tool clasificar."""
+        from agentes.salidas.almacenador import _extraer_resultado_tool
+        tools = [
+            {"tool": "clasificar_riesgo_eaws_integrado", "resultado": {
+                "nombre_nivel_24h": "Considerable",
+                "nivel_eaws_24h": 3
+            }},
+        ]
+        res = _extraer_resultado_tool(tools, "clasificar_riesgo_eaws_integrado")
+        assert res.get("nombre_nivel_24h") == "Considerable"
+        assert res.get("nombre_nivel") is None  # el campo correcto es nombre_nivel_24h
 
 
 class TestRegistroVersiones:

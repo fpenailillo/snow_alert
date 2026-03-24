@@ -301,6 +301,7 @@ class BaseSubagente(ABC):
                             "tool": bloque.name,
                             "iteracion": iteracion,
                             "inputs": bloque.input,
+                            "resultado": resultado,
                             "duracion_segundos": duracion_tool,
                             "subagente": self.NOMBRE
                         })

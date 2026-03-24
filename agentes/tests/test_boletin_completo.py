@@ -49,11 +49,13 @@ SECCIONES_OBLIGATORIAS = [
     "CONFIANZA:",
 ]
 
-TOOLS_ORDEN_ESPERADO = [
-    "analizar_terreno",
-    "monitorear_nieve",
-    "analizar_meteorologia",
-    "clasificar_riesgo_eaws",
+# Tools clave del pipeline v3 multi-agente (una por cada subagente)
+TOOLS_MINIMAS_ESPERADAS = [
+    "analizar_dem",               # SubagenteTopografico
+    "analizar_vit",               # SubagenteSatelital
+    "obtener_condiciones_actuales_meteo",  # SubagenteMeteorologico
+    "clasificar_riesgo_eaws_integrado",    # SubagenteIntegrador
+    "redactar_boletin_eaws",               # SubagenteIntegrador
 ]
 
 
@@ -126,33 +128,33 @@ def test_nivel_eaws_es_entero_valido(boletin_generado):
 
 
 def test_tools_llamadas_en_orden_correcto(boletin_generado):
-    """Verifica que las 4 tools fueron llamadas en el orden esperado."""
+    """Verifica que las tools clave del pipeline v3 fueron llamadas."""
     tools_llamadas = boletin_generado.get("tools_llamadas", [])
     nombres_tools = [t["tool"] for t in tools_llamadas]
 
     print(f"\n  Tools llamadas: {nombres_tools}")
 
-    # Verificar que todas las 4 tools fueron llamadas
-    for tool_esperada in TOOLS_ORDEN_ESPERADO:
+    # Verificar que todas las tools clave están presentes
+    for tool_esperada in TOOLS_MINIMAS_ESPERADAS:
         assert tool_esperada in nombres_tools, (
             f"Tool '{tool_esperada}' no fue llamada. "
             f"Tools disponibles: {nombres_tools}"
         )
 
-    # Verificar que se respetó el orden relativo
-    indices = {tool: nombres_tools.index(tool) for tool in TOOLS_ORDEN_ESPERADO}
-
-    assert indices["analizar_terreno"] < indices["monitorear_nieve"], (
-        "analizar_terreno debe llamarse antes que monitorear_nieve"
-    )
-    assert indices["monitorear_nieve"] < indices["analizar_meteorologia"], (
-        "monitorear_nieve debe llamarse antes que analizar_meteorologia"
-    )
-    assert indices["analizar_meteorologia"] < indices["clasificar_riesgo_eaws"], (
-        "analizar_meteorologia debe llamarse antes que clasificar_riesgo_eaws"
+    # Verificar que el integrador corre después del topográfico
+    idx_dem = nombres_tools.index("analizar_dem")
+    idx_clasificar = nombres_tools.index("clasificar_riesgo_eaws_integrado")
+    assert idx_dem < idx_clasificar, (
+        "analizar_dem (subagente 1) debe ejecutarse antes que clasificar_riesgo_eaws_integrado (subagente 5)"
     )
 
-    print(f"  ✓ Orden correcto: {' → '.join(TOOLS_ORDEN_ESPERADO)}")
+    # Verificar que el boletín se redacta después de clasificar
+    idx_boletin = nombres_tools.index("redactar_boletin_eaws")
+    assert idx_clasificar < idx_boletin, (
+        "clasificar_riesgo_eaws_integrado debe ejecutarse antes que redactar_boletin_eaws"
+    )
+
+    print(f"  ✓ Pipeline v3: {len(nombres_tools)} tools llamadas, orden verificado")
 
 
 def test_boletin_contiene_ubicacion(boletin_generado):

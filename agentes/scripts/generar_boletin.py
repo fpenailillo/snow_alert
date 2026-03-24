@@ -12,6 +12,8 @@ import json
 import logging
 import sys
 import os
+from datetime import datetime, timezone
+from typing import Optional
 
 # Agregar raíz del proyecto al path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../..'))
@@ -38,12 +40,24 @@ Ejemplos:
   python agentes/scripts/generar_boletin.py --ubicacion "La Parva Sector Bajo"
   python agentes/scripts/generar_boletin.py --ubicacion "Valle Nevado" --solo-imprimir
   python agentes/scripts/generar_boletin.py --listar-ubicaciones
+  python agentes/scripts/generar_boletin.py --ubicacion "La Parva Sector Bajo" --fecha 2024-07-15
         """
     )
     parser.add_argument(
         '--ubicacion',
         type=str,
         help='Nombre exacto de la ubicación'
+    )
+    parser.add_argument(
+        '--fecha',
+        type=str,
+        default=None,
+        metavar='YYYY-MM-DD',
+        help=(
+            'Fecha de referencia para análisis histórico (formato YYYY-MM-DD). '
+            'Si se omite, usa datos actuales. '
+            'Ejemplo: --fecha 2024-07-15'
+        )
     )
     parser.add_argument(
         '--solo-imprimir',
@@ -81,7 +95,8 @@ def listar_ubicaciones() -> None:
 def generar_y_mostrar(
     ubicacion: str,
     solo_imprimir: bool = False,
-    formato_json: bool = False
+    formato_json: bool = False,
+    fecha_referencia: Optional[datetime] = None
 ) -> int:
     """
     Genera un boletín y lo muestra/guarda según las opciones.
@@ -90,15 +105,23 @@ def generar_y_mostrar(
         ubicacion: Nombre de la ubicación
         solo_imprimir: Si True, no guarda en BigQuery/GCS
         formato_json: Si True, imprime en formato JSON
+        fecha_referencia: datetime de referencia para análisis histórico.
+            Si es None, usa datos actuales.
 
     Returns:
         int: 0 si exitoso, 1 si error
     """
-    logger.info(f"Iniciando generación de boletín para: {ubicacion}")
+    if fecha_referencia is not None:
+        logger.info(
+            f"Iniciando generación de boletín histórico para: {ubicacion} "
+            f"(fecha referencia: {fecha_referencia.date()})"
+        )
+    else:
+        logger.info(f"Iniciando generación de boletín para: {ubicacion}")
 
     try:
         agente = AgenteRiesgoAvalancha()
-        resultado = agente.generar_boletin(ubicacion)
+        resultado = agente.generar_boletin(ubicacion, fecha_referencia=fecha_referencia)
 
         if formato_json:
             print(json.dumps(resultado, ensure_ascii=False, indent=2, default=str))
@@ -149,10 +172,29 @@ def main() -> int:
         print("Error: debe especificar --ubicacion o --listar-ubicaciones", file=sys.stderr)
         return 1
 
+    # Parsear --fecha si se proporcionó
+    fecha_referencia = None
+    if args.fecha:
+        try:
+            fecha_dt = datetime.strptime(args.fecha, "%Y-%m-%d")
+            # Usar las 15:00 UTC-3 como hora representativa del día
+            fecha_referencia = fecha_dt.replace(
+                hour=18, minute=0, second=0, tzinfo=timezone.utc
+            )
+            logger.info(f"Fecha de referencia histórica: {args.fecha} → {fecha_referencia.isoformat()}")
+        except ValueError:
+            print(
+                f"Error: formato de fecha inválido '{args.fecha}'. "
+                "Use el formato YYYY-MM-DD (ejemplo: 2024-07-15)",
+                file=sys.stderr
+            )
+            return 1
+
     return generar_y_mostrar(
         ubicacion=args.ubicacion,
         solo_imprimir=args.solo_imprimir,
-        formato_json=args.json
+        formato_json=args.json,
+        fecha_referencia=fecha_referencia,
     )
 
 

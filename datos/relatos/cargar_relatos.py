@@ -57,8 +57,8 @@ logger = logging.getLogger(__name__)
 
 # ─── Configuración ────────────────────────────────────────────────────────────
 
-GCP_PROJECT = "climas-chileno"
-DATASET = "clima"
+GCP_PROJECT = os.environ.get("GCP_PROJECT") or os.environ.get("ID_PROYECTO", "climas-chileno")
+DATASET = os.environ.get("DATASET_ID", "clima")
 TABLA = "relatos_montanistas"
 SCHEMA_PATH = os.path.join(os.path.dirname(__file__), "schema_relatos.json")
 

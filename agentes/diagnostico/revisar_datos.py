@@ -23,8 +23,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-ID_PROYECTO = "climas-chileno"
-DATASET = "clima"
+ID_PROYECTO = os.environ.get("GCP_PROJECT") or os.environ.get("ID_PROYECTO", "climas-chileno")
+DATASET = os.environ.get("DATASET_ID", "clima")
 
 # Columnas clave a verificar en cada tabla
 COLUMNAS_SATELITAL = [
