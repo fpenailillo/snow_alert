@@ -1,5 +1,57 @@
 # Log de Progreso — snow_alert
 
+## Sesión 2026-03-24 — P1/P2/P3 resueltos + Orquestación validación
+
+### P1 (ALTA): Dedup boletines ✅
+- Agregado upsert en `agentes/salidas/almacenador.py`:
+  - `_ya_existe_boletin()` + `_eliminar_boletin_existente()` antes de cada INSERT
+  - Patrón: SELECT COUNT → DELETE → INSERT streaming
+  - 39 filas duplicadas eliminadas de `clima.boletines_riesgo`
+
+### P2 (ALTA): ≥50 boletines únicos generados ✅
+- **61 boletines únicos** guardados en BQ el 2026-03-24
+- Problemas encontrados y resueltos en el camino:
+  - `generar_todos.py` guardaba al final (todo o nada) → reescrito para **guardado incremental** por ubicación
+  - `ClienteDatabricks.crear_mensaje()` sin timeout → colgaba horas (Cerro Bayo: 7950s, Mammoth Mountain: >1h)
+  - Solución: `timeout=300` en `cliente_llm.py` + guardado incremental
+  - Mammoth Mountain: timeout no funcionó → matado manualmente, saltado, continuó el resto
+- Estado BQ al cierre: **61 boletines únicos** del 2026-03-24
+
+### P3 (MEDIA): analizar-topografia-job ✅
+- Bug `peligro_eaws_base` (tuple → INTEGER) y `estimar_tamano_potencial` (keys incorrectas) ya corregidos en sesión 2026-03-17
+- Job mensual correrá automáticamente en 2026-04-01
+- Job diario ya funciona sin errores
+
+### Orquestación diaria optimizada ✅
+- Nuevo flag `--preset validacion` en `generar_todos.py`:
+  - 6 ubicaciones: La Parva Sector Alto/Bajo/Medio + Matterhorn Zermatt + Interlaken + St Moritz
+  - Permite usar Databricks (gratuito) sin esperar horas: ~15 min vs 3+ horas para 50 ubicaciones
+- `Dockerfile` actualizado: `ENTRYPOINT [..., "--preset", "validacion"]`
+- Datos siguen actualizándose para todas las ubicaciones via Cloud Functions
+
+### Commits de esta sesión
+- `ea78d3d` Fix duplicados almacenador.py + limpiar BQ
+- `bb829f6` (anterior)
+- `51f639d` Fix hangs Databricks: timeout 300s + guardado incremental
+- `2474572` Orquestación: preset validacion (La Parva + Suiza)
+
+### Estado Hipótesis (actualizado 2026-03-24)
+
+| ID | Umbral | Estado |
+|----|--------|--------|
+| H1 | F1-macro ≥75%, ≥50 boletines | ✅ 61 boletines únicos → ejecutar métricas |
+| H2 | Delta NLP >5pp | ✅ +7.9pp (notebook 06) |
+| H3 | QWK Techel 2022 | ⏳ Pendiente email a techel@slf.ch |
+| H4 | Kappa ≥0.60 vs Snowlab | ⏳ Pendiente contacto Andes Consciente |
+
+### Pendiente (acciones manuales)
+1. Enviar email a Frank Techel (techel@slf.ch) para datos EAWS Matrix operacional
+2. Contactar Andes Consciente para boletines históricos Snowlab La Parva
+3. Ejecutar `notebooks_validacion/01_validacion_f1_score.py` con 61 boletines (H1)
+4. Conectar LLM de producción (Anthropic) cuando esté disponible → cambiar Dockerfile de `--preset validacion` a `--guardar` para generar todas las ubicaciones
+
+---
+
 ## Sesión 2026-03-23 — Pipeline datos de validación + Boletines históricos
 
 ### Tarea 0: Boletines históricos completados ✅
