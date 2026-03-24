@@ -301,6 +301,8 @@ class ClienteDatabricks:
             usage=uso,
         )
 
+    TIMEOUT_SEGUNDOS = 300  # 5 minutos por llamada LLM
+
     def crear_mensaje(self, *, model, max_tokens, system, tools, messages):
         tools_oi = self._tools_a_openai(tools)
         messages_oi = self._mensajes_a_openai(system, messages)
@@ -309,6 +311,7 @@ class ClienteDatabricks:
             max_tokens=max_tokens,
             tools=tools_oi,
             messages=messages_oi,
+            timeout=self.TIMEOUT_SEGUNDOS,
         )
         return self._normalizar_respuesta(resp)
 
