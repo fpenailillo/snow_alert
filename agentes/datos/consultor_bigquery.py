@@ -256,6 +256,10 @@ class ConsultorBigQuery:
                     WHERE nombre_ubicacion = @ubicacion
                       AND hora_inicio >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 72 HOUR)
                       AND hora_inicio <= CURRENT_TIMESTAMP()
+                    QUALIFY ROW_NUMBER() OVER (
+                        PARTITION BY hora_inicio
+                        ORDER BY marca_tiempo_ingestion DESC
+                    ) = 1
                     ORDER BY hora_inicio ASC
                 """.format(proyecto=self.GCP_PROJECT, dataset=self.DATASET)
 
@@ -270,6 +274,10 @@ class ConsultorBigQuery:
                     WHERE nombre_ubicacion = @ubicacion
                       AND hora_inicio > CURRENT_TIMESTAMP()
                       AND hora_inicio <= TIMESTAMP_ADD(CURRENT_TIMESTAMP(), INTERVAL 48 HOUR)
+                    QUALIFY ROW_NUMBER() OVER (
+                        PARTITION BY hora_inicio
+                        ORDER BY marca_tiempo_ingestion DESC
+                    ) = 1
                     ORDER BY hora_inicio ASC
                 """.format(proyecto=self.GCP_PROJECT, dataset=self.DATASET)
 
@@ -288,6 +296,10 @@ class ConsultorBigQuery:
                     WHERE nombre_ubicacion = @ubicacion
                       AND hora_inicio >= TIMESTAMP_SUB(TIMESTAMP(@fecha_ref), INTERVAL 72 HOUR)
                       AND hora_inicio <= TIMESTAMP(@fecha_ref)
+                    QUALIFY ROW_NUMBER() OVER (
+                        PARTITION BY hora_inicio
+                        ORDER BY marca_tiempo_ingestion DESC
+                    ) = 1
                     ORDER BY hora_inicio ASC
                 """.format(proyecto=self.GCP_PROJECT, dataset=self.DATASET)
 
@@ -302,6 +314,10 @@ class ConsultorBigQuery:
                     WHERE nombre_ubicacion = @ubicacion
                       AND hora_inicio > TIMESTAMP(@fecha_ref)
                       AND hora_inicio <= TIMESTAMP_ADD(TIMESTAMP(@fecha_ref), INTERVAL 48 HOUR)
+                    QUALIFY ROW_NUMBER() OVER (
+                        PARTITION BY hora_inicio
+                        ORDER BY marca_tiempo_ingestion DESC
+                    ) = 1
                     ORDER BY hora_inicio ASC
                 """.format(proyecto=self.GCP_PROJECT, dataset=self.DATASET)
 
