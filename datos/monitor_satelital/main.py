@@ -449,8 +449,13 @@ def monitorear_satelital(solicitud: Request) -> Tuple[Dict[str, Any], int]:
         cliente_gcs = storage.Client()
         cliente_bq = bigquery.Client()
 
-        # Obtener nombre del bucket completo
-        bucket_nombre = f"{ID_PROYECTO}-{BUCKET_BRONCE}"
+        # Obtener nombre del bucket completo.
+        # BUCKET_BRONCE puede ser el sufijo ('datos-clima-bronce') o el nombre completo
+        # ('climas-chileno-datos-clima-bronce'). Se evita doblar el prefijo del proyecto.
+        if BUCKET_BRONCE.startswith(f"{ID_PROYECTO}-"):
+            bucket_nombre = BUCKET_BRONCE
+        else:
+            bucket_nombre = f"{ID_PROYECTO}-{BUCKET_BRONCE}"
         logger.info(f"Bucket destino: {bucket_nombre}")
 
         # Obtener ubicaciones
@@ -595,7 +600,10 @@ def main():
     cliente_bq = bigquery.Client()
 
     proyecto = os.environ.get('GCP_PROJECT', ID_PROYECTO)
-    bucket_nombre = f"{proyecto}-{BUCKET_BRONCE}"
+    if BUCKET_BRONCE.startswith(f"{proyecto}-"):
+        bucket_nombre = BUCKET_BRONCE
+    else:
+        bucket_nombre = f"{proyecto}-{BUCKET_BRONCE}"
 
     # Determinar tipo de captura
     tipo_captura = args.captura or determinar_tipo_captura()
