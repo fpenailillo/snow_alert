@@ -51,21 +51,67 @@ def ejecutar_analizar_tendencia_72h(nombre_ubicacion: str) -> dict:
     if "error" in tendencia:
         return tendencia
 
-    # Analizar el historial disponible
-    historial = tendencia.get("historial_24h", [])
-    resumen_actual = tendencia.get("resumen_actual", {})
+    if not tendencia.get("disponible"):
+        return {
+            "disponible": False,
+            "ubicacion": nombre_ubicacion,
+            "mensaje": tendencia.get("razon", "Sin datos de pronóstico horario")
+        }
 
-    # Calcular estadísticas del historial
-    estadisticas = _calcular_estadisticas_historial(historial)
+    # obtener_tendencia_meteorologica retorna estadísticas agregadas de pronostico_horas
+    # (no filas individuales). Derivar análisis desde esas estadísticas.
+    temp_min = tendencia.get("temp_min_72h")
+    temp_max = tendencia.get("temp_max_72h")
+    precip_total = tendencia.get("precip_total_acumulada_mm", 0) or 0
+    viento_max = tendencia.get("viento_max_ms")
+    horas_precip = tendencia.get("horas_con_precipitacion", 0) or 0
+    tendencia_temp = tendencia.get("tendencia_temperatura", "estable")
 
-    # Detectar ciclos de temperatura (congelación nocturna / fusión diurna)
-    ciclos_temp = _detectar_ciclos_temperatura(historial)
+    # Estadísticas desde datos agregados
+    estadisticas = {
+        "temp_min_C": temp_min,
+        "temp_max_C": temp_max,
+        "temp_promedio_C": round((temp_min + temp_max) / 2, 1) if temp_min is not None and temp_max is not None else None,
+        "variacion_termica_C": round(abs(temp_max - temp_min), 1) if temp_min is not None and temp_max is not None else 0,
+        "viento_max_ms": viento_max,
+        "precipitacion_total_mm": round(precip_total, 1),
+        "horas_con_datos": horas_precip
+    }
 
-    # Evaluar tendencia de viento
-    tendencia_viento = _evaluar_tendencia_viento(historial)
+    # Detectar ciclo fusión-congelación desde temp agregadas
+    ciclo_fusion_congelacion = (
+        temp_max is not None and temp_min is not None
+        and temp_max > 0 and temp_min < 0
+    )
+    ciclos_temp = {
+        "ciclo_detectado": ciclo_fusion_congelacion,
+        "temp_max_C": temp_max,
+        "temp_min_C": temp_min,
+        "ciclo_fusion_congelacion": ciclo_fusion_congelacion,
+        "alerta_ciclo": "CICLO_FUSION_CONGELACION_ACTIVO" if ciclo_fusion_congelacion else None
+    }
 
-    # Detectar eventos de precipitación
-    eventos_precip = _detectar_eventos_precipitacion(historial)
+    # Tendencia de viento desde estadísticas (no hay series temporales)
+    tendencia_viento = {
+        "disponible": viento_max is not None,
+        "tendencia": "desconocida",
+        "maximo_ms": viento_max,
+        "alerta": "VIENTO_FUERTE_72H" if viento_max and viento_max > 15 else None
+    }
+
+    # Eventos de precipitación
+    eventos = []
+    if precip_total > 30:
+        eventos.append("PRECIPITACION_ACUMULADA_ALTA")
+    elif precip_total > 10:
+        eventos.append("PRECIPITACION_ACUMULADA_MODERADA")
+    if horas_precip > 6:
+        eventos.append("PRECIPITACION_PERSISTENTE")
+    eventos_precip = {
+        "total_mm": round(precip_total, 1),
+        "horas_con_precipitacion": horas_precip,
+        "eventos": eventos
+    }
 
     # Evaluar peligro de fusión-recongelación
     peligro_fusion_congelacion = _evaluar_peligro_fusion_congelacion(
@@ -76,13 +122,13 @@ def ejecutar_analizar_tendencia_72h(nombre_ubicacion: str) -> dict:
     return {
         "disponible": True,
         "ubicacion": nombre_ubicacion,
-        "horas_analizadas": len(historial),
-        "estadisticas_24h": estadisticas,
+        "tendencia_temperatura_72h": tendencia_temp,
+        "estadisticas_72h": estadisticas,
         "ciclos_temperatura": ciclos_temp,
         "tendencia_viento": tendencia_viento,
         "eventos_precipitacion": eventos_precip,
         "peligro_fusion_congelacion": peligro_fusion_congelacion,
-        "resumen_actual": resumen_actual,
+        "alertas": tendencia.get("alertas", []),
         "alertas_tendencia": _compilar_alertas_tendencia(
             estadisticas, ciclos_temp, tendencia_viento, eventos_precip, peligro_fusion_congelacion
         )
