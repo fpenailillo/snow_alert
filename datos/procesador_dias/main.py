@@ -277,6 +277,33 @@ def transformar_datos_para_bigquery(datos: Dict[str, Any], uri_gcs: str) -> List
         raise ErrorProcesamientoClima(f"Error al transformar datos: {str(e)}")
 
 
+def _ya_existe_pronostico_dias(
+    cliente_bigquery: bigquery.Client,
+    nombre_ubicacion: str,
+    marca_ingestion: str
+) -> bool:
+    """Verifica si ya existe un pronóstico diario para esta ubicación en las últimas 2 horas."""
+    tabla_id = f"{ID_PROYECTO}.{NOMBRE_DATASET}.{NOMBRE_TABLA}"
+    query = f"""
+        SELECT COUNT(*) AS n
+        FROM `{tabla_id}`
+        WHERE nombre_ubicacion = @nombre
+          AND ABS(TIMESTAMP_DIFF(marca_tiempo_ingestion, @ts, MINUTE)) < 120
+    """
+    job_config = bigquery.QueryJobConfig(
+        query_parameters=[
+            bigquery.ScalarQueryParameter('nombre', 'STRING', nombre_ubicacion),
+            bigquery.ScalarQueryParameter('ts', 'TIMESTAMP', marca_ingestion),
+        ]
+    )
+    try:
+        for row in cliente_bigquery.query(query, job_config=job_config).result():
+            return row.n > 0
+    except Exception:
+        pass
+    return False
+
+
 def guardar_en_bigquery(
     cliente_bigquery: bigquery.Client,
     nombre_dataset: str,
@@ -334,8 +361,14 @@ def procesar_pronostico_dias(evento_nube):
         # Guardar en GCS (capa bronce)
         uri_gcs = guardar_en_gcs(cliente_storage, NOMBRE_BUCKET, datos)
 
-        # Transformar y guardar en BigQuery (capa plata)
+        # Transformar y guardar en BigQuery (capa plata) — con dedup
         filas_bigquery = transformar_datos_para_bigquery(datos, uri_gcs)
+        now_iso = datetime.now(timezone.utc).isoformat()
+        if _ya_existe_pronostico_dias(cliente_bigquery, nombre_ubicacion, now_iso):
+            logger.info(
+                f"Pronóstico diario duplicado para {nombre_ubicacion} — omitiendo"
+            )
+            return
         guardar_en_bigquery(cliente_bigquery, NOMBRE_DATASET, NOMBRE_TABLA, filas_bigquery)
 
         logger.info("=" * 60)

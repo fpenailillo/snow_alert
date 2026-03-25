@@ -387,6 +387,33 @@ def transformar_datos_para_bigquery(datos: Dict[str, Any], uri_gcs: str) -> Dict
         raise ErrorProcesamientoClima(mensaje_error)
 
 
+def _ya_existe_condicion(
+    cliente_bigquery: bigquery.Client,
+    nombre_ubicacion: str,
+    hora_actual: str
+) -> bool:
+    """Verifica si ya existe una condición para esta ubicación en las últimas 2 horas."""
+    tabla_id = f"{ID_PROYECTO}.{NOMBRE_DATASET}.{NOMBRE_TABLA}"
+    query = f"""
+        SELECT COUNT(*) AS n
+        FROM `{tabla_id}`
+        WHERE nombre_ubicacion = @nombre
+          AND ABS(TIMESTAMP_DIFF(hora_actual, @hora, MINUTE)) < 120
+    """
+    job_config = bigquery.QueryJobConfig(
+        query_parameters=[
+            bigquery.ScalarQueryParameter('nombre', 'STRING', nombre_ubicacion),
+            bigquery.ScalarQueryParameter('hora', 'TIMESTAMP', hora_actual),
+        ]
+    )
+    try:
+        for row in cliente_bigquery.query(query, job_config=job_config).result():
+            return row.n > 0
+    except Exception:
+        pass
+    return False
+
+
 def guardar_en_bigquery(
     cliente_bigquery: bigquery.Client,
     nombre_dataset: str,
@@ -496,7 +523,14 @@ def procesar_clima(evento_nube):
         logger.info(f"Transformando datos para BigQuery: {nombre_ubicacion}...")
         fila_bigquery = transformar_datos_para_bigquery(datos, uri_gcs)
 
-        # PASO 3: Guardar en BigQuery (capa plata)
+        # PASO 3: Guardar en BigQuery (capa plata) — con dedup
+        hora_actual = fila_bigquery.get('hora_actual', '')
+        if _ya_existe_condicion(cliente_bigquery, nombre_ubicacion, hora_actual):
+            logger.info(
+                f"Condición duplicada para {nombre_ubicacion} @ {hora_actual} — omitiendo"
+            )
+            return
+
         logger.info(f"Guardando datos transformados en BigQuery: {nombre_ubicacion}...")
         guardar_en_bigquery(
             cliente_bigquery,
