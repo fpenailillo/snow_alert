@@ -245,7 +245,10 @@ def crear_mapa_zonas_png(
     peligro_eaws = indice_dict.get('peligro_eaws_base', 1)
 
     pendiente_max = cubicacion.get('pendiente_max_inicio', 0)
-    desnivel = cubicacion.get('desnivel_inicio_deposito', 0)
+    # desnivel_inicio_deposito puede ser negativo si la zona de depósito
+    # (terreno plano) está a mayor elevación que la zona de inicio (terreno empinado).
+    # Se usa abs() para mostrar la diferencia de elevación como valor positivo.
+    desnivel = abs(cubicacion.get('desnivel_inicio_deposito') or 0)
 
     # Crear figura
     fig_width = tamano[0] / dpi

@@ -453,7 +453,7 @@ def cubicar_zonas_completo(
         # Desniveles y elevaciones (proxy Tamaño EAWS)
         'desnivel_inicio_deposito': round(desniveles['desnivel'], 2) if desniveles['desnivel'] != VALOR_NULO_GEE else None,
         'elevacion_max_inicio': elev_max_inicio,
-        'elevacion_min_inicio': elev_max_inicio,
+        'elevacion_min_inicio': None,  # calcular_desnivel_zonas() sólo devuelve media, no mínimo real
         'elevacion_min_deposito': elev_min_deposito,
 
         # Aspecto (proxy Estabilidad EAWS)

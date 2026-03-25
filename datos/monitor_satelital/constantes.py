@@ -155,11 +155,13 @@ VIS_MODIS_FALSE_COLOR_NIEVE: Dict[str, Any] = {
 }
 
 # MODIS NDSI Snow Cover
+# Paleta: gris (sin nieve) → azul claro → azul → azul profundo (nieve total)
+# Se evita blanco para que la nieve sea visible en fondo claro
 VIS_NDSI_SNOW: Dict[str, Any] = {
     'bands': ['NDSI'],
     'min': 0,
     'max': 100,
-    'palette': ['000000', '0dffff', '0524ff', '8f0af4', 'ffffff'],
+    'palette': ['c8c8c8', '88ddff', '2299dd', '0055aa'],
 }
 
 # MODIS LST
