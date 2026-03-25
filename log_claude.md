@@ -1,5 +1,70 @@
 # Log de Progreso — snow_alert
 
+## Sesión 2026-03-25 (continuación) — Alineación nombres cross-tabla + dedup procesadores
+
+### Estado final capa de datos (2026-03-25 ~12:10 UTC)
+
+| Tabla | Filas | Ubicaciones | NULLs críticos | Duplicados | Estado |
+|-------|-------|-------------|----------------|------------|--------|
+| condiciones_actuales | 69,477 | 92 (hist+activas) | 0 | 0 (dedup aplicado) | ✅ |
+| pronostico_horas | 11,723 | 71 | 0 | 0 (dedup aplicado) | ✅ |
+| pronostico_dias | 2,524 | 71 | 0 | 0 (dedup aplicado) | ✅ |
+| imagenes_satelitales | 701 | 25 | 0 (hoy 100% NDSI) | 0 | ✅ |
+| zonas_avalancha | 111 | 37 | 0 | 0 | ✅ |
+| pendientes_detalladas | 37 | 37 | 0 | 0 | ✅ |
+| boletines_riesgo | 65 | 51 | 0 | 0 | ✅ |
+| relatos_montanistas | 3,138 | 204 | 0 | 0 | ✅ |
+
+**Gaps cross-tabla: 0** — todas las ubicaciones en zonas_avalancha e imagenes_satelitales tienen datos en condiciones_actuales.
+
+### Fix alineación nombres cross-tabla ✅ (commits `8056f7e`, `4ed7199`)
+
+**Renames en UBICACIONES_ANALISIS (analizador):**
+- `Pucón` (ciudad -39.28) → `Ski Pucón` (resort -39.50)
+- `Catedral Alta Patagonia` → `Cerro Catedral`
+- `Chapelco` → `Cerro Chapelco`
+- Agregados: `Vallecitos`, `Caviahue`
+
+**Renames en UBICACIONES_MONITOREO (extractor):**
+- `Chapelco` → `Cerro Chapelco` (coord actualizadas a -40.25, -71.20)
+- `Whistler` → `Whistler Blackcomb`
+- `Plaza de Mulas - Aconcagua` → `Plaza de Mulas Aconcagua` (quita guión)
+- `Chamonix` eliminado (consolidado bajo `Chamonix Mont Blanc`)
+
+**Nuevas ubicaciones agregadas al extractor (70 total):**
+- Andinas: `Los Penitentes`, `Vallecitos`, `Caviahue`, `La Hoya`
+- Internacionales: `Plaza Argentina Aconcagua`, `Revelstoke`, `Squaw Valley`, `Val d'Isère`, `St. Anton am Arlberg`
+
+**BQ UPDATEs aplicados** (condiciones_actuales, pronostico_dias, pronostico_horas, zonas_avalancha, pendientes_detalladas, boletines_riesgo):
+- Renames: Chapelco→Cerro Chapelco (277+161+268 filas), Whistler→Whistler Blackcomb (112+58+268), Plaza de Mulas→(sin guión) (51+45+168), Chamonix→Chamonix Mont Blanc (113+58+268)
+- pendientes_detalladas: 38 duplicados eliminados + 3 renames (Catedral Alta Patagonia, Chapelco, Pucón)
+
+### Fix dedup procesadores ✅ (commit `2f67793`)
+
+**Causa:** DEPLOYMENT_ROLLOUT de Cloud Run envía múltiples HTTP health-checks al extractor → extractor publica mensajes duplicados a Pub/Sub → procesadores insertan todos sin verificar.
+
+**Solución:** Cada procesador consulta BigQuery antes de insertar:
+- `procesador-clima`: `_ya_existe_condicion()` — omite si hay fila del mismo lugar en ±2h
+- `procesador-clima-horas`: `_ya_existe_pronostico_horas()` — idem
+- `procesador-clima-dias`: `_ya_existe_pronostico_dias()` — idem
+
+**Limpieza BQ:** 1,371 filas eliminadas de condiciones_actuales, 5,018 de pronostico_horas, 1,304 de pronostico_dias.
+
+**Redespliegues:** `procesador-clima-00017-mac`, `procesador-clima-horas-00007-qos`, `procesador-clima-dias-00006-zek`.
+
+### Estado Cloud Functions (2026-03-25)
+
+| Función | Revisión | Estado | Último dato |
+|---------|----------|--------|-------------|
+| extractor-clima | 00021-nit | ACTIVE | 11:00 UTC |
+| procesador-clima | 00017-mac | ACTIVE | via Pub/Sub |
+| procesador-clima-horas | 00007-qos | ACTIVE | via Pub/Sub |
+| procesador-clima-dias | 00006-zek | ACTIVE | via Pub/Sub |
+| monitor-satelital-nieve | (sin cambio) | ACTIVE | 2026-03-25 |
+| analizador-satelital-zonas | 00011-yah | ACTIVE | 01:11 UTC |
+
+---
+
 ## Sesión 2026-03-25 — Auditoría completa capa de datos + Fix SSL extractor + Fix Japan 404
 
 ### Audit BigQuery — resultado final (2026-03-25)
