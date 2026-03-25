@@ -401,12 +401,6 @@ UBICACIONES_MONITOREO = [
         'descripcion': 'Ushuaia, Argentina - Fin del Mundo, Base para Antártida'
     },
     {
-        'nombre': 'Pucon',
-        'latitud': -39.2819,
-        'longitud': -71.9755,
-        'descripcion': 'Pucón, Chile - Turismo Aventura y Volcán Villarrica'
-    },
-    {
         'nombre': 'San Martin de los Andes',
         'latitud': -40.1575,
         'longitud': -71.3522,
