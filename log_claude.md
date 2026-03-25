@@ -1,5 +1,63 @@
 # Log de Progreso — snow_alert
 
+## Sesión 2026-03-25 — Auditoría completa capa de datos + Fix SSL extractor + Fix Japan 404
+
+### Audit BigQuery — resultado final (2026-03-25)
+
+| Tabla | Total filas | Bugs corregidos | NULLs esperados | Estado |
+|-------|-------------|-----------------|-----------------|--------|
+| condiciones_actuales | 70,778 | 0 | 42 (ERA5 backfill, sin URI) | ✅ |
+| pronostico_horas | 15,013 | 0 | 0 | ✅ |
+| pronostico_dias | 3,483 | 0 | 126 (ERA5 backfill, sin URI) | ✅ |
+| imagenes_satelitales | 651 | 0 | NDSI URI null 2026-03-18/24 (threshold+bucket bugs, ya corregidos) | ⏳ |
+| zonas_avalancha | 252 | 178 elevacion_min_inicio corregidas a NULL | 0 | ✅ |
+| pendientes_detalladas | 75 | 0 | 0 | ✅ |
+| boletines_riesgo | 74 | 0 | 0 | ✅ |
+| relatos_montanistas | 3,138 | 0 | 107 null nivel (sin info avalancha) + 18 null tipo actividad | ✅ |
+
+### Fix SSL extractor ✅ (commit `734c529`)
+- `SSLEOFError` desde Cloud Run con `weather.googleapis.com` → TLS 1.3 incompatible
+- Fix: `httpx` con `ssl.TLSVersion.TLSv1_2` forzado
+- Confirmación: 278 nuevas filas `condiciones_actuales` a las 03:10 UTC
+- Extractor redespliegue: revisión `extractor-clima-00018-qoz`
+
+### Eliminar Hakuba + Niseko del extractor ✅ (commit `b6590a1`)
+- HTTP 404 para ambas ubicaciones en `weather.googleapis.com`
+- Eliminadas de `UBICACIONES_MONITOREO` en `datos/extractor/main.py`
+- Extractor redespliegue: revisión `extractor-clima-00018-qoz`
+
+### zonas_avalancha streaming buffer UPDATE ✅
+- 37 filas 2026-03-25 en buffer → corregidas a NULL al limpiar (~1h después del deploy)
+- Total bug_rows = 0 (252/252 filas limpias)
+
+### Cobertura ubicaciones (post-fix, 2026-03-25)
+- Extractor (condiciones_actuales/pronostico_*): 63 ubicaciones (65 original - 2 Japan 404)
+- Monitor satelital (imagenes_satelitales): 25 ubicaciones Andes/Sudamérica (lista separada)
+- La cobertura variable 53-63 en fechas anteriores era por SSL failures intermitentes (resuelto con TLS 1.2)
+- Brecha 2026-03-24: 0 datos en todas las tablas meteorológicas (SSL failure todo el día)
+
+### Fix dedup zonas_avalancha ✅ (commit `91828e5`)
+- Causa: redespliegue Cloud Function dispara DEPLOYMENT_ROLLOUT HTTP → múltiples ejecuciones el mismo día
+- Síntoma: 74 duplicados del 2026-03-25 + 30 del 2026-03-24
+- Fix: `_ya_existe_zona()` en `main.py` verifica `nombre_ubicacion + DATE(fecha_analisis)` antes de INSERT
+- 104 filas duplicadas eliminadas de BQ + 37 filas placeholder del 2026-03-17 (zona_ha=0, EAWS=1 uniforme)
+
+### imagenes_satelitales NDSI fix validado ✅
+- Primera ejecución post-fix: 25/25 ubicaciones con `uri_geotiff_ndsi` (100%)
+- NDSI URIs nulos anteriores al 2026-03-25 son históricos (threshold bug + bucket bug, sin backfill)
+
+### Estado final zonas_avalancha (2026-03-25)
+- 111 filas limpias: 3 fechas × 37 ubicaciones (2026-03-18, 2026-03-24, 2026-03-25)
+- 0 duplicados, 0 placeholders, 0 copy-paste bugs
+
+### Pendiente
+1. `git push origin main` (commits: `91828e5`) — requiere credenciales GitHub interactivas
+2. Regenerar imágenes topografía GCS (desnivel fix) → job mensual 2026-04-01
+3. Enviar email a Frank Techel (techel@slf.ch) para datos EAWS Matrix operacional (H3)
+4. Ejecutar `notebooks_validacion/01_validacion_f1_score.py` (H1)
+
+---
+
 ## Sesión 2026-03-25 — Fix capa de datos: bucket duplicado + 5 Cloud Functions redespliegue
 
 ### Causa raíz NULLs BQ 2026-03-24 ✅ (ENCONTRADO Y CORREGIDO)
