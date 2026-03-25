@@ -1,5 +1,43 @@
 # Log de Progreso — snow_alert
 
+## Sesión 2026-03-25 — Fix capa de datos: bucket duplicado + 5 Cloud Functions redespliegue
+
+### Causa raíz NULLs BQ 2026-03-24 ✅ (ENCONTRADO Y CORREGIDO)
+- **Bug**: `monitor_satelital/main.py` línea 453: `f"{ID_PROYECTO}-{BUCKET_BRONCE}"`
+- **Síntoma**: Si `BUCKET_CLIMA=climas-chileno-datos-clima-bronce` estaba seteado como env var,
+  resultaba en bucket `climas-chileno-climas-chileno-datos-clima-bronce` (no existe → 404)
+- **Efecto**: Todos los uploads GCS del 2026-03-24 fallaron → NULL URIs en todas las filas de
+  `imagenes_satelitales` para esa fecha
+- **Fix**: `datos/monitor_satelital/main.py` — verificación `if BUCKET_BRONCE.startswith(f"{ID_PROYECTO}-")` antes de prefijar (commit `b7a1d4c`)
+
+### Fixes calidad datos ✅ (commit `7c44eb7`)
+- `datos/analizador_avalanchas/cubicacion.py`: `elevacion_min_inicio` → `None` (era copy-paste de `elevacion_max_inicio`)
+- `datos/analizador_avalanchas/visualizacion.py`: `abs()` en `desnivel_inicio_deposito` para evitar "-494 m"
+- `datos/monitor_satelital/constantes.py`: paleta NDSI cambiada de negro→blanco a gris→azul
+
+### Cloud Functions redespliegues ✅
+| Función | Revisión | Hora UTC |
+|---------|----------|----------|
+| monitor-satelital-nieve | 00021 | 2026-03-25T01:16:00 |
+| procesador-clima | nueva | 2026-03-25T01:10:54 |
+| procesador-clima-dias | nueva | 2026-03-25T01:10:53 |
+| procesador-clima-horas | nueva | 2026-03-25T01:10:53 |
+| analizador-satelital-zonas-riesgosas-avalanchas | nueva | 2026-03-25T01:11:33 |
+
+### NULLs estructurales en imagenes_satelitales (no bugs, son esperados)
+- `ndsi_medio` NULL 53% → cobertura de nubes inevitable
+- `lst_noche_celsius` NULL 69% → MODIS LST nocturno no siempre disponible
+- `uri_geotiff_ndsi` NULL anterior al 2026-03-24 → umbral 1024B era muy alto para NDSI (450B)
+  → Fix: commit `1aa3640` + redespliegue monitor hoy → NULLs futuros serán menores
+
+### Pendiente
+1. Próximo scheduler (08:30, 14:30, 20:30 CLT) validará que los uploads funcionen
+2. Regenerar imágenes topografía GCS (desnivel y cubicacion fixes) → job mensual 2026-04-01
+3. Enviar email a Frank Techel (techel@slf.ch) para datos EAWS Matrix operacional (H3)
+4. Ejecutar `notebooks_validacion/01_validacion_f1_score.py` (H1)
+
+---
+
 ## Sesión 2026-03-24 — P1/P2/P3 resueltos + Orquestación validación
 
 ### P1 (ALTA): Dedup boletines ✅
