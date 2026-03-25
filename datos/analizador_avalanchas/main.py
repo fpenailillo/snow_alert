@@ -241,6 +241,29 @@ def preparar_fila_bigquery(
     return fila
 
 
+def _ya_existe_zona(cliente: bigquery.Client, nombre_ubicacion: str, fecha_analisis: datetime) -> bool:
+    """Verifica si ya existe un análisis para esta ubicación y fecha (evita duplicados)."""
+    tabla_id = f'{ID_PROYECTO}.{DATASET_BIGQUERY}.{TABLA_ZONAS}'
+    query = f"""
+        SELECT COUNT(*) AS n
+        FROM `{tabla_id}`
+        WHERE nombre_ubicacion = @nombre
+          AND DATE(fecha_analisis) = @fecha
+    """
+    job_config = bigquery.QueryJobConfig(
+        query_parameters=[
+            bigquery.ScalarQueryParameter('nombre', 'STRING', nombre_ubicacion),
+            bigquery.ScalarQueryParameter('fecha', 'DATE', fecha_analisis.date().isoformat()),
+        ]
+    )
+    try:
+        for row in cliente.query(query, job_config=job_config).result():
+            return row.n > 0
+    except Exception:
+        pass
+    return False
+
+
 def insertar_en_bigquery(
     cliente: bigquery.Client,
     filas: List[Dict[str, Any]]
@@ -458,6 +481,12 @@ def procesar_lote(
         )
 
         if resultado['exito']:
+            # Verificar duplicado antes de insertar
+            if _ya_existe_zona(cliente_bq, resultado['nombre'], fecha_analisis):
+                logger.info(f"Ya existe análisis para {resultado['nombre']} en {fecha_analisis.date()} — omitiendo")
+                exitosos += 1
+                continue
+
             # Preparar fila para BigQuery
             fila = preparar_fila_bigquery(
                 nombre_ubicacion=resultado['nombre'],
