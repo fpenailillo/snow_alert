@@ -19,6 +19,7 @@ import os
 from datetime import datetime, timezone
 from typing import Dict, List, Any, Tuple
 
+import ssl
 import functions_framework
 import httpx
 import requests
@@ -383,18 +384,6 @@ UBICACIONES_MONITOREO = [
         'longitud': 168.6626,
         'descripcion': 'Queenstown, Nueva Zelanda - Capital de la Aventura, Remarkables y Coronet Peak'
     },
-    {
-        'nombre': 'Niseko',
-        'latitud': 42.8048,
-        'longitud': 140.6874,
-        'descripcion': 'Niseko, Hokkaido, Japón - Mejor Nieve Polvo del Mundo (400m)'
-    },
-    {
-        'nombre': 'Hakuba',
-        'latitud': 36.6983,
-        'longitud': 137.8619,
-        'descripcion': 'Hakuba Valley, Japón - Sede Olímpica Nagano 1998, Alpes Japoneses (760m)'
-    },
 
     # ========================================================================
     # PUEBLOS DE MONTAÑA
@@ -610,8 +599,12 @@ def llamar_weather_api(
 
         logger.info(f"Consultando {tipo_consulta} para {nombre_ubicacion} ({latitud}, {longitud})")
 
-        # Hacer GET request — usar httpx como cliente principal (SSL más robusto en Cloud Run)
-        with httpx.Client(timeout=30) as cliente:
+        # Hacer GET request — httpx con TLS 1.2 forzado
+        # SSLEOFError en Cloud Run con weather.googleapis.com: posible incompatibilidad TLS 1.3
+        ctx_ssl = ssl.create_default_context()
+        ctx_ssl.minimum_version = ssl.TLSVersion.TLSv1_2
+        ctx_ssl.maximum_version = ssl.TLSVersion.TLSv1_2
+        with httpx.Client(timeout=30, verify=ctx_ssl) as cliente:
             respuesta = cliente.get(url)
 
         if respuesta.status_code != 200:
