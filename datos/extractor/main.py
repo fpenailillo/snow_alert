@@ -20,6 +20,7 @@ from datetime import datetime, timezone
 from typing import Dict, List, Any, Tuple
 
 import functions_framework
+import httpx
 import requests
 from google.cloud import pubsub_v1
 from google.cloud import secretmanager
@@ -609,8 +610,9 @@ def llamar_weather_api(
 
         logger.info(f"Consultando {tipo_consulta} para {nombre_ubicacion} ({latitud}, {longitud})")
 
-        # Hacer GET request
-        respuesta = requests.get(url, timeout=30)
+        # Hacer GET request — usar httpx como cliente principal (SSL más robusto en Cloud Run)
+        with httpx.Client(timeout=30) as cliente:
+            respuesta = cliente.get(url)
 
         if respuesta.status_code != 200:
             mensaje_error = (
@@ -627,7 +629,7 @@ def llamar_weather_api(
 
     except ErrorExtraccionClima:
         raise
-    except requests.exceptions.RequestException as e:
+    except (httpx.RequestError, requests.exceptions.RequestException) as e:
         mensaje_error = f"Error de red al llamar API ({tipo_consulta}) para {nombre_ubicacion}: {str(e)}"
         logger.error(mensaje_error)
         raise ErrorExtraccionClima(mensaje_error)

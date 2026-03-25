@@ -11,4 +11,9 @@ google-cloud-pubsub==2.*
 google-cloud-secret-manager==2.*
 
 # Cliente HTTP para llamadas a APIs
+# urllib3 2.x tiene SSL más estricto que causa SSLEOFError desde Cloud Run
+# con weather.googleapis.com. Se fija < 2 para mantener comportamiento 1.x.
 requests==2.*
+urllib3>=1.26.18,<2
+# httpx como fallback HTTP con implementación SSL alternativa (h11/h2)
+httpx==0.*
