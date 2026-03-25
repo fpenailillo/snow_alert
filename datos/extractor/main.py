@@ -208,10 +208,10 @@ UBICACIONES_MONITOREO = [
         'descripcion': 'Las Leñas, Mendoza, Argentina - Esquí de Alta Montaña y Freeride (3430m)'
     },
     {
-        'nombre': 'Chapelco',
-        'latitud': -40.1500,
-        'longitud': -71.2500,
-        'descripcion': 'Chapelco, San Martín de los Andes, Argentina - Esquí Patagónico (1980m)'
+        'nombre': 'Cerro Chapelco',
+        'latitud': -40.2500,
+        'longitud': -71.2000,
+        'descripcion': 'Cerro Chapelco, San Martín de los Andes, Argentina - Esquí Patagónico (1980m)'
     },
     {
         'nombre': 'Cerro Castor',
@@ -229,12 +229,6 @@ UBICACIONES_MONITOREO = [
     # ========================================================================
     # CENTROS DE ESQUÍ - EUROPA (ALPES)
     # ========================================================================
-    {
-        'nombre': 'Chamonix',
-        'latitud': 45.9237,
-        'longitud': 6.8694,
-        'descripcion': 'Chamonix-Mont-Blanc, Francia - Capital Mundial del Alpinismo (1035m)'
-    },
     {
         'nombre': 'Zermatt',
         'latitud': 46.0207,
@@ -258,6 +252,18 @@ UBICACIONES_MONITOREO = [
         'latitud': 45.4154,
         'longitud': 6.6347,
         'descripcion': 'Courchevel, Francia - Parte de Les 3 Vallées, Mayor Dominio Esquiable (1850m)'
+    },
+    {
+        'nombre': 'Val d\'Isère',
+        'latitud': 45.4480,
+        'longitud': 6.9790,
+        'descripcion': 'Val d\'Isère, Francia - Alpes Graios, Referente mundial esquí de competición (1850m)'
+    },
+    {
+        'nombre': 'St. Anton am Arlberg',
+        'latitud': 47.1310,
+        'longitud': 10.2680,
+        'descripcion': 'St. Anton am Arlberg, Austria - Cuna del Alpinismo moderno, Tirol (1304m)'
     },
     {
         'nombre': 'Val Thorens',
@@ -294,10 +300,22 @@ UBICACIONES_MONITOREO = [
         'descripcion': 'Jackson Hole, Wyoming, USA - Esquí Extremo y Vida Salvaje (1924m)'
     },
     {
-        'nombre': 'Whistler',
+        'nombre': 'Whistler Blackcomb',
         'latitud': 50.1163,
         'longitud': -122.9574,
         'descripcion': 'Whistler Blackcomb, BC, Canadá - Mayor Resort de Esquí de Norteamérica (675m)'
+    },
+    {
+        'nombre': 'Revelstoke',
+        'latitud': 51.0033,
+        'longitud': -118.1756,
+        'descripcion': 'Revelstoke Mountain Resort, BC, Canadá - Mayor desnivel vertical en Norteamérica (1713m)'
+    },
+    {
+        'nombre': 'Squaw Valley',
+        'latitud': 39.1975,
+        'longitud': -120.2358,
+        'descripcion': 'Palisades Tahoe (ex-Squaw Valley), California, USA - Sede JJOO 1960, Sierra Nevada (1890m)'
     },
     {
         'nombre': 'Park City',
@@ -429,10 +447,16 @@ UBICACIONES_MONITOREO = [
     # BASES DE MONTAÑISMO - ALTA MONTAÑA
     # ========================================================================
     {
-        'nombre': 'Plaza de Mulas - Aconcagua',
+        'nombre': 'Plaza de Mulas Aconcagua',
         'latitud': -32.6500,
         'longitud': -70.0167,
-        'descripcion': 'Plaza de Mulas, Argentina - Campo Base Aconcagua, Techo de América (4370m)'
+        'descripcion': 'Plaza de Mulas, Argentina - Campo Base Aconcagua vía Normal, Techo de América (4370m)'
+    },
+    {
+        'nombre': 'Plaza Argentina Aconcagua',
+        'latitud': -32.6500,
+        'longitud': -69.8010,
+        'descripcion': 'Plaza Argentina, Argentina - Campo Base Aconcagua Glaciar de los Polacos (4200m)'
     },
     {
         'nombre': 'Everest Base Camp Nepal',
@@ -475,7 +499,35 @@ UBICACIONES_MONITOREO = [
         'latitud': 45.9766,
         'longitud': 7.6586,
         'descripcion': 'Hörnli Hut Area, Suiza - Base para Ascenso al Matterhorn (3260m)'
-    }
+    },
+
+    # ========================================================================
+    # CENTROS DE ESQUÍ - ARGENTINA (completando cobertura Andina)
+    # ========================================================================
+    {
+        'nombre': 'Los Penitentes',
+        'latitud': -32.8567,
+        'longitud': -69.8075,
+        'descripcion': 'Los Penitentes, Mendoza, Argentina - Esquí de Alta Montaña Cordillera (base 2580m / cima 3000m)'
+    },
+    {
+        'nombre': 'Vallecitos',
+        'latitud': -33.0000,
+        'longitud': -69.4700,
+        'descripcion': 'Vallecitos, Mendoza, Argentina - Centro de Esquí familiar y montañismo (2900m)'
+    },
+    {
+        'nombre': 'Caviahue',
+        'latitud': -37.8700,
+        'longitud': -71.0500,
+        'descripcion': 'Caviahue, Neuquén, Argentina - Esquí en el corazón de la Patagonia (1600m)'
+    },
+    {
+        'nombre': 'La Hoya',
+        'latitud': -43.1100,
+        'longitud': -71.2500,
+        'descripcion': 'La Hoya, Esquel, Argentina - Centro de Esquí Patagónico, Chubut (base 1200m / cima 1970m)'
+    },
 ]
 
 
