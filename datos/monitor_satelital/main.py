@@ -91,15 +91,11 @@ class ErrorAlmacenamientoBigQuery(Exception):
 # UBICACIONES A MONITOREAR
 # =============================================================================
 
-# Importar desde el extractor existente para mantener consistencia
-try:
-    sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'extractor'))
-    from main import UBICACIONES_MONITOREO
-    logger.info(f"Ubicaciones importadas del extractor: {len(UBICACIONES_MONITOREO)}")
-except ImportError:
-    logger.warning("No se pudo importar UBICACIONES_MONITOREO del extractor, usando lista completa local")
-    # Lista completa de respaldo (sincronizada con extractor/main.py)
-    UBICACIONES_MONITOREO = [
+# Ubicaciones con cobertura satelital (Andes + Patagonia).
+# Lista independiente del extractor: el monitor solo cubre regiones con datos
+# MODIS/Sentinel útiles. El extractor cubre adicionalmente Europa y Norteamérica,
+# pero para NDSI satelital solo tiene sentido el territorio andino/patagónico.
+UBICACIONES_MONITOREO = [
         # Chile
         {'nombre': 'Portillo', 'latitud': -32.8369, 'longitud': -70.1287, 'descripcion': 'Portillo, Los Andes, Chile'},
         {'nombre': 'Ski Arpa', 'latitud': -32.6000, 'longitud': -70.3900, 'descripcion': 'Ski Arpa, Los Andes, Chile'},

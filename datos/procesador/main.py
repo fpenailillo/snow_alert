@@ -432,6 +432,16 @@ def guardar_en_bigquery(
     Raises:
         ErrorAlmacenamientoBigQuery: Si falla la inserción
     """
+    # Validar campos mínimos obligatorios antes de insertar
+    _campos_req = ['nombre_ubicacion', 'latitud', 'longitud']
+    _faltantes = [c for c in _campos_req if fila.get(c) is None]
+    if _faltantes:
+        logger.error(
+            f"Fila descartada — campos requeridos ausentes: {_faltantes} "
+            f"| ubicacion={fila.get('nombre_ubicacion')}"
+        )
+        return
+
     try:
         tabla_id = f"{ID_PROYECTO}.{nombre_dataset}.{nombre_tabla}"
 

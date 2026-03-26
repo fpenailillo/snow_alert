@@ -296,6 +296,18 @@ def guardar_en_bigquery(
     filas: List[Dict[str, Any]]
 ) -> None:
     """Guarda las filas de pronóstico en BigQuery."""
+    # Filtrar filas con campos obligatorios ausentes
+    _campos_req = ['nombre_ubicacion', 'latitud', 'longitud']
+    filas_validas = [f for f in filas if all(f.get(c) is not None for c in _campos_req)]
+    if len(filas_validas) < len(filas):
+        logger.error(
+            f"Descartadas {len(filas) - len(filas_validas)}/{len(filas)} filas "
+            f"por campos requeridos ausentes"
+        )
+    if not filas_validas:
+        return
+    filas = filas_validas
+
     try:
         tabla_id = f"{ID_PROYECTO}.{nombre_dataset}.{nombre_tabla}"
 
