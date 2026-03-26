@@ -6,9 +6,11 @@ de avalanchas para calcular un índice histórico de peligrosidad.
 """
 
 TERMINOS_RIESGO_EAWS = [
-    "placa", "alud", "avalancha", "grieta",
-    "viento", "nieve blanda", "costra", "peligroso",
-    "inestable", "húmeda", "mojada", "fusión", "derretimiento",
+    # Términos críticos primero (usados en el cálculo del índice de riesgo en BQ)
+    "placa", "alud", "avalancha", "grieta", "inestable", "peligroso",
+    # Condiciones secundarias
+    "viento", "nieve blanda", "costra",
+    "húmeda", "mojada", "fusión", "derretimiento",
     "canalón", "pendiente", "resbalé", "caí"
 ]
 
