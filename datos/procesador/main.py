@@ -409,8 +409,8 @@ def _ya_existe_condicion(
     try:
         for row in cliente_bigquery.query(query, job_config=job_config).result():
             return row.n > 0
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning(f"Error verificando dedup para {nombre_ubicacion}: {e} — se permite inserción")
     return False
 
 

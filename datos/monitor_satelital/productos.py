@@ -6,6 +6,7 @@ visual (true color, false color), NDSI (cobertura de nieve),
 LST (temperatura superficial) y ERA5-Land (gap-filler sin nubes).
 """
 
+import concurrent.futures
 import logging
 from datetime import datetime, timedelta, timezone
 from typing import Dict, Any, Optional, Tuple, List
@@ -42,10 +43,21 @@ from constantes import (
     NDSI_VALOR_NUBE,
     LST_FACTOR_ESCALA,
     KELVIN_A_CELSIUS,
+    TIMEOUT_DESCARGA_SEGUNDOS,
 )
 
 
 logger = logging.getLogger(__name__)
+
+
+def _getinfo_con_timeout(objeto_ee, timeout: int = TIMEOUT_DESCARGA_SEGUNDOS):
+    """Ejecuta getInfo() de GEE con timeout para evitar bloqueos indefinidos en Cloud Functions."""
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+        futuro = executor.submit(objeto_ee.getInfo)
+        try:
+            return futuro.result(timeout=timeout)
+        except concurrent.futures.TimeoutError:
+            raise TimeoutError(f"GEE getInfo() timeout después de {timeout}s")
 
 
 class ErrorProductoNoDisponible(Exception):
@@ -106,7 +118,7 @@ def obtener_imagen_mas_reciente(
             for filtro in filtros_adicionales:
                 coleccion = coleccion.filter(filtro)
 
-        cantidad = coleccion.size().getInfo()
+        cantidad = _getinfo_con_timeout(coleccion.size())
 
         if cantidad == 0:
             logger.warning(
@@ -120,7 +132,7 @@ def obtener_imagen_mas_reciente(
             }
 
         imagen = coleccion.first()
-        info = imagen.getInfo()
+        info = _getinfo_con_timeout(imagen)
         timestamp_ms = info['properties'].get('system:time_start', 0)
         fecha_captura = datetime.fromtimestamp(timestamp_ms / 1000, tz=timezone.utc)
 

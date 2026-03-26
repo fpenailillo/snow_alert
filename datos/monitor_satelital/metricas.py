@@ -7,6 +7,7 @@ satelitales que se almacenarán en BigQuery (capa Silver).
 Versión 1.1: Incluye indicadores de nieve, SAR y viento en altura.
 """
 
+import concurrent.futures
 import logging
 from typing import Dict, Any, Optional
 from datetime import datetime
@@ -19,6 +20,7 @@ from constantes import (
     NDSI_VALOR_NUBE,
     NDSI_VALOR_NOCHE,
     KELVIN_A_CELSIUS,
+    TIMEOUT_DESCARGA_SEGUNDOS,
 )
 
 # Importar nuevos módulos de métricas
@@ -28,6 +30,16 @@ from viento_altura import compilar_metricas_viento_bigquery
 
 
 logger = logging.getLogger(__name__)
+
+
+def _getinfo_con_timeout(objeto_ee, timeout: int = TIMEOUT_DESCARGA_SEGUNDOS):
+    """Ejecuta getInfo() de GEE con timeout para evitar bloqueos indefinidos en Cloud Functions."""
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+        futuro = executor.submit(objeto_ee.getInfo)
+        try:
+            return futuro.result(timeout=timeout)
+        except concurrent.futures.TimeoutError:
+            raise TimeoutError(f"GEE getInfo() timeout después de {timeout}s")
 
 
 # =============================================================================
@@ -57,12 +69,12 @@ def calcular_porcentaje_nubes(
         mascara_nubes = imagen_ndsi.eq(NDSI_VALOR_NUBE)
 
         # Calcular media de la máscara (proporción de nubes)
-        stats = mascara_nubes.reduceRegion(
+        stats = _getinfo_con_timeout(mascara_nubes.reduceRegion(
             reducer=ee.Reducer.mean(),
             geometry=roi,
             scale=escala,
             maxPixels=1e9
-        ).getInfo()
+        ))
 
         # La media de una máscara binaria da la proporción
         proporcion = stats.get('NDSI_Snow_Cover', 0) or 0
@@ -102,26 +114,26 @@ def calcular_metricas_ndsi(
     """
     try:
         # Reducir para obtener estadísticas
-        stats = imagen_ndsi.reduceRegion(
+        stats = _getinfo_con_timeout(imagen_ndsi.reduceRegion(
             reducer=ee.Reducer.mean().combine(
                 ee.Reducer.max(), sharedInputs=True
             ),
             geometry=roi,
             scale=escala,
             maxPixels=1e9
-        ).getInfo()
+        ))
 
         ndsi_medio = stats.get('NDSI_mean')
         ndsi_max = stats.get('NDSI_max')
 
         # Calcular cobertura de nieve (NDSI >= umbral)
         mascara_nieve = imagen_ndsi.gte(UMBRAL_NDSI_NIEVE)
-        stats_nieve = mascara_nieve.reduceRegion(
+        stats_nieve = _getinfo_con_timeout(mascara_nieve.reduceRegion(
             reducer=ee.Reducer.mean(),
             geometry=roi,
             scale=escala,
             maxPixels=1e9
-        ).getInfo()
+        ))
 
         pct_nieve = (stats_nieve.get('NDSI', 0) or 0) * 100
 
@@ -173,7 +185,7 @@ def calcular_metricas_lst(
             - lst_max_celsius: Temperatura máxima
     """
     try:
-        stats = imagen_lst.reduceRegion(
+        stats = _getinfo_con_timeout(imagen_lst.reduceRegion(
             reducer=ee.Reducer.mean().combine(
                 ee.Reducer.min(), sharedInputs=True
             ).combine(
@@ -182,7 +194,7 @@ def calcular_metricas_lst(
             geometry=roi,
             scale=escala,
             maxPixels=1e9
-        ).getInfo()
+        ))
 
         metricas = {
             'lst_media_celsius': round(stats.get('LST_Celsius_mean', 0) or 0, 2),
@@ -234,20 +246,20 @@ def calcular_metricas_era5(
     """
     try:
         # Métricas de nieve
-        stats_nieve = imagen_nieve.reduceRegion(
+        stats_nieve = _getinfo_con_timeout(imagen_nieve.reduceRegion(
             reducer=ee.Reducer.mean(),
             geometry=roi,
             scale=escala,
             maxPixels=1e9
-        ).getInfo()
+        ))
 
         # Métricas de temperatura
-        stats_temp = imagen_temp.reduceRegion(
+        stats_temp = _getinfo_con_timeout(imagen_temp.reduceRegion(
             reducer=ee.Reducer.mean(),
             geometry=roi,
             scale=escala,
             maxPixels=1e9
-        ).getInfo()
+        ))
 
         metricas = {
             'era5_snow_depth_m': round(stats_nieve.get('snow_depth_m', 0) or 0, 4),
@@ -298,12 +310,12 @@ def calcular_metricas_sentinel2(
     """
     try:
         # Porcentaje de nieve según Scene Classification Layer
-        stats_nieve = imagen_nieve.reduceRegion(
+        stats_nieve = _getinfo_con_timeout(imagen_nieve.reduceRegion(
             reducer=ee.Reducer.mean(),
             geometry=roi,
             scale=escala,
             maxPixels=1e9
-        ).getInfo()
+        ))
 
         pct_nieve = (stats_nieve.get('snow_mask', 0) or 0) * 100
 
@@ -351,12 +363,12 @@ def calcular_albedo_nieve(
         # Aplicar máscara al albedo
         albedo_enmascarado = imagen_albedo.updateMask(mascara_nieve)
 
-        stats = albedo_enmascarado.reduceRegion(
+        stats = _getinfo_con_timeout(albedo_enmascarado.reduceRegion(
             reducer=ee.Reducer.mean(),
             geometry=roi,
             scale=escala,
             maxPixels=1e9
-        ).getInfo()
+        ))
 
         albedo = stats.get('Snow_Albedo_Daily_Tile')
 
