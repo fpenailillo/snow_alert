@@ -1,5 +1,65 @@
 # Log de Progreso — snow_alert
 
+## Sesión 2026-03-26 (continuación 4) — Mejoras boletines: datos climáticos + proyecciones
+
+### Mejoras al integrador EAWS ✅ (commit ffe9231)
+
+**Problema identificado por usuario:** boletines no incluían datos cuantitativos de precipitación/nevada, y las proyecciones 48h/72h no consideraban el pronóstico meteorológico.
+
+**Cambios aplicados:**
+
+| Archivo | Cambio |
+|---------|--------|
+| `tool_generar_boletin.py` | +3 campos: `precipitacion_reciente_mm`, `nieve_reciente_cm`, `tendencia_pronostico`; nueva subsección "Datos climáticos recientes" en FACTORES DE RIESGO; texto explicativo de tendencia en PRONÓSTICO |
+| `tool_clasificar_eaws.py` | +campo `tendencia_pronostico` en tool schema y función; lo propaga al output; reescritura de `_proyectar_nivel()` por factor |
+| `prompts.py` (integrador) | Requiere extracción explícita de `precipitacion_reciente_mm`, `nieve_reciente_cm`, `tendencia_pronostico` del informe S3; exige que `resumen_meteorologico` incluya datos cuantitativos |
+
+**Nueva lógica `_proyectar_nivel()` (antes: demasiado simple):**
+
+| Factor | 48h | 72h |
+|--------|-----|-----|
+| PRECIPITACION_CRITICA/LLUVIA | +1 | mantiene (baja solo si `mejorando`) |
+| ESTABLE | mantiene | -1 |
+| FUSION_ACTIVA/CICLO | +1 si empeorando; mantiene | -1 si mejorando; mantiene |
+| General (NEVADA, VIENTO) | +1 si empeorando; mantiene | -1 si mejorando o sin tendencia desde ≥3 |
+
+**Impacto:** Los boletines ahora mostrarán explícitamente "Precipitación últimas 24h: X mm / Nieve nueva: X cm" y las proyecciones reflejarán el pronóstico real.
+
+### Estado boletines BQ (2026-03-25)
+- Total: 71 boletines | 51 ubicaciones únicas
+- Rango fechas: 2026-03-18 → 2026-03-26
+- Ground truth: pendiente datos Snowlab/Andes Consciente → H1/H4 no calculables aún
+
+### Redespliegue imagen Cloud Run ✅ (commit ffe9231)
+- Build `3cdc0423` exitoso vía `cloudbuild.yaml`
+- Imagen activa: `gcr.io/climas-chileno/snow-alert-agentes:ffe9231`
+- Cloud Run Job `orquestador-avalanchas` actualizado automáticamente por cloudbuild.yaml
+
+### Cloud Scheduler — boletines diarios ✅ (2026-03-26)
+- Creado `generar-boletines-diario-job` us-central1
+- Schedule: `30 23 * * *` (23:30 UTC, tras analizar-zonas-diario-job a 22:00)
+- Descripción: genera 6 boletines daily (La Parva × 3 + Matterhorn + Interlaken + St Moritz)
+- SA: funciones-clima-sa → rol run.invoker para Cloud Run Jobs
+- Estado: ENABLED | próximo disparo: 2026-03-26T23:30:00Z
+
+**Schedulers completos:**
+
+| Job | Schedule | Propósito |
+|-----|----------|-----------|
+| extraer-clima-job | 0 8,14,20 * * * | Extrae datos clima |
+| monitor-satelital-job | 30 8,14,20 * * * | Monitoreo satelital |
+| analizar-zonas-diario-job | 0 22 * * * | Análisis topográfico zonas |
+| analizar-topografia-job | 0 3 1 * * | Análisis topografía (mensual) |
+| **generar-boletines-diario-job** | **30 23 * * *** | **Boletines EAWS (nuevo)** |
+
+### Generación boletines históricos invierno ⏳ (en progreso, background)
+- Script: `agentes/scripts/generar_boletines_invierno.py`
+- Backfill ya existe (42 operaciones omitidas — datos ERA5 cargados en sesión anterior)
+- Generando 42 boletines: La Parva ×3 | 14 fechas invierno 2024-2025
+- Inicio: 2026-03-25 22:49:39 | estimado: ~3.5h | finaliza ~02:00 UTC
+
+---
+
 ## Sesión 2026-03-26 (continuación 3) — Auditoría completa tools agentes + fixes NDSI consistencia
 
 ### Auditoría tools agentes ✅ (commits 95ca729, f3518a7)
