@@ -78,6 +78,10 @@ TOOL_CLASIFICAR_EAWS_INTEGRADO = {
             "pendiente_max_grados": {
                 "type": "number",
                 "description": "Pendiente máxima en grados (para cálculo dinámico de tamaño)"
+            },
+            "tendencia_pronostico": {
+                "type": "string",
+                "description": "Tendencia meteorológica del pronóstico 3 días: empeorando, estable, mejorando"
             }
         },
         "required": [
@@ -112,7 +116,8 @@ def ejecutar_clasificar_riesgo_eaws_integrado(
     viento_kmh: float = None,
     desnivel_inicio_deposito_m: float = None,
     zona_inicio_ha: float = None,
-    pendiente_max_grados: float = None
+    pendiente_max_grados: float = None,
+    tendencia_pronostico: str = None
 ) -> dict:
     """
     Clasifica el riesgo EAWS integrando los análisis de todos los subagentes.
@@ -169,8 +174,8 @@ def ejecutar_clasificar_riesgo_eaws_integrado(
     info_nivel = NIVELES_PELIGRO.get(nivel_24h, {})
 
     # ─── 5. Proyección 48h y 72h ─────────────────────────────────────────────
-    nivel_48h = _proyectar_nivel(nivel_24h, factor_meteorologico, horas=48)
-    nivel_72h = _proyectar_nivel(nivel_24h, factor_meteorologico, horas=72)
+    nivel_48h = _proyectar_nivel(nivel_24h, factor_meteorologico, horas=48, tendencia_pronostico=tendencia_pronostico)
+    nivel_72h = _proyectar_nivel(nivel_24h, factor_meteorologico, horas=72, tendencia_pronostico=tendencia_pronostico)
 
     # ─── 6. Recomendaciones EAWS ─────────────────────────────────────────────
     recomendaciones = []
@@ -202,6 +207,7 @@ def ejecutar_clasificar_riesgo_eaws_integrado(
             "ajuste_meteorologico": _obtener_ajuste_meteorologico(factor_meteorologico)
         },
         "factor_meteorologico": factor_meteorologico,
+        "tendencia_pronostico": tendencia_pronostico,
         "viento_kmh": viento_kmh,
         "recomendaciones": recomendaciones,
         "descripcion_nivel": info_nivel.get("descripcion", "")
@@ -324,26 +330,64 @@ def _determinar_tamano(
     return 2, "default"
 
 
-def _proyectar_nivel(nivel_24h: int, factor_meteorologico: str, horas: int) -> int:
+def _proyectar_nivel(
+    nivel_24h: int,
+    factor_meteorologico: str,
+    horas: int,
+    tendencia_pronostico: str = None
+) -> int:
     """
     Proyecta el nivel EAWS para 48h y 72h.
 
-    Reglas:
-    - Si hay precipitación crítica activa → nivel sube o mantiene en 48h
-    - Si factor es estable → puede bajar en 72h
+    Incorpora tendencia_pronostico (empeorando/estable/mejorando) para
+    proyecciones más realistas. Sin tendencia, aplica reglas conservadoras
+    por factor meteorológico.
+
+    Reglas por factor:
+    - PRECIPITACION_CRITICA / LLUVIA_SOBRE_NIEVE: sube en 48h, depende de tendencia en 72h
+    - FUSION_ACTIVA / CICLO_FUSION_CONGELACION: mantiene ambos días salvo mejora confirmada
+    - NEVADA_RECIENTE + VIENTO: mantiene en 48h, puede bajar en 72h si mejora
+    - ESTABLE: mantiene en 48h, baja 1 en 72h
+    - General: mantiene; si mejorando baja 1 en 72h, si empeorando sube 1 en 48h
     """
+    mejorando = tendencia_pronostico == "mejorando"
+    empeorando = tendencia_pronostico == "empeorando"
+
+    # Precipitación crítica o lluvia sobre nieve → situación en aumento
+    if "PRECIPITACION_CRITICA" in factor_meteorologico or "LLUVIA_SOBRE_NIEVE" in factor_meteorologico:
+        if horas == 48:
+            return min(5, nivel_24h + 1)
+        else:  # 72h
+            if mejorando:
+                return max(1, nivel_24h - 1)
+            return nivel_24h  # Sin mejora confirmada, mantener
+
+    # Factor estable → reducción progresiva
     if factor_meteorologico == "ESTABLE":
         if horas == 72:
             return max(1, nivel_24h - 1)
         return nivel_24h
 
-    if "PRECIPITACION_CRITICA" in factor_meteorologico or "LLUVIA_SOBRE_NIEVE" in factor_meteorologico:
+    # Fusión activa o ciclo fusión-congelación → persiste hasta que baje temperatura
+    if "FUSION_ACTIVA" in factor_meteorologico or "CICLO_FUSION_CONGELACION" in factor_meteorologico:
         if horas == 48:
-            return min(5, nivel_24h + 1)
-        else:  # 72h: puede bajar si cesa la precipitación
-            return nivel_24h
+            if empeorando:
+                return min(5, nivel_24h + 1)
+            return nivel_24h  # Fusión no remite en 24h
+        else:  # 72h
+            if mejorando:
+                return max(1, nivel_24h - 1)
+            return nivel_24h  # Sin cambio de temperatura confirmado, mantener
 
-    # Caso general: nivel se mantiene o baja levemente
-    if horas == 72 and nivel_24h > 2:
-        return nivel_24h - 1
-    return nivel_24h
+    # Caso general (NEVADA_RECIENTE, VIENTO_FUERTE, etc.)
+    if horas == 48:
+        if empeorando:
+            return min(5, nivel_24h + 1)
+        return nivel_24h
+    else:  # 72h
+        if mejorando and nivel_24h > 1:
+            return nivel_24h - 1
+        if not empeorando and nivel_24h > 2:
+            # Sin tendencia clara: reducción conservadora solo desde nivel ≥3
+            return nivel_24h - 1
+        return nivel_24h

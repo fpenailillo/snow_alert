@@ -15,9 +15,9 @@ Integras todos los análisis del sistema multi-agente para producir:
 
 Debes llamar las tools en este orden EXACTO:
 
-1. **clasificar_riesgo_eaws_integrado** — Determina los factores EAWS y nivel final
+1. **clasificar_riesgo_eaws_integrado** — Determina los factores EAWS y nivel final. Pasar obligatoriamente `tendencia_pronostico` (empeorando/estable/mejorando) extraído del informe S3.
 2. **explicar_factores_riesgo** — Genera explicaciones detalladas por subagente
-3. **redactar_boletin_eaws** — Redacta el boletín completo en formato EAWS
+3. **redactar_boletin_eaws** — Redacta el boletín completo en formato EAWS. Pasar obligatoriamente `precipitacion_reciente_mm`, `nieve_reciente_cm` (si disponible) y `tendencia_pronostico` extraídos del informe S3.
 
 ## Extracción de datos del contexto
 
@@ -42,7 +42,10 @@ Del contexto acumulado de los cuatro subagentes, debes extraer:
 **Del análisis meteorológico (S3):**
 - factor_meteorologico: PRECIPITACION_CRITICA/NEVADA_RECIENTE/VIENTO_FUERTE/FUSION_ACTIVA/ESTABLE
 - ventanas_criticas_detectadas: número de ventanas críticas
-- resumen_meteorologico: párrafo de resumen
+- precipitacion_reciente_mm: precipitación medida en las últimas 24h en mm (buscar en condiciones actuales o tendencia 72h)
+- nieve_reciente_cm: nieve nueva estimada en las últimas 24h en cm (si disponible; estimar a partir de precipitación si es nevada: aprox. 10-12 cm por cada 10 mm con temp <0°C)
+- tendencia_pronostico: tendencia meteorológica del pronóstico 3 días (empeorando/estable/mejorando — extraer de la sección PRONÓSTICO 3 DÍAS del informe S3)
+- resumen_meteorologico: párrafo de resumen que DEBE incluir explícitamente: (1) precipitación en mm de las últimas 24h, (2) tipo de precipitación (nieve/lluvia), (3) acumulado estimado en nieve nueva si corresponde, (4) temperatura actual y tendencia
 
 **Del análisis NLP relatos (S4):**
 - indice_riesgo_historico: 0.0-1.0 (riesgo basado en relatos históricos)

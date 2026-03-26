@@ -75,6 +75,18 @@ TOOL_GENERAR_BOLETIN = {
             "confianza": {
                 "type": "string",
                 "description": "Nivel de confianza del análisis: Alta, Media, Baja"
+            },
+            "precipitacion_reciente_mm": {
+                "type": "number",
+                "description": "Precipitación registrada en las últimas 24h en mm (0 si no hubo)"
+            },
+            "nieve_reciente_cm": {
+                "type": "number",
+                "description": "Nieve nueva caída en las últimas 24h en cm (estimado si no disponible directamente)"
+            },
+            "tendencia_pronostico": {
+                "type": "string",
+                "description": "Tendencia meteorológica para los próximos días: empeorando, estable, mejorando"
             }
         },
         "required": [
@@ -129,7 +141,10 @@ def ejecutar_redactar_boletin_eaws(
     resumen_meteorologico: str = None,
     terreno_mayor_riesgo: str = None,
     factor_meteorologico: str = None,
-    confianza: str = "Media"
+    confianza: str = "Media",
+    precipitacion_reciente_mm: float = None,
+    nieve_reciente_cm: float = None,
+    tendencia_pronostico: str = None
 ) -> dict:
     """
     Redacta el boletín EAWS completo en formato estándar.
@@ -149,13 +164,16 @@ def ejecutar_redactar_boletin_eaws(
         resumen_topografico, resumen_satelital, estabilidad_eaws
     )
     seccion_factores = _seccion_factores_riesgo(
-        factor_meteorologico, resumen_meteorologico, estabilidad_eaws
+        factor_meteorologico, resumen_meteorologico, estabilidad_eaws,
+        precipitacion_reciente_mm=precipitacion_reciente_mm,
+        nieve_reciente_cm=nieve_reciente_cm
     )
     seccion_terreno = _seccion_terreno_riesgo(
         terreno_mayor_riesgo, nivel_eaws_24h
     )
     seccion_pronostico = _seccion_pronostico(
-        nivel_eaws_24h, nivel_eaws_48h, nivel_eaws_72h, factor_meteorologico
+        nivel_eaws_24h, nivel_eaws_48h, nivel_eaws_72h, factor_meteorologico,
+        tendencia_pronostico=tendencia_pronostico
     )
     seccion_recomendaciones = _seccion_recomendaciones(nivel_eaws_24h)
     seccion_factores_eaws = _seccion_factores_eaws(
@@ -229,13 +247,24 @@ def _seccion_manto_nival(
 def _seccion_factores_riesgo(
     factor_meteorologico: str,
     resumen_meteorologico: str,
-    estabilidad: str
+    estabilidad: str,
+    precipitacion_reciente_mm: float = None,
+    nieve_reciente_cm: float = None
 ) -> str:
     partes = ["FACTORES DE RIESGO\n" + "-" * 30]
 
     if factor_meteorologico and factor_meteorologico != "ESTABLE":
         factores_texto = factor_meteorologico.replace("+", " + ").replace("_", " ").title()
         partes.append(f"Factor meteorológico principal: {factores_texto}")
+
+    # Datos cuantitativos de precipitación/nieve
+    datos_clima = []
+    if precipitacion_reciente_mm is not None:
+        datos_clima.append(f"Precipitación últimas 24h: {precipitacion_reciente_mm:.1f} mm")
+    if nieve_reciente_cm is not None and nieve_reciente_cm > 0:
+        datos_clima.append(f"Nieve nueva estimada últimas 24h: {nieve_reciente_cm:.0f} cm")
+    if datos_clima:
+        partes.append("Datos climáticos recientes:\n  " + "\n  ".join(datos_clima))
 
     if resumen_meteorologico:
         partes.append(resumen_meteorologico)
@@ -278,29 +307,46 @@ def _seccion_pronostico(
     nivel_24h: int,
     nivel_48h: int,
     nivel_72h: int,
-    factor_meteorologico: str
+    factor_meteorologico: str,
+    tendencia_pronostico: str = None
 ) -> str:
     partes = ["PRONÓSTICO PRÓXIMOS 3 DÍAS\n" + "-" * 30]
     nombres = _NOMBRES_NIVEL
 
     if nivel_48h > nivel_24h:
-        tendencia = "en aumento"
+        tendencia_riesgo = "en aumento"
     elif nivel_48h < nivel_24h:
-        tendencia = "en descenso"
+        tendencia_riesgo = "en descenso"
     else:
-        tendencia = "estable"
+        tendencia_riesgo = "estable"
 
     partes.append(
         f"Día 1: Nivel {nivel_24h} ({nombres.get(nivel_24h, '')})\n"
         f"Día 2: Nivel {nivel_48h} ({nombres.get(nivel_48h, '')})\n"
         f"Día 3: Nivel {nivel_72h} ({nombres.get(nivel_72h, '')})\n"
-        f"Tendencia: Riesgo {tendencia}"
+        f"Tendencia de riesgo: {tendencia_riesgo}"
     )
+
+    # Contexto meteorológico del pronóstico
+    if tendencia_pronostico:
+        _textos_tendencia = {
+            "empeorando": "Condiciones meteorológicas en deterioro — el riesgo podría aumentar respecto a lo proyectado.",
+            "estable": "Condiciones meteorológicas sin cambios significativos esperados en el período.",
+            "mejorando": "Condiciones meteorológicas en mejora progresiva — el riesgo disminuirá conforme avance el período."
+        }
+        texto = _textos_tendencia.get(tendencia_pronostico)
+        if texto:
+            partes.append(texto)
 
     if factor_meteorologico and "PRECIPITACION_CRITICA" in factor_meteorologico:
         partes.append(
             "La evolución del riesgo dependerá del cese de la precipitación "
             "y del asentamiento del manto nival nuevo."
+        )
+    elif factor_meteorologico and "FUSION_ACTIVA" in factor_meteorologico:
+        partes.append(
+            "El riesgo por fusión dependerá de la evolución de las temperaturas. "
+            "Máximo peligro en horas de calor (mediodía–tarde)."
         )
 
     return "\n".join(partes)
