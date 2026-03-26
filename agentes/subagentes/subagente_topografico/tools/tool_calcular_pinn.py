@@ -120,8 +120,9 @@ def ejecutar_calcular_pinn(
     # Cohesión c [Pa]: mayor densidad y bajo metamorfismo → más cohesión
     cohesion_Pa = max(100, (densidad_kg_m3 / 200.0) * 1500 * (1.5 - indice_metamorfismo))
 
-    # Ángulo de fricción interna φ
-    angulo_friccion_rad = math.radians(28.0 + 5.0 * (1.0 - indice_metamorfismo))
+    # Ángulo de fricción interna φ — clampeado a mínimo 15° para evitar valores
+    # negativos cuando indice_metamorfismo > 5.6
+    angulo_friccion_rad = math.radians(max(15.0, 28.0 + 5.0 * (1.0 - indice_metamorfismo)))
     pendiente_rad = math.radians(pendiente_grados)
 
     # Peso normal y tangencial por unidad de área
@@ -207,7 +208,7 @@ def _fs_mohr_coulomb_puro(densidad: float, pendiente_grados: float, metamorfismo
     h = 1.0  # espesor referencia
     pendiente_rad = math.radians(pendiente_grados)
     cohesion_Pa = max(100.0, (densidad / 200.0) * 1500.0 * (1.5 - metamorfismo))
-    angulo_friccion_rad = math.radians(28.0 + 5.0 * (1.0 - metamorfismo))
+    angulo_friccion_rad = math.radians(max(15.0, 28.0 + 5.0 * (1.0 - metamorfismo)))
     peso = densidad * g * h
     tau_normal = peso * math.cos(pendiente_rad)
     tau_aplicado = peso * math.sin(pendiente_rad)

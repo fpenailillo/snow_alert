@@ -113,9 +113,10 @@ def ejecutar_detectar_anomalias_satelitales(
         alertas.add("TEMPERATURA_SUPERFICIAL_POSITIVA_DIURNA")
 
     # ─── 3. Nieve húmeda (SAR/NDSI bajo) ─────────────────────────────────────
-    if ndsi_medio < 0.3 and pct_cobertura_nieve > 40:
+    # NDSI escala 0-1; umbral literatura para nieve húmeda ~0.4 (Dietz et al.)
+    if ndsi_medio < 0.4 and pct_cobertura_nieve > 40:
         alertas.add("NIEVE_HUMEDA_NDSI_BAJO")
-    elif ndsi_medio < 0.35 and pct_cobertura_nieve > 60:
+    elif ndsi_medio < 0.45 and pct_cobertura_nieve > 60:
         alertas.add("NIEVE_POTENCIALMENTE_HUMEDA")
 
     # ─── 4. Transporte eólico (ciclo diurno reducido + cobertura cambiante) ──
