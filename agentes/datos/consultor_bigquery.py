@@ -645,6 +645,13 @@ class ConsultorBigQuery:
             resultado = filas[0]
             resultado["disponible"] = True
 
+            # Normalizar NDSI: BQ almacena en escala 0-100 (MODIS/Sentinel-2 escalado)
+            # Los tools usan umbrales en escala [-1, 1] → dividir por 100
+            for campo in ("ndsi_medio", "ndsi_max"):
+                valor = resultado.get(campo)
+                if valor is not None:
+                    resultado[campo] = round(valor / 100.0, 4)
+
             # Serializar fecha
             if resultado.get("fecha_captura") and hasattr(resultado["fecha_captura"], "isoformat"):
                 resultado["fecha_captura"] = resultado["fecha_captura"].isoformat()
