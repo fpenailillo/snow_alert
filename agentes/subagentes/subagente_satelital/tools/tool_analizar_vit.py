@@ -414,10 +414,10 @@ def _clasificar_estado_vit(
     if max_atencion > 0.6:
         score += 1.5
 
-    # 2. NDSI bajo → nieve húmeda o poca cobertura
-    if ndsi_promedio < 0.3:
+    # 2. NDSI bajo → nieve húmeda o poca cobertura (umbral 0.4 per Dietz et al.)
+    if ndsi_promedio < 0.4:
         score += 2.0
-    elif ndsi_promedio < 0.4:
+    elif ndsi_promedio < 0.45:
         score += 1.0
 
     # 3. Alta variabilidad → cambios rápidos en el manto
@@ -482,7 +482,7 @@ def _analizar_punto_unico(
     delta = vector[5] * 30
 
     score = 0.0
-    if ndsi < 0.3:
+    if ndsi < 0.4:
         score += 2.0
     if abs(delta) > 15:
         score += 2.0

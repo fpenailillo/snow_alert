@@ -233,7 +233,7 @@ def _detectar_senales_cambio(
     if delta_nieve < -10:
         senales.append("PERDIDA_RAPIDA_COBERTURA_NIVAL")
 
-    if ndsi_actual < 0.3 and cobertura_actual > 50:
+    if ndsi_actual < 0.4 and cobertura_actual > 50:
         senales.append("NIEVE_HUMEDA_BAJA_REFLECTANCIA")
 
     # Propagar alertas del consultor
