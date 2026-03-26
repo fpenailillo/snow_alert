@@ -30,7 +30,25 @@
 - Rango fechas: 2026-03-18 → 2026-03-26
 - Ground truth: pendiente datos Snowlab/Andes Consciente → H1/H4 no calculables aún
 
-### Redespliegue imagen Cloud Run ✅ (commit ffe9231)
+### Fix CRÍTICO: escala NDSI ✅ (commit 8d5e22d)
+
+**Bug:** `consultor_bigquery.py` retornaba `ndsi_medio` en escala 0-100 (como MODIS/Sentinel-2 la almacenan). Los tools usaban umbrales en escala [-1, 1] (estándar Dietz et al.). Efecto: `4.26 < 0.4 = FALSE` cuando debería ser `0.0426 < 0.4 = TRUE` → alerta `NIEVE_HUMEDA_NDSI_BAJO` nunca disparaba.
+
+**Fix:** En `obtener_estado_satelital()`, después de leer de BQ:
+```python
+for campo in ("ndsi_medio", "ndsi_max"):
+    valor = resultado.get(campo)
+    if valor is not None:
+        resultado[campo] = round(valor / 100.0, 4)
+```
+
+**Valores corregidos (La Parva Sector Bajo, 2026-03-25):**
+- Antes: ndsi_medio=4.26 → no dispara alertas de nieve húmeda
+- Después: ndsi_medio=0.0426 → `0.0426 < 0.4` = TRUE → `NIEVE_HUMEDA_NDSI_BAJO`
+
+**Impacto retroactivo:** Los 72 boletines previos usaron NDSI sin normalizar, por lo que las señales satelitales eran parcialmente incorrectas. Próximos boletines (scheduler diario + históricos pendientes) usarán la escala correcta.
+
+### Redespliegue imagen Cloud Run ✅ (commit ffe9231, luego 8d5e22d)
 - Build `3cdc0423` exitoso vía `cloudbuild.yaml`
 - Imagen activa: `gcr.io/climas-chileno/snow-alert-agentes:ffe9231`
 - Cloud Run Job `orquestador-avalanchas` actualizado automáticamente por cloudbuild.yaml
