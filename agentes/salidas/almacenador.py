@@ -113,7 +113,8 @@ def _datos_satelitales_disponibles(tools_llamadas: list) -> bool:
         bool: True si se obtuvo datos satelitales disponibles
     """
     nombres_tools = [t.get("tool", "") for t in tools_llamadas]
-    return "monitorear_nieve" in nombres_tools or "procesar_ndsi" in nombres_tools
+    tools_satelitales = {"procesar_ndsi", "detectar_anomalias_satelitales", "analizar_vit", "calcular_snowline"}
+    return bool(tools_satelitales & set(nombres_tools))
 
 
 def _extraer_resultado_tool(tools_llamadas: list, nombre_tool: str) -> dict:
@@ -197,7 +198,9 @@ def _construir_campos_subagentes(tools_llamadas: list, resultado_boletin: dict) 
         "tipo_alud_predominante": res_nlp_sint.get("tipo_alud_predominante"),
         "confianza_historica": res_nlp_sint.get("confianza"),
         "patrones_nlp": json.dumps(
-            res_patrones.get("frecuencias_terminos") or [],
+            {k: len(v) for k, v in res_patrones.get("resultados_por_termino", {}).items()}
+            if isinstance(res_patrones.get("resultados_por_termino"), dict)
+            else {},
             ensure_ascii=False, default=str
         ),
     }
