@@ -1,5 +1,37 @@
 # Log de Progreso — snow_alert
 
+## Sesión 2026-03-25 (continuación 6) — Auditoría completa sistema + fixes almacenador + hashes
+
+### Fix almacenador ✅ (commit e09f665)
+
+**Bug 1:** `_construir_campos_subagentes()` buscaba `res_patrones.get("frecuencias_terminos")` pero `buscar_relatos_condiciones()` retorna `resultados_por_termino: {term: [filas]}` → `patrones_nlp` siempre era `"[]"` en BQ. Fix: `{k: len(v) for k, v in resultados_por_termino.items()}`.
+
+**Bug 2:** `_datos_satelitales_disponibles()` chequea `"monitorear_nieve"` (inexistente) → `datos_satelitales_disponibles=False` aunque se llamara cualquier otra tool satelital. Fix: set completo `{"procesar_ndsi", "detectar_anomalias_satelitales", "analizar_vit", "calcular_snowline"}`.
+
+### Hashes prompts actualizados ✅ (commit f34f6fb)
+
+Prompts `nlp` e `integrador` fueron modificados en commits previos pero el registro de versiones no fue actualizado → `verificar_integridad()` en el orquestador retornaba `False` en cada arranque (warning al log).
+
+| Componente | Hash anterior | Hash nuevo | Versión |
+|-----------|---------------|------------|---------|
+| `nlp` | `3b0c928ed4439495` | `ba1f7309d30ba8bd` | 3.0→3.1 |
+| `integrador` | `4cc094839c0640fb` | `225e6a9d4ecf376a` | 3.0→3.1 |
+
+`VERSION_GLOBAL`: `3.1` → `3.2`
+
+### Auditoría módulos base ✅ (sin bugs)
+
+- `base_subagente.py`: agentic loop correcto, reintentos con backoff exponencial, manejo de tool_use/end_turn
+- `cliente_llm.py`: conversiones Anthropic↔OpenAI correctas, normalización de respuestas OK
+- `agente_principal.py` (OrquestadorAvalancha): pipeline secuencial 5 subagentes, NLP no-crítico, `_extraer_nivel()` regex OK
+- `metricas_eaws.py`: F1-macro, Kappa, QWK implementados correctamente; `TECHEL_2022_REFERENCIA` con datos del paper
+
+### Redespliegue en progreso 🔄
+
+Build `a6bf95c0` con `ff632b3` → en WORKING. Pendiente build con `f34f6fb` (almacenador + hashes).
+
+---
+
 ## Sesión 2026-03-25 (continuación 5) — Auditoría SubagenteNLP + fix índice riesgo histórico
 
 ### Fix subagente_nlp: término crítico "inestable" nunca buscado ✅ (commit c3e0762)
