@@ -1,5 +1,85 @@
 # Log de Progreso — snow_alert
 
+## Sesión 2026-03-26 (continuación 3) — Auditoría completa tools agentes + fixes NDSI consistencia
+
+### Auditoría tools agentes ✅ (commits 95ca729, f3518a7)
+
+**20 tools auditadas, 6 fixes aplicados:**
+
+| Fix | Tool | Cambio |
+|-----|------|--------|
+| #2 | `tool_pronostico_dias` | `precip_*_mm` → `prob_precip_*_pct` (unidades para LLM) |
+| #5 | `tool_calcular_pinn` (×2 funciones) | `max(15°, 28 + 5*(1-meta))` — clamp ángulo fricción interna |
+| #4 | `tool_detectar_anomalias` | NDSI 0.3→0.4 / 0.35→0.45 (Dietz et al. literatura estándar) |
+| #4b | `tool_procesar_ndsi` | NDSI 0.3→0.4 en `_detectar_senales_cambio` |
+| #4c | `tool_analizar_vit` (×2 funciones) | NDSI 0.3→0.4 / 0.4→0.45 en clasificación ViT |
+
+**Sin bugs en:** `tool_condiciones_actuales`, `tool_ventanas_criticas`, `tool_analizar_dem`, `tool_zonas_riesgo`, `tool_estabilidad_manto`, `tool_clasificar_eaws`, `tool_snowline`, `tool_buscar_relatos`, `tool_generar_boletin`, `tool_explicar_factores`, `tool_conocimiento_historico`, `tool_extraer_patrones`, `tool_tendencia_72h`.
+
+**Arquitectura verificada:**
+- 5 subagentes usan Databricks (Qwen3-next-80b) como LLM — gratis
+- `MODELO = "claude-sonnet-4-5"` en cada subagente es etiqueta, no enruta proveedor
+- Orquestador acumula contexto (3000 chars/subagente, max 12000 total) — adecuado
+- Integrador: MAX_TOKENS=6144, MAX_ITERACIONES=6
+
+### Cloud Run Job ✅ (2026-03-26)
+- Imagen `f3518a7` activa en `orquestador-avalanchas` us-central1
+
+---
+
+## Sesión 2026-03-25 (continuación 2) — git push + backfill script imágenes topografía
+
+### git push origin main
+- Pendiente ejecución interactiva por el usuario (`! git push origin main`)
+
+### Auditoría y fixes capa de datos ✅ (2026-03-26)
+
+**Fixes CRÍTICOS aplicados (commit aeb94dd):**
+- procesador/horas/dias: except Exception silencioso en dedup → ahora WARNING en log
+- monitor_satelital: 10 llamadas GEE getInfo() sin timeout → _getinfo_con_timeout(60s)
+
+**Fixes MEDIOS aplicados (commit 406603d):**
+- extractor: reintentos HTTP 3×backoff (2/4/8s) en errores red y 5xx
+- extractor: Pub/Sub timeout 10s → 30s
+- extractor/requirements.txt: requests==2.32.*, httpx==0.27.* (versiones menores fijadas)
+
+**F2 — Cloud Scheduler deadlines:** ya configurados (1800s por defecto GCP). Sin acción necesaria.
+
+### Redespliegue Cloud Functions post-fix calidad datos ✅ (2026-03-26 ~00:25 UTC)
+
+| Función | Revisión anterior | Revisión nueva | Fix incluido |
+|---------|------------------|----------------|--------------|
+| procesador-clima | 00017-mac | 00018-gig | dedup WARNING log |
+| procesador-clima-horas | 00007-qos | 00008-saz | dedup WARNING log |
+| procesador-clima-dias | 00006-zek | 00007-tam | dedup WARNING log |
+| monitor-satelital-nieve | (anterior) | 00021-nar | GEE getInfo timeout 60s |
+
+Commit: `aeb94dd`
+
+### Notebook 01 validacion_f1_score.py ✅ (ejecutado 2026-03-26 00:07 UTC)
+- 65 boletines en BQ con nivel_eaws_24h
+- Distribución predicciones: {1:11, 2:15, 3:9, 4:17, 5:13} — cubre los 5 niveles EAWS
+- Confianza: 46 Media / 17 Alta / 2 Baja
+- Ground truth aún no disponible → F1-macro no calculable (pendiente datos Snowlab)
+- Modo descriptivo únicamente hasta recibir datos de Andes Consciente
+
+### Email a Frank Techel ✅ (borrador preparado 2026-03-26)
+- Borrador listo para enviar a techel@slf.ch
+- Solicita EAWS Matrix operacional (~26 servicios) para validación H3 (QWK)
+- Enviado por: Francisco Peñailillo (fpenaililllom@correo.uss.cl)
+
+### Script backfill imágenes GCS ✅ (creado)
+- **Archivo**: `datos/analizador_avalanchas/regenerar_imagenes_gcs.py`
+- **Propósito**: Regenera imágenes PNG/thumbnail en GCS para fechas < 2026-03-25 (desnivel bug)
+- **No requiere GEE**: Lee datos ya correctos de BQ `zonas_avalancha`
+- **Uso**:
+  - Dry run (ver qué se generaría): `python regenerar_imagenes_gcs.py --dry-run`
+  - Fecha específica: `python regenerar_imagenes_gcs.py --fecha 2026-03-18`
+  - Todas las fechas afectadas: `python regenerar_imagenes_gcs.py`
+- **Planificado para ejecutar**: 2026-04-01
+
+---
+
 ## Sesión 2026-03-25 (continuación) — Alineación nombres cross-tabla + dedup procesadores
 
 ### Estado final capa de datos (2026-03-25 ~12:10 UTC)
