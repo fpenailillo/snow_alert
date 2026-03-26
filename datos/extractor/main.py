@@ -16,6 +16,7 @@ Cobertura:
 import json
 import logging
 import os
+import time
 from datetime import datetime, timezone
 from typing import Dict, List, Any, Tuple
 
@@ -639,43 +640,53 @@ def llamar_weather_api(
     Raises:
         ErrorExtraccionClima: Si la llamada a la API falla
     """
-    try:
-        # Construir URL con query parameters
-        url = construir_url_api(url_base, latitud, longitud, api_key, parametros_extra)
+    url = construir_url_api(url_base, latitud, longitud, api_key, parametros_extra)
+    logger.info(f"Consultando {tipo_consulta} para {nombre_ubicacion} ({latitud}, {longitud})")
 
-        logger.info(f"Consultando {tipo_consulta} para {nombre_ubicacion} ({latitud}, {longitud})")
+    # httpx con TLS 1.2 forzado — SSLEOFError en Cloud Run con weather.googleapis.com
+    ctx_ssl = ssl.create_default_context()
+    ctx_ssl.minimum_version = ssl.TLSVersion.TLSv1_2
+    ctx_ssl.maximum_version = ssl.TLSVersion.TLSv1_2
 
-        # Hacer GET request — httpx con TLS 1.2 forzado
-        # SSLEOFError en Cloud Run con weather.googleapis.com: posible incompatibilidad TLS 1.3
-        ctx_ssl = ssl.create_default_context()
-        ctx_ssl.minimum_version = ssl.TLSVersion.TLSv1_2
-        ctx_ssl.maximum_version = ssl.TLSVersion.TLSv1_2
-        with httpx.Client(timeout=30, verify=ctx_ssl) as cliente:
-            respuesta = cliente.get(url)
+    _esperas = [2, 4, 8]
+    ultimo_error = None
 
-        if respuesta.status_code != 200:
-            mensaje_error = (
-                f"Error en API ({tipo_consulta}) para {nombre_ubicacion}: "
-                f"Estado {respuesta.status_code}, Respuesta: {respuesta.text[:500]}"
-            )
-            logger.error(mensaje_error)
-            raise ErrorExtraccionClima(mensaje_error)
+    for intento in range(3):
+        try:
+            with httpx.Client(timeout=30, verify=ctx_ssl) as cliente:
+                respuesta = cliente.get(url)
 
-        datos_clima = respuesta.json()
-        logger.info(f"{tipo_consulta.capitalize()} obtenido exitosamente para {nombre_ubicacion}")
+            if respuesta.status_code == 200:
+                logger.info(f"{tipo_consulta.capitalize()} obtenido exitosamente para {nombre_ubicacion}")
+                return respuesta.json()
 
-        return datos_clima
+            # 4xx: error de cliente, no reintentar
+            if 400 <= respuesta.status_code < 500:
+                msg = (f"Error {respuesta.status_code} ({tipo_consulta}) para {nombre_ubicacion}: "
+                       f"{respuesta.text[:200]}")
+                logger.error(msg)
+                raise ErrorExtraccionClima(msg)
 
-    except ErrorExtraccionClima:
-        raise
-    except (httpx.RequestError, requests.exceptions.RequestException) as e:
-        mensaje_error = f"Error de red al llamar API ({tipo_consulta}) para {nombre_ubicacion}: {str(e)}"
-        logger.error(mensaje_error)
-        raise ErrorExtraccionClima(mensaje_error)
-    except Exception as e:
-        mensaje_error = f"Error inesperado al llamar API ({tipo_consulta}) para {nombre_ubicacion}: {str(e)}"
-        logger.error(mensaje_error)
-        raise ErrorExtraccionClima(mensaje_error)
+            # 5xx: reintentar
+            ultimo_error = f"HTTP {respuesta.status_code}"
+            logger.warning(f"Intento {intento + 1}/3 — {ultimo_error} para {nombre_ubicacion}")
+
+        except ErrorExtraccionClima:
+            raise
+        except (httpx.RequestError, requests.exceptions.RequestException) as e:
+            ultimo_error = str(e)
+            logger.warning(f"Intento {intento + 1}/3 — error de red para {nombre_ubicacion}: {e}")
+        except Exception as e:
+            ultimo_error = str(e)
+            logger.warning(f"Intento {intento + 1}/3 — error inesperado para {nombre_ubicacion}: {e}")
+
+        if intento < 2:
+            logger.info(f"Reintentando en {_esperas[intento]}s...")
+            time.sleep(_esperas[intento])
+
+    raise ErrorExtraccionClima(
+        f"Fallaron 3 intentos ({tipo_consulta}) para {nombre_ubicacion}: {ultimo_error}"
+    )
 
 
 def obtener_condiciones_actuales(
@@ -843,7 +854,7 @@ def publicar_a_pubsub(
         )
 
         # Esperar confirmación
-        id_mensaje = futuro.result(timeout=10)
+        id_mensaje = futuro.result(timeout=30)
 
         logger.info(
             f"Mensaje publicado exitosamente a Pub/Sub para {nombre_ubicacion}. "
