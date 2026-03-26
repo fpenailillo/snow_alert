@@ -67,21 +67,21 @@ REGISTRO_PROMPTS = {
     "nlp": {
         "modulo": "agentes.subagentes.subagente_nlp.prompts",
         "variable": "SYSTEM_PROMPT_NLP",
-        "version": "3.0.0",
-        "descripcion": "Análisis relatos Andeshandbook, índice riesgo histórico",
-        "hash_sha256": "3b0c928ed4439495",
+        "version": "3.1.0",
+        "descripcion": "Análisis relatos Andeshandbook, índice riesgo histórico + guía conversión frecuencias",
+        "hash_sha256": "ba1f7309d30ba8bd",
     },
     "integrador": {
         "modulo": "agentes.subagentes.subagente_integrador.prompts",
         "variable": "SYSTEM_PROMPT_INTEGRADOR",
-        "version": "3.0.0",
-        "descripcion": "Integración S1-S4, matriz EAWS 5×4×5, boletín final",
-        "hash_sha256": "4cc094839c0640fb",
+        "version": "3.1.0",
+        "descripcion": "Integración S1-S4 + extracción datos climáticos cuantitativos + proyecciones por tendencia",
+        "hash_sha256": "225e6a9d4ecf376a",
     },
 }
 
 # Versión global del conjunto de prompts (se incrementa cuando cambia cualquiera)
-VERSION_GLOBAL = "3.1"
+VERSION_GLOBAL = "3.2"
 
 
 def _calcular_hash(contenido: str) -> str:
