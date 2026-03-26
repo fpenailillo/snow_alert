@@ -1,5 +1,24 @@
 # Log de Progreso — snow_alert
 
+## Sesión 2026-03-25 (continuación 5) — Auditoría SubagenteNLP + fix índice riesgo histórico
+
+### Fix subagente_nlp: término crítico "inestable" nunca buscado ✅ (commit c3e0762)
+
+**Bug:** `buscar_relatos_condiciones()` en consultor_bigquery.py limita `terminos[:8]`. `TERMINOS_RIESGO_EAWS` en `tool_extraer_patrones.py` tenía "inestable" en posición 9 → nunca se buscaba. "inestable" forma parte de `terminos_criticos = {"alud","avalancha","placa","peligroso","inestable","grieta"}` usado para calcular `indice_riesgo_calculado`. Resultado: índice subestimado cuando había relatos mencionando condiciones inestables.
+
+**Fix:** Reordenar `TERMINOS_RIESGO_EAWS` para que los 6 términos críticos queden en las primeras 6 posiciones: `placa, alud, avalancha, grieta, inestable, peligroso`.
+
+**Fix adicional:** Prompt de `subagente_nlp` no especificaba cómo convertir `resultados_por_termino: {term: [rows]}` → `frecuencias_terminos: {term: count}` requerido por `sintetizar_conocimiento_historico`. Añadida instrucción explícita con ejemplo.
+
+**Módulos auditados sin bugs adicionales:**
+- `tool_buscar_relatos.py`: correcto, usa parameterized queries, fallback por zona
+- `tool_conocimiento_historico.py`: lógica sólida, fallback a base andina cuando total_relatos=0
+- `consultor_bigquery.obtener_relatos_ubicacion()`: correcto, fallback a primera palabra si sin resultados
+- `consultor_bigquery.buscar_relatos_condiciones()`: correcto salvo el límite de 8 términos
+- `conocimiento_base_andino.py`: base completa con 14 zonas, `get_indice_estacional()` con factores mensuales correctos
+
+---
+
 ## Sesión 2026-03-26 (continuación 4) — Mejoras boletines: datos climáticos + proyecciones
 
 ### Mejoras al integrador EAWS ✅ (commit ffe9231)
