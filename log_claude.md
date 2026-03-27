@@ -1,5 +1,28 @@
 # Log de Progreso — snow_alert
 
+## Sesión 2026-03-27 (continuación 8) — Auditoría meteo+integrador + fix reintentos API + backfill histórico
+
+### Auditoría SubagenteMeteorológico y SubagenteIntegrador ✅ (sin bugs críticos)
+
+- `tool_condiciones_actuales.py`: limpio
+- `tool_pronostico_dias.py`: limpio
+- `tool_tendencia_72h.py`: código muerto (4 funciones privadas nunca llamadas); `estadisticas["horas_con_datos"]` = `horas_con_precipitacion` (nombre confuso pero no crítico)
+- `tool_ventanas_criticas.py`: limpio
+- `tool_clasificar_eaws.py`: edge case menor — triple combinación "NEVADA_RECIENTE+VIENTO_FUERTE+FUSION_ACTIVA" recibe ajuste "poor" en lugar de "very_poor" (substring match devuelve "NEVADA_RECIENTE" antes de la combinación completa). Raro en Andes chilenos.
+- `tool_generar_boletin.py`: limpio
+
+### Fix reintentos API ✅ (commit 7d9e950 → desplegado como 7d9e950)
+
+`MAX_REINTENTOS_API`: 3→5, `ESPERA_MAXIMA_SEGUNDOS`: 30→60s. Backoff: 2+4+8+16+32=62s total. Necesario para recuperar límites QPS de Databricks (~60s rolling window). Build `b39b495a` → `SUCCESS`.
+
+### Backfill histórico reiniciado (b8mbph4ac)
+
+Proceso anterior (bt0vez5r2) fallaba con reintentos viejos (14s max). Reiniciado con código actualizado. Primer boletín (La Parva Sector Bajo | 2024-09-01 | nivel=5) generado exitosamente sin rate limit failure. BQ save falla por streaming buffer (<90min desde inserción previa) → salvado en GCS.
+
+27 boletines pendientes: 2024-09-01/15 + 2025 inviernos (jun-sep) × 3 ubicaciones.
+
+---
+
 ## Sesión 2026-03-27 (continuación 7) — Fix ViT sesgo estacional + limpieza BQ + deploy a2e424c
 
 ### Fix ViT: sesgo estacional NDSI ✅ (commit a2e424c → desplegado)
