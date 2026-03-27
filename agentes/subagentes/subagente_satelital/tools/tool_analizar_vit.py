@@ -400,6 +400,7 @@ def _clasificar_estado_vit(
     vector_contexto: list,
     ndsi_promedio: float,
     variabilidad_ndsi: float,
+    cobertura_promedio: float = 0.0,
 ) -> dict:
     """
     Clasifica el estado nival a partir del vector de contexto multi-head.
@@ -414,11 +415,14 @@ def _clasificar_estado_vit(
     if max_atencion > 0.6:
         score += 1.5
 
-    # 2. NDSI bajo → nieve húmeda o poca cobertura (umbral 0.4 per Dietz et al.)
-    if ndsi_promedio < 0.4:
-        score += 2.0
-    elif ndsi_promedio < 0.45:
-        score += 1.0
+    # 2. NDSI bajo → nieve húmeda (Dietz et al. umbral 0.4).
+    # SOLO aplica si hay cobertura de nieve significativa (>10%): en verano/otoño,
+    # ndsi<0.4 es normal (sin nieve) y no indica riesgo.
+    if cobertura_promedio > 10:
+        if ndsi_promedio < 0.4:
+            score += 2.0
+        elif ndsi_promedio < 0.45:
+            score += 1.0
 
     # 3. Alta variabilidad → cambios rápidos en el manto
     if variabilidad_ndsi > 0.3:
@@ -482,7 +486,8 @@ def _analizar_punto_unico(
     delta = vector[5] * 30
 
     score = 0.0
-    if ndsi < 0.4:
+    # NDSI bajo es señal de riesgo solo cuando hay nieve (cobertura > 10%)
+    if cobertura_promedio > 10 and ndsi < 0.4:
         score += 2.0
     if abs(delta) > 15:
         score += 2.0
@@ -596,6 +601,7 @@ def ejecutar_analizar_vit(
         vector_contexto=vector_contexto,
         ndsi_promedio=ndsi_promedio,
         variabilidad_ndsi=variabilidad_ndsi,
+        cobertura_promedio=cobertura_promedio,
     )
 
     anomalias = _detectar_anomalias_serie(
