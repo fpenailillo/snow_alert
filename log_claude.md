@@ -1,5 +1,41 @@
 # Log de Progreso — snow_alert
 
+## Sesión 2026-03-27 (continuación 7) — Fix ViT sesgo estacional + limpieza BQ + deploy a2e424c
+
+### Fix ViT: sesgo estacional NDSI ✅ (commit a2e424c → desplegado)
+
+**Bug:** `_clasificar_estado_vit` en `tool_analizar_vit.py` sumaba `score += 2.0` incondicionalmente cuando `ndsi_promedio < 0.4`, llevando a `ALERTADO` (umbral ≥ 2.0) aunque no hubiera nieve. En marzo (verano austral chileno), NDSI ≈ 0.04 (terreno descubierto) → score = 2.0 → `ALERTADO` → niveles 4-5 falsos.
+
+**Causa raíz:** El criterio NDSI < 0.4 detecta correctamente _nieve húmeda/en fusión_ pero solo tiene sentido cuando HAY nieve. Sin cobertura nival, NDSI bajo es irrelevante.
+
+**Fix:** Condicionar penalización NDSI a `cobertura_promedio > 10` (10% cobertura mínima):
+```python
+if cobertura_promedio > 10:
+    if ndsi_promedio < 0.4:  score += 2.0   # nieve húmeda confirmada
+    elif ndsi_promedio < 0.45: score += 1.0  # posiblemente húmeda
+```
+Mismo cambio en `_analizar_punto_unico`. Verificado: marzo (cobertura=1%) → `ESTABLE` score=0 ✅; invierno (cobertura=60%) → `ALERTADO` score=2.0 ✅
+
+**Build y deploy:**
+- Build `140c566d` → `SUCCESS`
+- `gcr.io/climas-chileno/snow-alert-agentes:a2e424c` activo en Cloud Run Job
+
+### Limpieza BQ: 20 boletines contaminados eliminados ✅
+
+Boletines de 2026-03-24 (17 filas) y 2026-03-26 (3 filas) generados con imagen `cc71f72` (NDSI fix presente, ViT fix ausente) mostraban `estado_vit=ALERTADO, score=2.0` y niveles 3-5 inflados en verano. Eliminados con DELETE FROM BQ. Estado final: 0 boletines contaminados.
+
+**Datos de validación (invierno 2024) íntegros:** Los 15 boletines históricos (2024-06-15 a 2024-08-15) no tenían el bug — NDSI invernal era > 0.4 con nieve presente, por lo que la condición no se disparaba incorrectamente.
+
+### Generación histórica completada ✅
+
+85→68 boletines en BQ después de limpieza. Rango 2024-06-15 a 2026-03-26. Preset `validacion` incluye ubicaciones chilenas (La Parva ×3) + suizas (Matterhorn, Interlaken, St Moritz) para H3 con datos SLF.
+
+### Estado commits (pendiente git push)
+
+17 commits locales sin push. Ejecutar: `git push origin main`
+
+---
+
 ## Sesión 2026-03-25 (continuación 6) — Auditoría completa sistema + fixes almacenador + hashes
 
 ### Fix almacenador ✅ (commit e09f665)
