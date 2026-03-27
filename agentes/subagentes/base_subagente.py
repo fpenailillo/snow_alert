@@ -23,9 +23,11 @@ logger = logging.getLogger(__name__)
 
 
 # Configuración de reintentos para llamadas a la API
-MAX_REINTENTOS_API = 3
+# 5 reintentos con backoff: 2s → 4s → 8s → 16s → 32s (total ~62s max espera)
+# Suficiente para recuperar límites QPS de Databricks (~60s rolling window)
+MAX_REINTENTOS_API = 5
 ESPERA_BASE_SEGUNDOS = 2.0
-ESPERA_MAXIMA_SEGUNDOS = 30.0
+ESPERA_MAXIMA_SEGUNDOS = 60.0
 
 
 class ErrorSubagente(Exception):
