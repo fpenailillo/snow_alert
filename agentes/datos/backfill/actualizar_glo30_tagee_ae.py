@@ -34,6 +34,7 @@ Earth Engine quota:
 import argparse
 import json
 import logging
+import math
 import sys
 from datetime import datetime, timezone
 from typing import Optional
@@ -176,7 +177,8 @@ def calcular_glo30_tagee(ee, bbox: list) -> dict:
     eastness = aspect_rad.sin()
 
     # Zonas de convergencia: celdas donde curvatura horizontal > umbral
-    umbral_convergencia = 0.1
+    # A 30m resolución, curvatura típica es O(1e-4 m⁻¹); umbral ajustado para GLO-30
+    umbral_convergencia = 1e-4
     zonas_convergencia = curv_horizontal.gt(umbral_convergencia)
 
     # ── Estadísticas de región ─────────────────────────────────────────────────
@@ -244,7 +246,7 @@ def calcular_alphaearth(ee, bbox: list, anios: list[int]) -> dict:
             ).getInfo()
 
             if stats:
-                embedding = [stats.get(f"dim_{i}", 0.0) for i in range(64)]
+                embedding = [stats.get(f"A{i:02d}", 0.0) for i in range(64)]
                 embeddings_por_anio[anio] = embedding
                 logger.info(f"AlphaEarth: embedding año {anio} extraído (norma={_norma(embedding):.3f})")
             else:
@@ -303,7 +305,7 @@ def escribir_en_bigquery(zona_nombre_bq: str, datos: dict, dry_run: bool = False
     fila = {
         "nombre_ubicacion": zona_nombre_bq,
         "fecha_analisis": datetime.now(timezone.utc).isoformat(),
-        "dem_fuente": datos.get("dem_fuente", "COPERNICUS/DEM/GLO30"),
+        "fuente_dem": datos.get("dem_fuente", "COPERNICUS/DEM/GLO30"),
         "resolucion_m": 30,
         # TAGEE
         "curvatura_horizontal_promedio": datos.get("curvatura_horizontal_promedio"),
@@ -405,8 +407,6 @@ def procesar_zona(ee, zona_nombre: str, config: dict, dry_run: bool):
 
 
 def main():
-    import math  # para calcular_glo30_tagee
-
     parser = argparse.ArgumentParser(
         description="Actualiza pendientes_detalladas con GLO-30 + TAGEE + AlphaEarth"
     )
@@ -466,5 +466,4 @@ def main():
 
 
 if __name__ == "__main__":
-    import math
     main()
