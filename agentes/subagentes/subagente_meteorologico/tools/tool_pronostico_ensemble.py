@@ -11,16 +11,11 @@ S3 la puede llamar para obtener incertidumbre cuantificada.
 
 import logging
 import os
+from agentes.datos.constantes_zonas import COORDENADAS_ZONAS
 
 logger = logging.getLogger(__name__)
 
 _USE_WEATHERNEXT2 = os.environ.get("USE_WEATHERNEXT2", "false").lower() == "true"
-
-_COORDS_ZONAS = {
-    "La Parva": (-33.354, -70.298),
-    "Valle Nevado": (-33.357, -70.270),
-    "El Colorado": (-33.360, -70.289),
-}
 
 
 TOOL_PRONOSTICO_ENSEMBLE = {
@@ -69,7 +64,7 @@ def ejecutar_obtener_pronostico_ensemble(
         ConsolidadorMeteorologico,
     )
 
-    coords = _COORDS_ZONAS.get(nombre_ubicacion, (-33.35, -70.35))
+    coords = COORDENADAS_ZONAS.get(nombre_ubicacion, (-33.35, -70.35))
     lat, lon = coords
 
     try:

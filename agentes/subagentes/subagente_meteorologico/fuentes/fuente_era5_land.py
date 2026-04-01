@@ -10,18 +10,13 @@ Sin cambio de comportamiento existente.
 
 import logging
 from agentes.datos.consultor_bigquery import ConsultorBigQuery
+from agentes.datos.constantes_zonas import COORDENADAS_ZONAS
 from agentes.subagentes.subagente_meteorologico.fuentes.base import (
     FuenteMeteorologica,
     PronosticoMeteorologico,
 )
 
 logger = logging.getLogger(__name__)
-
-_COORDS_ZONAS = {
-    "La Parva": (-33.354, -70.298),
-    "Valle Nevado": (-33.357, -70.270),
-    "El Colorado": (-33.360, -70.289),
-}
 
 
 class FuenteERA5Land(FuenteMeteorologica):
@@ -55,7 +50,7 @@ class FuenteERA5Land(FuenteMeteorologica):
         """
         consultor = ConsultorBigQuery()
 
-        coords = _COORDS_ZONAS.get(zona, (lat, lon))
+        coords = COORDENADAS_ZONAS.get(zona, (lat, lon))
 
         try:
             # Obtener tendencia que puede incluir datos ERA5 embebidos en imagenes_satelitales

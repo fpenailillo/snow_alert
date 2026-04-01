@@ -1038,6 +1038,123 @@ class ConsultorBigQuery:
                 "razon": tabla_msg,
             }
 
+    def obtener_stats_terreno_st(self, ubicacion: str) -> dict:
+        """
+        Calcula estadísticas de terreno usando ST_REGIONSTATS directamente en BigQuery.
+
+        Usa NASADEM (NASA/NASADEM_HGT/001) como DEM de referencia rápida, sin
+        necesidad de exportar desde Earth Engine. Complementa obtener_atributos_tagee_ae()
+        con estadísticas adicionales disponibles en tiempo real.
+
+        Args:
+            ubicacion: Nombre de la zona objetivo
+
+        Returns:
+            dict con elevacion_media, elevacion_std, elevacion_min, elevacion_max,
+            area_km2 y metadatos de zona desde zonas_objetivo.
+        """
+        inicio = time.time()
+        logger.info(f"[ConsultorBigQuery] ST_REGIONSTATS terreno → {ubicacion}")
+        try:
+            sql = """
+                SELECT
+                  z.nombre_zona,
+                  z.lat_centroide,
+                  z.lon_centroide,
+                  z.elevacion_min_m,
+                  z.elevacion_max_m,
+                  z.exposicion_predominante,
+                  z.region_eaws,
+                  ROUND(ST_AREA(z.geometria) / 1e6, 2) AS area_km2,
+                  ROUND(ST_REGIONSTATS(
+                    z.geometria,
+                    'ee://NASA/NASADEM_HGT/001',
+                    'elevation'
+                  ).mean, 1) AS nasadem_elevacion_media_m,
+                  ROUND(ST_REGIONSTATS(
+                    z.geometria,
+                    'ee://NASA/NASADEM_HGT/001',
+                    'elevation'
+                  ).stddev, 1) AS nasadem_elevacion_std_m,
+                  ROUND(ST_REGIONSTATS(
+                    z.geometria,
+                    'ee://USGS/SRTMGL1_003',
+                    'elevation'
+                  ).mean, 1) AS srtm_elevacion_media_m
+                FROM `climas-chileno.clima.zonas_objetivo` z
+                WHERE z.nombre_zona = @zona
+                LIMIT 1
+            """
+            job_config = bigquery.QueryJobConfig(
+                query_parameters=[
+                    bigquery.ScalarQueryParameter("zona", "STRING", ubicacion),
+                ]
+            )
+            filas = list(self._ejecutar_query(sql, job_config))
+            if not filas:
+                return {"disponible": False, "razon": f"Zona '{ubicacion}' no encontrada en zonas_objetivo"}
+
+            fila = dict(filas[0])
+            fila["disponible"] = True
+            fila["fuente_dem"] = "NASADEM+SRTM via ST_REGIONSTATS"
+            fila["latencia_ms"] = round((time.time() - inicio) * 1000)
+            logger.info(
+                f"  ST_REGIONSTATS OK: elev_media={fila.get('nasadem_elevacion_media_m')}m "
+                f"({fila['latencia_ms']}ms)"
+            )
+            return fila
+
+        except Exception as exc:
+            logger.warning(f"Error ST_REGIONSTATS para {ubicacion}: {exc}")
+            return {"disponible": False, "razon": str(exc)}
+
+    def obtener_zona_geografica(self, ubicacion: str) -> dict:
+        """
+        Retorna metadata geográfica de la zona desde la tabla zonas_objetivo.
+
+        Útil para obtener el polígono, área, centroide y elevaciones de referencia
+        sin necesidad de hardcodear coordenadas en los subagentes.
+
+        Args:
+            ubicacion: Nombre de la zona objetivo
+
+        Returns:
+            dict con nombre_zona, geometria (GeoJSON), lat/lon centroide, área y metadata
+        """
+        logger.info(f"[ConsultorBigQuery] zona geográfica → {ubicacion}")
+        try:
+            sql = """
+                SELECT
+                  nombre_zona,
+                  ST_AsGeoJSON(geometria) AS geometria_geojson,
+                  lat_centroide,
+                  lon_centroide,
+                  ROUND(ST_AREA(geometria) / 1e6, 2) AS area_km2,
+                  elevacion_min_m,
+                  elevacion_max_m,
+                  exposicion_predominante,
+                  region_eaws
+                FROM `climas-chileno.clima.zonas_objetivo`
+                WHERE nombre_zona = @zona
+                LIMIT 1
+            """
+            job_config = bigquery.QueryJobConfig(
+                query_parameters=[
+                    bigquery.ScalarQueryParameter("zona", "STRING", ubicacion),
+                ]
+            )
+            filas = list(self._ejecutar_query(sql, job_config))
+            if not filas:
+                return {"disponible": False, "razon": f"Zona '{ubicacion}' no encontrada"}
+
+            fila = dict(filas[0])
+            fila["disponible"] = True
+            return fila
+
+        except Exception as exc:
+            logger.warning(f"Error obteniendo zona geográfica {ubicacion}: {exc}")
+            return {"disponible": False, "razon": str(exc)}
+
     def buscar_relatos_condiciones(self, terminos: list, limite: int = 10) -> dict:
         """
         Busca relatos que mencionen términos específicos de condiciones de riesgo.

@@ -39,28 +39,16 @@ import sys
 from datetime import datetime, timezone
 from typing import Optional
 
+from agentes.datos.constantes_zonas import BBOX_ZONAS, COORDENADAS_ZONAS
+
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(levelname)s — %(message)s")
 
 # ─── Zonas objetivo ───────────────────────────────────────────────────────────
 
 ZONAS = {
-    "La Parva": {
-        "bbox": [-70.45, -33.45, -70.15, -33.25],  # [lon_min, lat_min, lon_max, lat_max]
-        "nombre_bq": "La Parva",
-    },
-    "La Parva Sector Bajo": {
-        "bbox": [-70.40, -33.43, -70.25, -33.32],
-        "nombre_bq": "La Parva Sector Bajo",
-    },
-    "Valle Nevado": {
-        "bbox": [-70.38, -33.40, -70.18, -33.25],
-        "nombre_bq": "Valle Nevado",
-    },
-    "El Colorado": {
-        "bbox": [-70.35, -33.43, -70.22, -33.30],
-        "nombre_bq": "El Colorado",
-    },
+    nombre: {"bbox": bbox, "nombre_bq": nombre}
+    for nombre, bbox in BBOX_ZONAS.items()
 }
 
 GCP_PROJECT = "climas-chileno"

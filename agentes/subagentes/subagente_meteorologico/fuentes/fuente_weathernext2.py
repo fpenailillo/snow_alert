@@ -27,6 +27,7 @@ Mientras no haya acceso → disponible=False, retorna PronosticoMeteorologico co
 import logging
 import os
 from typing import Optional
+from agentes.datos.constantes_zonas import COORDENADAS_ZONAS
 from agentes.subagentes.subagente_meteorologico.fuentes.base import (
     FuenteMeteorologica,
     PronosticoMeteorologico,
@@ -41,13 +42,7 @@ _USE_WEATHERNEXT2 = os.environ.get("USE_WEATHERNEXT2", "false").lower() == "true
 _BQ_DATASET = "climas-chileno.weathernext_2"
 _BQ_TABLE = f"{_BQ_DATASET}.forecasts"
 
-_COORDS_ZONAS = {
-    "La Parva": (-33.354, -70.298),
-    "Valle Nevado": (-33.357, -70.270),
-    "El Colorado": (-33.360, -70.289),
-}
-
-# Celda 0.25° que cubre ambas zonas
+# Celda 0.25° que cubre ambas zonas (resolución nativa WeatherNext 2)
 _BBOX_ANDES_CENTRAL = {
     "lat_min": -33.5, "lat_max": -33.25,
     "lon_min": -70.5, "lon_max": -70.25,
@@ -224,7 +219,7 @@ class FuenteWeatherNext2(FuenteMeteorologica):
             if row["humedad_pct"] is not None:
                 miembros[m]["humedades"].append(row["humedad_pct"])
 
-        coords = _COORDS_ZONAS.get(zona, (lat_celda, lon_celda))
+        coords = COORDENADAS_ZONAS.get(zona, (lat_celda, lon_celda))
         pronosticos = []
         for m_id, datos in miembros.items():
             temp_media = sum(datos["temps"]) / len(datos["temps"]) if datos["temps"] else None

@@ -97,6 +97,63 @@
 
 ---
 
+## Sesión 2026-04-01 (continuación 2) — REQ-05 BigQuery ST_REGIONSTATS + EE backfill ejecutado
+
+### Backfill EE ejecutado en producción ✅
+
+Acceso a Earth Engine verificado. Backfill GLO-30/TAGEE/AlphaEarth ejecutado para las 4 zonas:
+
+| Zona | Zonas convergencia | Drift 2023→2024 | BQ |
+|------|-------------------|-----------------|-----|
+| La Parva | 372,775 celdas | 2.9% | ✅ |
+| Valle Nevado | 184,719 celdas | 2.7% | ✅ |
+| La Parva Sector Bajo | 104,592 celdas | **4.2%** | ✅ |
+| El Colorado | 106,418 celdas | **3.8%** | ✅ |
+
+Drift 2023→2024 es el mayor de la serie — consistente con anomalías climáticas verano 2024 en Andes centrales. La Parva Sector Bajo y El Colorado muestran mayor variabilidad interanual.
+
+Bugs corregidos en backfill script: `math` import, bandas `A00-A63` (no `dim_0`), campo `fuente_dem` (no `dem_fuente`), umbral convergencia `1e-4 m⁻¹`.
+
+### Tarea #5: REQ-05 — BigQuery ST_REGIONSTATS + centralización coordenadas ✅
+
+**Estado:** Implementado y testeado. 19 tests nuevos — todos pasando.
+
+- **`agentes/datos/constantes_zonas.py`** — módulo único de verdad geográfica:
+  - `COORDENADAS_ZONAS`: lat/lon para Open-Meteo/ERA5/WeatherNext 2
+  - `BBOX_ZONAS`: polígonos bbox para Earth Engine
+  - `POLIGONOS_ZONAS`: GeoJSON cerrados para BQ GEOGRAPHY
+  - `METADATA_ZONAS`: elevaciones, exposición, región EAWS
+  - Helpers: `obtener_coordenadas()`, `obtener_bbox()`, `poligono_geojson_str()`
+- **Tabla BQ `climas-chileno.clima.zonas_objetivo`** creada con GEOGRAPHY:
+  - 4 zonas con polígonos válidos, área calculada con ST_AREA()
+  - La Parva: 619.7 km², Valle Nevado: 309.9 km²
+- **`ConsultorBigQuery.obtener_stats_terreno_st()`** — usa `ST_REGIONSTATS`:
+  - NASADEM + SRTM vía BigQuery directo (sin EE Python)
+  - Retorna elevación media, std, área desde zonas_objetivo en una sola query
+  - Fallback gracioso si zona no existe o BQ falla
+- **`ConsultorBigQuery.obtener_zona_geografica()`** — retorna polígono + metadata desde zonas_objetivo
+- **Refactor coordenadas** — eliminadas 4 copias de `_COORDS_ZONAS` hardcodeadas:
+  - `fuente_open_meteo.py` → importa `COORDENADAS_ZONAS`
+  - `fuente_era5_land.py` → importa `COORDENADAS_ZONAS`
+  - `fuente_weathernext2.py` → importa `COORDENADAS_ZONAS`
+  - `tool_pronostico_ensemble.py` → importa `COORDENADAS_ZONAS`
+  - `actualizar_glo30_tagee_ae.py` → importa `BBOX_ZONAS`
+- Tests: `agentes/tests/test_req05_st_regionstats.py` — 19 tests (constantes, ST_REGIONSTATS, zonas_objetivo, refactor)
+
+### Estado tests (2026-04-01 cierre final)
+- Suite completa: **256 passed, 8 skipped, 0 failed**
+- Nuevos tests REQ-05: 19 | Total nuevos esta sesión: +93
+- Sin regresiones en los 163 tests base
+
+### Todos los REQ completados
+- ✅ REQ-01 S4 Situational Briefing
+- ✅ REQ-02 S3 WeatherNext 2 (espera suscripción Analytics Hub)
+- ✅ REQ-03 S1 AlphaEarth+GLO-30+TAGEE + backfill ejecutado
+- ✅ REQ-04 S2 RSFM paralelo
+- ✅ REQ-05 ST_REGIONSTATS + zonas_objetivo + centralización coordenadas
+
+---
+
 ## Sesión 2026-03-27 (continuación 9) — Tarea #1 completada: backfill histórico 27 boletines
 
 ### Tarea #1: Generar boletines históricos restantes (27 boletines) — COMPLETADA ✅

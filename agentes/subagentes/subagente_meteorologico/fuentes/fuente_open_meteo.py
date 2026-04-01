@@ -10,19 +10,13 @@ NO se modificó ningún comportamiento existente.
 
 import logging
 from agentes.datos.consultor_bigquery import ConsultorBigQuery
+from agentes.datos.constantes_zonas import COORDENADAS_ZONAS
 from agentes.subagentes.subagente_meteorologico.fuentes.base import (
     FuenteMeteorologica,
     PronosticoMeteorologico,
 )
 
 logger = logging.getLogger(__name__)
-
-# Coordenadas conocidas de las zonas principales
-_COORDS_ZONAS = {
-    "La Parva": (-33.354, -70.298),
-    "Valle Nevado": (-33.357, -70.270),
-    "El Colorado": (-33.360, -70.289),
-}
 
 
 class FuenteOpenMeteo(FuenteMeteorologica):
@@ -55,7 +49,7 @@ class FuenteOpenMeteo(FuenteMeteorologica):
         """
         consultor = ConsultorBigQuery()
 
-        coords = _COORDS_ZONAS.get(zona, (lat, lon))
+        coords = COORDENADAS_ZONAS.get(zona, (lat, lon))
 
         try:
             # Condición actual (Open-Meteo)
