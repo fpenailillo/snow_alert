@@ -71,7 +71,7 @@ class OrquestadorAvalancha:
         self.subagente_topografico = SubagenteTopografico()
         self.subagente_satelital = SubagenteSatelital()
         self.subagente_meteorologico = SubagenteMeteorologico()
-        self.subagente_nlp = AgenteSituationalBriefing()  # v2: Gemini 2.5 Flash
+        self.subagente_nlp = AgenteSituationalBriefing()  # v2: Situational Briefing (Qwen3-80B/Databricks)
         self.subagente_integrador = SubagenteIntegrador()
 
         # Verificar integridad de prompts al inicializar
