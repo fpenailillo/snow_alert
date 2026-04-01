@@ -73,6 +73,10 @@ UBICACIONES_LA_PARVA = {
     "La Parva Sector Bajo":  {"latitud": -33.363, "longitud": -70.301},
     "La Parva Sector Medio": {"latitud": -33.352, "longitud": -70.290},
     "La Parva Sector Alto":  {"latitud": -33.344, "longitud": -70.280},
+    # Ubicaciones de validación H3 (Alpes suizos — hemisferio norte)
+    "Matterhorn Zermatt":    {"latitud": 45.9766, "longitud": 7.6586},
+    "Interlaken":            {"latitud": 46.6863, "longitud": 7.8632},
+    "St Moritz":             {"latitud": 46.4908, "longitud": 9.8355},
 }
 
 # Fechas de invierno 2024 y 2025 (hemisferio sur: junio-septiembre)

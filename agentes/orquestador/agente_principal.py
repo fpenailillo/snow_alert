@@ -31,7 +31,7 @@ from agentes.subagentes.subagente_topografico.agente import SubagenteTopografico
 from agentes.subagentes.subagente_satelital.agente import SubagenteSatelital
 from agentes.subagentes.subagente_meteorologico.agente import SubagenteMeteorologico
 from agentes.subagentes.subagente_integrador.agente import SubagenteIntegrador
-from agentes.subagentes.subagente_nlp.agente import SubagenteNLP
+from agentes.subagentes.subagente_situational_briefing.agente import AgenteSituationalBriefing
 from agentes.prompts.registro_versiones import obtener_version_actual, verificar_integridad
 
 
@@ -51,12 +51,12 @@ class OrquestadorAvalancha:
     """
     Orquestador del sistema multi-agente de predicción de avalanchas.
 
-    Coordina 5 subagentes independientes de Claude en secuencia:
+    Coordina 5 subagentes independientes en secuencia:
     1. Topográfico (DEM + PINNs)
     2. Satelital (imágenes + ViT)
     3. Meteorológico (condiciones + ventanas críticas)
-    4. NLP Relatos (análisis histórico de montañistas)
-    5. Integrador (EAWS + boletín final)
+    4. Situational Briefing (contexto cualitativo, Gemini 2.5 Flash) ← v2
+    5. Integrador (EAWS + boletín final, Qwen3-80B vía Databricks)
 
     El contexto se acumula de cada subagente al siguiente para
     proporcionar información enriquecida a cada etapa del análisis.
@@ -71,7 +71,7 @@ class OrquestadorAvalancha:
         self.subagente_topografico = SubagenteTopografico()
         self.subagente_satelital = SubagenteSatelital()
         self.subagente_meteorologico = SubagenteMeteorologico()
-        self.subagente_nlp = SubagenteNLP()
+        self.subagente_nlp = AgenteSituationalBriefing()  # v2: Gemini 2.5 Flash
         self.subagente_integrador = SubagenteIntegrador()
 
         # Verificar integridad de prompts al inicializar

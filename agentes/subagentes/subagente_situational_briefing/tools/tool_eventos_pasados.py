@@ -10,6 +10,31 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+TOOL_EVENTOS_PASADOS = {
+    "name": "obtener_eventos_pasados",
+    "description": (
+        "Obtiene eventos históricos de avalanchas documentados para la zona. "
+        "Retorna lista de eventos con fecha, tipo y descripción. "
+        "Actualmente usa base de conocimiento estática (SLF/Snowlab pendiente). "
+        "Solo mencionar estos eventos en el briefing si son relevantes para las "
+        "condiciones actuales — no fabricar eventos adicionales."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "ubicacion": {
+                "type": "string",
+                "description": "Nombre exacto de la ubicación"
+            }
+        },
+        "required": ["ubicacion"]
+    }
+}
+
+
+def ejecutar_obtener_eventos_pasados(ubicacion: str) -> dict:
+    return obtener_eventos_pasados(ubicacion)
+
 # Eventos documentados conocidos (base de conocimiento estática inicial)
 # Fuente: relatos Andeshandbook + literatura avalanchológica Andes Central
 _EVENTOS_CONOCIDOS = {

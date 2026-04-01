@@ -656,3 +656,56 @@ Commit: `aeb94dd`
 2. Calcular métricas H1 (F1-macro) y H4 (Kappa) con ≥50 boletines reales
 3. Actualizar CLAUDE.md con estado Fase 6 completada
 4. Commit final y push a main
+
+---
+
+## Sesión 2026-04-01 — REQ-01 S4 Situational Briefing + REQ-02 S3 WeatherNext2
+
+### Contexto
+
+Implementación de nuevos requerimientos en `claude/requirements/`:
+- REQ-01: Reemplazo total de S4 (scraping+NLP → Situational Briefing)
+- REQ-02: WeatherNext 2 como fuente meteorológica aditiva en S3
+
+### Tarea 1: Permiso allowlist (skill fewer-permission-prompts)
+
+- Creado `.claude/settings.json` con 20 patrones read-only para herramientas GCP
+- Patrones clave: `bq query *`, `gcloud logging read *`, `gsutil ls *`, `gcloud run jobs describe *`
+
+### Tarea 2: REQ-01 — S4 Situational Briefing (verificación + migración Databricks)
+
+**Estado al inicio:** código S4 parcialmente pre-implementado (Gemini 2.5 Flash).
+
+**Migración a Databricks (decisión del usuario):**
+- Reemplazado Gemini 2.5 Flash por Qwen3-80B vía Databricks (endpoint gratuito, mismo que S5)
+- `agentes/subagentes/subagente_situational_briefing/agente.py`: reescrito para heredar `BaseSubagente`
+  - `PROVEEDOR = "databricks"`, `MODELO = "databricks-qwen3-next-80b-a3b-instruct"`
+  - `MAX_ITERACIONES = 8`, `MAX_TOKENS = 4096`
+  - Agentic loop estándar: 4 tools → síntesis briefing en texto
+- Cada tool expone `TOOL_<X>` (dict) + `ejecutar_<tool_name>` (wrapper) para el loop de BaseSubagente
+- `prompts/system_prompt.md`: reescrito con template de salida fijo (secciones `##` obligatorias) + metadatos compatibilidad S5
+- `claude/requirements/01-s4-situational-briefing.md`: actualizado (Gemini → Databricks en secciones 4.3, 6, 7, 8, 9)
+
+**Fix crítico de tests:** patch path corregido
+- `agentes.datos.cliente_llm.crear_cliente` → `agentes.subagentes.base_subagente.crear_cliente`
+- Razón: `base_subagente.py` hace `from agentes.datos.cliente_llm import crear_cliente` (import a nivel módulo), el binding local debe parcharse donde se usa, no en el módulo origen
+
+**Resultado:** 20/20 tests S4 pasando ✅
+
+### Tarea 3: REQ-02 — S3 WeatherNext2 (verificación + fix imports)
+
+**Estado al inicio:** código parcialmente pre-implementado.
+
+**Fixes realizados:**
+- `fuente_open_meteo.py` y `fuente_era5_land.py`: import `ConsultorBigQuery` movido a nivel módulo (era lazy)
+- `test_weathernext2.py`: patch paths corregidos a `fuente_open_meteo.ConsultorBigQuery` / `fuente_era5_land.ConsultorBigQuery`
+- `agente.py` de S3: registrado `TOOL_PRONOSTICO_ENSEMBLE` + ejecutor
+
+**Resultado:** 17/17 tests WeatherNext2 pasando ✅
+
+### Resultado final
+
+- **Total tests:** 199 passed, 8 skipped — 0 regresiones ✅
+- Tests nuevos: +37 (20 S4 Situational Briefing + 17 S3 WeatherNext2)
+- Requerimientos completados: REQ-01 ✅, REQ-02 ✅ (pendiente suscripción Analytics Hub para producción)
+- Pendiente: REQ-03 (AlphaEarth), REQ-04 (RSFM paralelo), REQ-05 (BigQuery ST_REGIONSTATS)

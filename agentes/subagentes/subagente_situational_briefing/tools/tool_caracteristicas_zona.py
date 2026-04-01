@@ -10,6 +10,31 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+TOOL_CARACTERISTICAS_ZONA = {
+    "name": "obtener_caracteristicas_zona",
+    "description": (
+        "Obtiene características topográficas de la zona relevantes para EAWS: "
+        "rango de altitudes, orientaciones críticas de acumulación/inicio, "
+        "distribución de pendientes según rangos EAWS (<30°, 30-35°, 35-45°, 45-60°, >60°), "
+        "características especiales (cornisas, couloirs, glaciares) y accesos. "
+        "Enriquecida con datos BQ (zonas_avalancha) si disponibles."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "ubicacion": {
+                "type": "string",
+                "description": "Nombre exacto de la ubicación"
+            }
+        },
+        "required": ["ubicacion"]
+    }
+}
+
+
+def ejecutar_obtener_caracteristicas_zona(ubicacion: str) -> dict:
+    return obtener_caracteristicas_zona(ubicacion)
+
 # Constantes topográficas para zonas conocidas
 # Basado en análisis DEM NASADEM/GLO-30 y conocimiento del terreno
 _CARACTERISTICAS_ZONAS = {

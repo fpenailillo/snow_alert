@@ -115,12 +115,13 @@ class SituationalBriefing(BaseModel):
 
 ### 4.3 Modelo LLM
 
-Usar **Gemini 2.5 Flash** vía Vertex AI (NO modificar Databricks/Qwen3-80B de S5):
+Usar **Qwen3-80B vía Databricks** (mismo endpoint gratuito que S5):
 
-- Razón: structured output con JSON schema, costo bajo (~$0.001/briefing), español de Chile soportado nativamente
-- Endpoint: `gemini-2.5-flash` en `us-central1`
-- Configurar context caching para `system_prompt` (90% descuento input tokens)
-- Fallback: si Vertex AI falla, usar Qwen3-80B de Databricks como contingencia (no como primario, para no acoplar S4 con S5)
+- Razón: endpoint gratuito ya disponible en el proyecto, sin dependencia adicional de Vertex AI ni billing extra
+- Modelo: `databricks-qwen3-next-80b-a3b-instruct` vía AI Gateway Databricks
+- Credenciales: `DATABRICKS_TOKEN` en Secret Manager (misma config que S5)
+- Patrón: hereda `BaseSubagente` → agentic loop estándar con tools + síntesis final en texto
+- No se requiere fallback separado: misma infraestructura que S5, ya validada en producción
 
 ### 4.4 Integración con orquestador
 
@@ -173,8 +174,8 @@ El `orquestador-avalanchas` debe:
 ## 6. Criterios de aceptación
 
 - [ ] El briefing se genera en <10 segundos por zona
-- [ ] Costo por briefing <$0.005 (Gemini 2.5 Flash)
-- [ ] Schema Pydantic validado en 100% de ejecuciones
+- [ ] Costo por briefing $0 (Qwen3-80B vía Databricks, endpoint gratuito)
+- [ ] Schema de salida en texto validado en 100% de ejecuciones
 - [ ] Tests unitarios e integración pasando (target: +15 tests nuevos)
 - [ ] No-alucinación verificada: 0 datos inventados en 20 ejecuciones de prueba
 - [ ] S5 consume el briefing sin romper su lógica actual
@@ -187,27 +188,27 @@ El `orquestador-avalanchas` debe:
 
 | Riesgo | Probabilidad | Impacto | Mitigación |
 |--------|--------------|---------|-----------|
-| Gemini alucina eventos pasados | Media | Alto | Few-shot con énfasis en "solo mencionar lo presente en tools"; test de no-alucinación |
+| Qwen3 alucina eventos pasados | Media | Alto | System prompt con énfasis en "solo mencionar lo presente en tools"; test de no-alucinación |
 | Briefing demasiado genérico | Media | Medio | Iterar template; incluir métricas específicas (no solo prosa) |
 | Pérdida de información cualitativa de relatos | Baja | Bajo | Mantener tabla histórica para análisis posterior; relatos no fueron útiles operacionalmente |
-| Context caching no aplica | Baja | Bajo | Costo sube ~10x pero sigue siendo <$0.05/briefing |
-| Acoplamiento Vertex AI ↔ Databricks | Baja | Medio | S4 usa solo Vertex; S5 solo Databricks; sin dependencia cruzada |
+| Databricks AI Gateway no disponible | Baja | Medio | Misma infraestructura que S5; si falla, S4 se marca degradado y pipeline continúa |
+| Latencia Databricks > 10s | Baja | Bajo | MAX_ITERACIONES=8, timeout razonable; pipeline marca degradado si supera límite |
 
 ---
 
 ## 8. Referencias técnicas
 
-- Gemini 2.5 Flash: `https://cloud.google.com/vertex-ai/generative-ai/docs/models/gemini/2-5-flash`
-- Structured outputs con Pydantic: `https://ai.google.dev/gemini-api/docs/structured-output`
-- Context caching: `https://cloud.google.com/vertex-ai/generative-ai/docs/context-cache/context-cache-overview`
-- ADK LlmAgent: `https://google.github.io/adk-docs/agents/llm-agents/`
+- Databricks AI Gateway: `https://docs.databricks.com/aws/en/ai-gateway/index.html`
+- Qwen3-80B modelo base: `https://huggingface.co/Qwen/Qwen3-80B`
+- BaseSubagente (patrón interno): `agentes/subagentes/base_subagente.py`
+- ClienteDatabricks (patrón interno): `agentes/datos/cliente_llm.py`
 - EAWS matrix (referencia interna): skill `eaws-methodology/`
 
 ---
 
 ## 9. Notas para Claude Code
 
-- **NO modificar S5**: el integrador EAWS sigue usando Qwen3-80B vía Databricks. S4 alimenta a S5 vía contexto, no compite con él.
+- **S4 y S5 usan el mismo endpoint Databricks**: ambos usan `databricks-qwen3-next-80b-a3b-instruct`; S4 genera el briefing de contexto, S5 determina el nivel EAWS. No hay conflicto de recursos.
 - **Idempotencia:** el briefing del mismo día con mismos inputs debe producir output equivalente (temperatura LLM=0.2)
 - **Trazabilidad:** persistir cada briefing en BigQuery `clima.situational_briefings` con UUID y inputs usados (auditoría académica)
 - **Lengua:** todo el briefing en español de Chile, terminología EAWS estándar (no traducir términos técnicos)

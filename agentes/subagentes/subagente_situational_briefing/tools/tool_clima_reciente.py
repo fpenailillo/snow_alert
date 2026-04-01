@@ -9,6 +9,31 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+TOOL_CLIMA_RECIENTE = {
+    "name": "obtener_clima_reciente_72h",
+    "description": (
+        "Obtiene condiciones meteorológicas de las últimas 72 horas para la zona: "
+        "temperatura min/max/promedio, precipitación acumulada, viento máximo y "
+        "dirección dominante, humedad, condición predominante y eventos destacables "
+        "(ráfagas, precipitación importante, temperatura en umbral de fusión). "
+        "Es la fuente principal de datos recientes para el briefing."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "ubicacion": {
+                "type": "string",
+                "description": "Nombre exacto de la ubicación"
+            }
+        },
+        "required": ["ubicacion"]
+    }
+}
+
+
+def ejecutar_obtener_clima_reciente_72h(ubicacion: str) -> dict:
+    return obtener_clima_reciente_72h(ubicacion)
+
 
 def obtener_clima_reciente_72h(ubicacion: str) -> dict:
     """

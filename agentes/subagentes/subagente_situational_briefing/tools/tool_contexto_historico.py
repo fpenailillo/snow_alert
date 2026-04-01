@@ -11,6 +11,31 @@ from datetime import datetime, timezone
 
 logger = logging.getLogger(__name__)
 
+TOOL_CONTEXTO_HISTORICO = {
+    "name": "obtener_contexto_historico",
+    "description": (
+        "Determina el contexto climatológico y estacional de la zona. "
+        "Retorna la época del ciclo de nieve andino (pre-temporada, temporada-temprana, "
+        "mid-winter, primavera, fin-temporada), patrón típico para el mes, "
+        "nivel de nieve estacional (alto/normal/bajo) y desviación vs promedio histórico. "
+        "Usar para contextualizar las condiciones recientes en el ciclo anual."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "ubicacion": {
+                "type": "string",
+                "description": "Nombre exacto de la ubicación"
+            }
+        },
+        "required": ["ubicacion"]
+    }
+}
+
+
+def ejecutar_obtener_contexto_historico(ubicacion: str) -> dict:
+    return obtener_contexto_historico(ubicacion)
+
 # Promedios históricos aproximados para La Parva / Valle Nevado (~3200m snm)
 # Fuente: datos climatológicos Andes Central, DGA Chile
 _CLIMATOLOGIA_ANDES_CENTRAL = {

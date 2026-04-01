@@ -295,79 +295,96 @@ class TestToolClimaReciente:
 # ── Agente completo ───────────────────────────────────────────────────────────
 
 class TestAgenteSituationalBriefing:
-    """Tests del agente completo con Gemini mockeado."""
+    """Tests del agente completo con cliente Databricks mockeado."""
 
-    def _briefing_gemini_mock(self, zona="La Parva") -> str:
-        """JSON válido que Gemini devolvería."""
-        return json.dumps({
-            "zona": zona,
-            "timestamp_generacion": "2026-04-25T12:00:00+00:00",
-            "horizonte_validez_h": 24,
-            "condiciones_recientes": {
-                "temperatura_promedio_c": -2.0,
-                "temperatura_min_c": -5.0,
-                "temperatura_max_c": 1.0,
-                "precipitacion_acumulada_mm": 10.0,
-                "viento_max_kmh": 50.0,
-                "direccion_viento_dominante": "NW",
-                "humedad_relativa_pct": 80.0,
-                "condicion_predominante": "nublado",
-                "eventos_destacables": ["Viento moderado"],
-            },
-            "contexto_historico": {
-                "epoca_estacional": "pre-temporada",
-                "mes_actual": "abril 2026",
-                "patron_climatologico_tipico": "Otoño con nevadas esporádicas",
-                "desviacion_vs_normal": "dentro del rango histórico",
-                "nivel_nieve_estacional": "bajo",
-            },
-            "caracteristicas_zona": {
-                "nombre_zona": zona,
-                "altitud_minima_m": 2662,
-                "altitud_maxima_m": 3630,
-                "orientaciones_criticas": ["S", "SE"],
-                "rangos_pendiente_eaws": ["35-45°: ~30%"],
-                "caracteristicas_especiales": [],
-            },
-            "narrativa_integrada": (
-                "La zona de La Parva se encuentra en período de pre-temporada con "
-                "condiciones meteorológicas de otoño tardío. Las temperaturas se mantienen "
-                "bajo cero durante la noche y el viento NW ha sido moderado. La cobertura "
-                "de nieve es baja para la época. Las orientaciones sur y sureste concentran "
-                "el mayor espesor de nieve disponible."
-            ),
-            "factores_atencion_eaws": [
-                "Viento NW con potencial de formación de placas en pendientes SE",
-                "Temperatura en umbral de fusión durante horas diurnas",
+    _BRIEFING_TEXTO = """## SITUATIONAL BRIEFING — La Parva
+Generado por: AgenteSituationalBriefing (Qwen3-80B/Databricks) | Confianza: MEDIA
+
+### Contexto Estacional
+- Época: pre-temporada (abril 2026)
+- Patrón típico: Otoño con nevadas esporádicas
+- Desviación vs normal: dentro del rango histórico
+- Nivel nieve estacional: bajo
+
+### Condiciones Recientes (72h)
+- Temperatura: promedio -2.0°C, min -5.0°C, max 1.0°C
+- Precipitación acumulada: 10.0 mm
+- Viento máximo: 50 km/h (NW)
+- Humedad relativa: 80%
+- Condición predominante: nublado
+- Eventos destacables: Viento moderado
+
+### Características Topográficas
+- Altitud: 2662–3630 m snm
+- Orientaciones críticas: S, SE
+- Índice riesgo topográfico: sin datos BQ
+
+### Narrativa Integrada
+La zona de La Parva se encuentra en período de pre-temporada con condiciones
+meteorológicas de otoño tardío. Las temperaturas se mantienen bajo cero durante
+la noche y el viento NW ha sido moderado.
+
+### Factores de Atención EAWS
+- Viento NW con potencial de formación de placas en pendientes SE
+- Temperatura en umbral de fusión durante horas diurnas
+
+### Metadatos (compatibilidad S5)
+- indice_riesgo_historico: 0.35
+- tipo_alud_predominante: placa_viento
+- total_relatos_analizados: 0
+- confianza_historica: Media
+- resumen_nlp: Pre-temporada con viento NW y temperatura en umbral de fusión.
+- fuentes: clima.condiciones_actuales, constantes_hardcodeadas
+"""
+
+    def _crear_mock_cliente(self, briefing_texto=None):
+        """Crea un mock del cliente Databricks que simula el agentic loop.
+
+        Primera respuesta: llama las 4 tools.
+        Segunda respuesta: produce el briefing final.
+        """
+        from agentes.datos.cliente_llm import RespuestaNormalizada, BloqueTexto, BloqueToolUse, _Usage
+        from openai import RateLimitError, APIConnectionError, APIStatusError
+
+        texto = briefing_texto or self._BRIEFING_TEXTO
+
+        respuesta_tools = RespuestaNormalizada(
+            stop_reason="tool_use",
+            content=[
+                BloqueToolUse(id="t1", name="obtener_clima_reciente_72h", input={"ubicacion": "La Parva"}),
+                BloqueToolUse(id="t2", name="obtener_contexto_historico", input={"ubicacion": "La Parva"}),
+                BloqueToolUse(id="t3", name="obtener_caracteristicas_zona", input={"ubicacion": "La Parva"}),
+                BloqueToolUse(id="t4", name="obtener_eventos_pasados", input={"ubicacion": "La Parva"}),
             ],
-            "indice_riesgo_cualitativo": "bajo",
-            "tipo_problema_probable": "placa_viento",
-            "confianza": "media",
-            "fuentes_datos": ["clima.condiciones_actuales"],
-        })
+            usage=_Usage(input_tokens=500, output_tokens=100),
+        )
+        respuesta_final = RespuestaNormalizada(
+            stop_reason="end_turn",
+            content=[BloqueTexto(text=texto)],
+            usage=_Usage(input_tokens=1000, output_tokens=400),
+        )
 
-    def test_ejecutar_con_gemini_ok(self):
+        mock_cliente = MagicMock()
+        mock_cliente.errores_recuperables = (RateLimitError, APIConnectionError)
+        mock_cliente.error_servidor = APIStatusError
+        mock_cliente.crear_mensaje.side_effect = [respuesta_tools, respuesta_final]
+        return mock_cliente
+
+    def test_ejecutar_con_databricks_ok(self):
         from agentes.subagentes.subagente_situational_briefing.agente import AgenteSituationalBriefing
 
-        mock_response = MagicMock()
-        mock_response.text = self._briefing_gemini_mock("La Parva")
-
-        with patch("vertexai.init"), \
-             patch("vertexai.generative_models.GenerativeModel") as mock_model_cls, \
-             patch("agentes.datos.consultor_bigquery.ConsultorBigQuery") as mock_bq_cls:
+        _BQ = "agentes.datos.consultor_bigquery.ConsultorBigQuery"
+        with patch("agentes.subagentes.base_subagente.crear_cliente", return_value=self._crear_mock_cliente()), \
+             patch(_BQ) as mock_bq_cls:
 
             mock_bq = mock_bq_cls.return_value
             mock_bq.obtener_condiciones_actuales.return_value = {"disponible": False}
             mock_bq.obtener_tendencia_meteorologica.return_value = {"disponible": False}
             mock_bq.obtener_perfil_topografico.return_value = {"zonas": []}
 
-            mock_model = mock_model_cls.return_value
-            mock_model.generate_content.return_value = mock_response
-
             agente = AgenteSituationalBriefing()
             resultado = agente.ejecutar("La Parva")
 
-        # Verificar interfaz orquestador
         assert "analisis" in resultado
         assert "tools_llamadas" in resultado
         assert "duracion_segundos" in resultado
@@ -375,60 +392,25 @@ class TestAgenteSituationalBriefing:
         assert resultado["nombre_subagente"] == "AgenteSituationalBriefing"
         assert resultado["ubicacion"] == "La Parva"
 
-        # Verificar contenido del analisis
         analisis = resultado["analisis"]
         assert "SITUATIONAL BRIEFING" in analisis
         assert "La Parva" in analisis
         assert "indice_riesgo_historico" in analisis
         assert "tipo_alud_predominante" in analisis
 
-    def test_ejecutar_fallback_cuando_gemini_falla(self):
-        from agentes.subagentes.subagente_situational_briefing.agente import AgenteSituationalBriefing
-
-        with patch("vertexai.init"), \
-             patch("vertexai.generative_models.GenerativeModel") as mock_model_cls, \
-             patch("agentes.datos.consultor_bigquery.ConsultorBigQuery") as mock_bq_cls:
-
-            mock_bq = mock_bq_cls.return_value
-            mock_bq.obtener_condiciones_actuales.return_value = {
-                "disponible": True, "temperatura": -1.0, "velocidad_viento": 10.0,
-                "direccion_viento": 270.0, "precipitacion_acumulada": 5.0,
-                "humedad_relativa": 75.0, "condicion_clima": "nublado",
-            }
-            mock_bq.obtener_tendencia_meteorologica.return_value = {"disponible": False}
-            mock_bq.obtener_perfil_topografico.return_value = {"zonas": []}
-
-            # Gemini falla
-            mock_model_cls.return_value.generate_content.side_effect = Exception("Vertex AI timeout")
-
-            agente = AgenteSituationalBriefing()
-            resultado = agente.ejecutar("Valle Nevado")
-
-        assert resultado["analisis"] is not None
-        assert "fallback" in resultado["analisis"].lower()
-        assert "SITUATIONAL BRIEFING" in resultado["analisis"]
-        # Sigue devolviendo dict compatible con orquestador
-        assert "tools_llamadas" in resultado
-        assert isinstance(resultado["tools_llamadas"], list)
-
     def test_tools_llamadas_registradas(self):
+        """Verifica que las 4 tools quedan registradas en tools_llamadas."""
         from agentes.subagentes.subagente_situational_briefing.agente import AgenteSituationalBriefing
 
-        mock_response = MagicMock()
-        mock_response.text = self._briefing_gemini_mock("Valle Nevado")
-
-        with patch("vertexai.init"), \
-             patch("vertexai.generative_models.GenerativeModel") as mock_model_cls, \
-             patch("agentes.datos.consultor_bigquery.ConsultorBigQuery") as mock_bq_cls:
-
-            mock_bq = mock_bq_cls.return_value
-            mock_bq.obtener_condiciones_actuales.return_value = {"disponible": False}
-            mock_bq.obtener_tendencia_meteorologica.return_value = {"disponible": False}
-            mock_bq.obtener_perfil_topografico.return_value = {"zonas": []}
-            mock_model_cls.return_value.generate_content.return_value = mock_response
+        _BQ = "agentes.datos.consultor_bigquery.ConsultorBigQuery"
+        with patch("agentes.subagentes.base_subagente.crear_cliente", return_value=self._crear_mock_cliente()), \
+             patch(_BQ) as mock_bq_cls:
+            mock_bq_cls.return_value.obtener_condiciones_actuales.return_value = {"disponible": False}
+            mock_bq_cls.return_value.obtener_tendencia_meteorologica.return_value = {"disponible": False}
+            mock_bq_cls.return_value.obtener_perfil_topografico.return_value = {"zonas": []}
 
             agente = AgenteSituationalBriefing()
-            resultado = agente.ejecutar("Valle Nevado")
+            resultado = agente.ejecutar("La Parva")
 
         tools_nombres = [t["tool"] for t in resultado["tools_llamadas"]]
         assert "obtener_clima_reciente_72h" in tools_nombres
@@ -440,26 +422,39 @@ class TestAgenteSituationalBriefing:
         """Verifica que el analisis contiene los campos que S5 espera."""
         from agentes.subagentes.subagente_situational_briefing.agente import AgenteSituationalBriefing
 
-        mock_response = MagicMock()
-        mock_response.text = self._briefing_gemini_mock()
-
-        with patch("vertexai.init"), \
-             patch("vertexai.generative_models.GenerativeModel") as mock_model_cls, \
-             patch("agentes.datos.consultor_bigquery.ConsultorBigQuery") as mock_bq_cls:
-
-            mock_bq = mock_bq_cls.return_value
-            mock_bq.obtener_condiciones_actuales.return_value = {"disponible": False}
-            mock_bq.obtener_tendencia_meteorologica.return_value = {"disponible": False}
-            mock_bq.obtener_perfil_topografico.return_value = {"zonas": []}
-            mock_model_cls.return_value.generate_content.return_value = mock_response
+        _BQ = "agentes.datos.consultor_bigquery.ConsultorBigQuery"
+        with patch("agentes.subagentes.base_subagente.crear_cliente", return_value=self._crear_mock_cliente()), \
+             patch(_BQ) as mock_bq_cls:
+            mock_bq_cls.return_value.obtener_condiciones_actuales.return_value = {"disponible": False}
+            mock_bq_cls.return_value.obtener_tendencia_meteorologica.return_value = {"disponible": False}
+            mock_bq_cls.return_value.obtener_perfil_topografico.return_value = {"zonas": []}
 
             agente = AgenteSituationalBriefing()
             resultado = agente.ejecutar("La Parva")
 
         analisis = resultado["analisis"]
-        # Campos que S5 extrae del texto
         assert "indice_riesgo_historico:" in analisis
         assert "tipo_alud_predominante:" in analisis
         assert "total_relatos_analizados:" in analisis
         assert "confianza_historica:" in analisis
         assert "resumen_nlp:" in analisis
+
+    def test_proveedor_databricks(self):
+        """Verifica que el agente usa Databricks, no Anthropic ni Gemini."""
+        from agentes.subagentes.subagente_situational_briefing.agente import AgenteSituationalBriefing
+        assert AgenteSituationalBriefing.PROVEEDOR == "databricks"
+        assert "qwen" in AgenteSituationalBriefing.MODELO.lower() or "databricks" in AgenteSituationalBriefing.MODELO.lower()
+
+    def test_tools_definidas(self):
+        """Verifica que las 4 tools están correctamente registradas."""
+        from agentes.subagentes.subagente_situational_briefing.agente import AgenteSituationalBriefing
+        with patch("agentes.subagentes.base_subagente.crear_cliente", return_value=MagicMock()):
+            agente = AgenteSituationalBriefing()
+        tools = [t["name"] for t in agente._cargar_tools()]
+        assert "obtener_clima_reciente_72h" in tools
+        assert "obtener_contexto_historico" in tools
+        assert "obtener_caracteristicas_zona" in tools
+        assert "obtener_eventos_pasados" in tools
+        ejecutores = agente._cargar_ejecutores()
+        for nombre in tools:
+            assert nombre in ejecutores, f"Ejecutor faltante para '{nombre}'"
