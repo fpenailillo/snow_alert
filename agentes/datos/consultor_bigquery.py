@@ -838,6 +838,92 @@ class ConsultorBigQuery:
             logger.error(f"Error consultando pendientes detalladas para {ubicacion}: {e}")
             return {"error": str(e)}
 
+    def obtener_atributos_tagee_ae(self, ubicacion: str) -> dict:
+        """
+        Atributos TAGEE y embeddings AlphaEarth desde pendientes_detalladas.
+
+        Columnas añadidas por el script actualizar_glo30_tagee_ae.py:
+          - curvatura_horizontal_promedio, curvatura_vertical_promedio (TAGEE)
+          - zonas_convergencia_runout  (conteo de celdas con curvatura positiva)
+          - northness_promedio, eastness_promedio (TAGEE índices de aspecto)
+          - embedding_centroide_zona   (ARRAY<FLOAT64>, 64 dimensiones AlphaEarth)
+          - similitud_anios_previos    (JSON con drift interanual)
+          - dem_fuente                 (COPERNICUS/DEM/GLO30 vs NASADEM)
+
+        Retorna {"disponible": False} si las columnas no existen todavía
+        (datos aún no generados con el script EE).
+        """
+        logger.info(f"Consultando atributos TAGEE+AE para: {ubicacion}")
+        try:
+            sql = """
+                SELECT
+                    curvatura_horizontal_promedio,
+                    curvatura_vertical_promedio,
+                    zonas_convergencia_runout,
+                    northness_promedio,
+                    eastness_promedio,
+                    embedding_centroide_zona,
+                    similitud_anios_previos,
+                    dem_fuente,
+                    fecha_analisis
+                FROM `{proyecto}.{dataset}.pendientes_detalladas`
+                WHERE nombre_ubicacion = @ubicacion
+                  AND dem_fuente = 'COPERNICUS/DEM/GLO30'
+                ORDER BY fecha_analisis DESC
+                LIMIT 1
+            """.format(proyecto=self.GCP_PROJECT, dataset=self.DATASET)
+
+            parametros = [
+                bigquery.ScalarQueryParameter("ubicacion", "STRING", ubicacion)
+            ]
+
+            filas = self._ejecutar_query(sql, parametros)
+
+            if not filas:
+                return {
+                    "disponible": False,
+                    "razon": (
+                        "Sin datos GLO-30/TAGEE/AlphaEarth. "
+                        "Ejecutar: python agentes/datos/backfill/actualizar_glo30_tagee_ae.py"
+                    )
+                }
+
+            resultado = filas[0]
+            resultado["disponible"] = True
+
+            # Deserializar embedding (almacenado como JSON string o lista)
+            emb = resultado.get("embedding_centroide_zona")
+            if emb and isinstance(emb, str):
+                import json
+                try:
+                    resultado["embedding_centroide_zona"] = json.loads(emb)
+                except (ValueError, TypeError):
+                    resultado["embedding_centroide_zona"] = None
+
+            # Deserializar similitud interanual
+            sim = resultado.get("similitud_anios_previos")
+            if sim and isinstance(sim, str):
+                import json
+                try:
+                    resultado["similitud_anios_previos"] = json.loads(sim)
+                except (ValueError, TypeError):
+                    resultado["similitud_anios_previos"] = {}
+
+            if resultado.get("fecha_analisis") and hasattr(resultado["fecha_analisis"], "isoformat"):
+                resultado["fecha_analisis"] = resultado["fecha_analisis"].isoformat()
+
+            return resultado
+
+        except Exception as e:
+            # Columnas nuevas aún no en schema → retorno gracioso
+            if "Unrecognized name" in str(e) or "Not found" in str(e):
+                return {
+                    "disponible": False,
+                    "razon": "Columnas TAGEE/AE no existen aún en pendientes_detalladas"
+                }
+            logger.error(f"Error consultando TAGEE/AE para {ubicacion}: {e}")
+            return {"disponible": False, "razon": str(e)}
+
     def listar_ubicaciones_con_datos(self) -> list:
         """
         Ubicaciones con condiciones_actuales en las últimas 24h.

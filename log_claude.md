@@ -48,6 +48,55 @@
 
 ---
 
+## Sesión 2026-04-01 (continuación) — REQ-03 S1 AlphaEarth+GLO-30+TAGEE + REQ-04 S2 RSFM paralelo
+
+### Tarea #3: REQ-03 — S1 AlphaEarth + Copernicus GLO-30 + TAGEE ✅
+
+**Estado:** Implementado y testeado. 23 tests nuevos — todos pasando.
+
+- Nuevas tools en `agentes/subagentes/subagente_topografico/tools/`:
+  - `tool_tagee_terreno.py`: consulta BQ para atributos TAGEE (curvatura H/V, northness/eastness, zonas de convergencia runout). Fallback gracioso cuando BQ no tiene datos aún.
+  - `tool_alphaearth.py`: consulta BQ para embeddings 64D de AlphaEarth por año (2020-2024), calcula drift interanual vía similitud coseno, detecta cambios de terreno. Señal ESTÁTICA anual (NO operacional diaria).
+- `tool_calcular_pinn.py` enriquecido:
+  - 3 parámetros opcionales: `curvatura_horizontal`, `curvatura_vertical`, `drift_embedding_ae`
+  - Nuevo helper `_aplicar_features_glo30()`: ajusta FS basado en curvatura (-0.05 si H>0.3, -0.02 si H>0.1, -0.03 si curvatura vertical convexa). Drift AE genera alerta sin modificar FS (es señal de incertidumbre, no física).
+  - Retro-compatible: parámetros opcionales con default None
+- `agente.py` S1 actualizado: 6 tools (antes 4), `MAX_ITERACIONES=10`
+- Backfill `agentes/datos/backfill/actualizar_glo30_tagee_ae.py`: script Earth Engine para poblar columnas nuevas en `pendientes_detalladas` con datos GLO-30+TAGEE+AlphaEarth
+- `ConsultorBigQuery.obtener_atributos_tagee_ae()`: maneja columnas inexistentes con fallback gracioso
+- Tests: `agentes/tests/test_s1_glo30.py` — 23 tests (TageeTerreno, AlphaEarth, PINN+GLO30, SubagenteS1V2, ConsultorBQ)
+
+### Tarea #4: REQ-04 — S2 vía Earth AI paralela al ViT ✅
+
+**Estado:** Implementado y testeado. 15 tests nuevos — todos pasando.
+
+- Nuevo schema unificado `agentes/subagentes/subagente_satelital/schemas.py`:
+  - `DeteccionSatelital`: dataclass con `via: Literal["vit_actual", "gemini_multispectral", "rsfm"]`
+  - `to_dict()` y `desde_resultado_vit()` classmethod
+- Nueva tool `tools/tool_gemini_multispectral.py`:
+  - Flag `S2_VIA=vit_actual` (default): retorna `{"via_activa": False}` sin consumir recursos
+  - Con `S2_VIA=ambas_*`: consulta BQ satellite state → prompt Qwen3-80B/Databricks → parsea análisis multi-spectral
+  - Limitación documentada: 43% errores Gemini en tareas diagramáticas → solo razonamiento cualitativo
+- Nuevo `comparador/ab_runner.py`:
+  - `ComparadorS2`: lee `S2_VIA` en `__init__` (no nivel módulo — importante para testing)
+  - `_calcular_metricas()`: delta_score_anomalia, acuerdo_anomalia, ratio_latencia, delta_confianza
+  - `_persistir_comparacion_async()`: escribe en `clima.s2_comparaciones`, nunca bloquea
+- `agente.py` S2 actualizado: 5 tools (antes 4), `MAX_ITERACIONES=10`
+- Tests: `agentes/tests/test_s2_earth_ai.py` — 15 tests (Schema, GeminiMultispectral, ComparadorS2, SubagenteSatelitalV2)
+
+### Estado tests (2026-04-01 cierre)
+- Suite completa: **237 passed, 8 skipped, 0 failed**
+- Nuevos tests REQ-03: 23 | Nuevos tests REQ-04: 15 | Total nuevos esta sesión: +74
+- Sin regresiones en los 162 tests anteriores
+
+### Pendientes REQ-03 (requieren Earth Engine manual)
+- Deadline quota EE: **27 abril 2026** — ejecutar `actualizar_glo30_tagee_ae.py` cuando EE disponible
+
+### Pendientes REQ-04 (disponibles GA)
+- Activar `S2_VIA=ambas_consolidar_vit` para recolectar datos comparativos temporada 2026
+
+---
+
 ## Sesión 2026-03-27 (continuación 9) — Tarea #1 completada: backfill histórico 27 boletines
 
 ### Tarea #1: Generar boletines históricos restantes (27 boletines) — COMPLETADA ✅

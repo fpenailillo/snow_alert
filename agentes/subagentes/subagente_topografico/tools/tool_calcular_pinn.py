@@ -20,6 +20,8 @@ TOOL_CALCULAR_PINN = {
         "(gradiente_termico, densidad_kg_m3, indice_metamorfismo, "
         "energia_fusion) para calcular el estado de estabilidad mediante "
         "ecuaciones de calor y criterio de cedencia de Mohr-Coulomb. "
+        "Cuando estén disponibles, acepta features TAGEE (curvatura horizontal/"
+        "vertical) y AlphaEarth (drift_embedding) para enriquecer el análisis. "
         "No requiere GPU: implementa las ecuaciones físicas directamente."
     ),
     "input_schema": {
@@ -48,6 +50,21 @@ TOOL_CALCULAR_PINN = {
             "temperatura_superficie_C": {
                 "type": "number",
                 "description": "Temperatura superficial actual en °C (puede ser None)"
+            },
+            "curvatura_horizontal": {
+                "type": "number",
+                "description": "(Opcional TAGEE) Curvatura horizontal promedio de GLO-30. "
+                               "Positiva=convergencia flujo, negativa=divergencia."
+            },
+            "curvatura_vertical": {
+                "type": "number",
+                "description": "(Opcional TAGEE) Curvatura vertical promedio de GLO-30. "
+                               "Negativa=convexa=zona inicio, positiva=cóncava=zona depósito."
+            },
+            "drift_embedding_ae": {
+                "type": "number",
+                "description": "(Opcional AlphaEarth) Drift máximo interanual del embedding [0-1]. "
+                               "Valores >0.1 indican cambios significativos en start zones."
             }
         },
         "required": [
@@ -67,7 +84,10 @@ def ejecutar_calcular_pinn(
     indice_metamorfismo: float,
     energia_fusion_J_kg: float,
     pendiente_grados: float,
-    temperatura_superficie_C: float = None
+    temperatura_superficie_C: float = None,
+    curvatura_horizontal: float = None,
+    curvatura_vertical: float = None,
+    drift_embedding_ae: float = None,
 ) -> dict:
     """
     Ejecuta el modelo PINN de manto nival.
@@ -78,6 +98,11 @@ def ejecutar_calcular_pinn(
     3. Criterio de cedencia de Mohr-Coulomb para falla por cizalle
     4. Balance energético de fusión
 
+    Cuando están disponibles, los features TAGEE y AlphaEarth enriquecen:
+    - curvatura_horizontal: ajusta el factor de seguridad por convergencia de flujo
+    - curvatura_vertical: penaliza o bonifica según geometría zona inicio/depósito
+    - drift_embedding_ae: alerta sobre cambios en start zones históricas
+
     Args:
         gradiente_termico_C_100m: gradiente térmico vertical
         densidad_kg_m3: densidad nival
@@ -85,6 +110,9 @@ def ejecutar_calcular_pinn(
         energia_fusion_J_kg: energía de fusión potencial
         pendiente_grados: ángulo de pendiente para Mohr-Coulomb
         temperatura_superficie_C: temperatura superficial actual (opcional)
+        curvatura_horizontal: (TAGEE/GLO-30) curvatura horizontal promedio
+        curvatura_vertical: (TAGEE/GLO-30) curvatura vertical promedio
+        drift_embedding_ae: (AlphaEarth) drift máximo interanual del embedding
 
     Returns:
         dict con estado del manto, factor de seguridad y riesgo de falla
@@ -159,19 +187,30 @@ def ejecutar_calcular_pinn(
         factor_temp=factor_temp
     )
 
-    # ─── 6. Propagación de incertidumbre (Taylor 1er orden) ──────────────────
+    # ─── 6. Ajuste por features TAGEE/AlphaEarth (cuando disponibles) ─────────
+    features_glo30 = _aplicar_features_glo30(
+        factor_seguridad=factor_seguridad,
+        curvatura_horizontal=curvatura_horizontal,
+        curvatura_vertical=curvatura_vertical,
+        drift_embedding_ae=drift_embedding_ae,
+    )
+    factor_seguridad_ajustado = features_glo30["fs_ajustado"]
+
+    # ─── 7. Propagación de incertidumbre (Taylor 1er orden) ──────────────────
     uq = _propagar_incertidumbre_pinn(
         densidad_kg_m3=densidad_kg_m3,
         pendiente_grados=pendiente_grados,
         indice_metamorfismo=indice_metamorfismo,
-        fs_base=factor_seguridad,
+        fs_base=factor_seguridad_ajustado,
     )
 
     return {
-        "factor_seguridad_mohr_coulomb": factor_seguridad,
+        "factor_seguridad_mohr_coulomb": factor_seguridad_ajustado,
+        "factor_seguridad_base": factor_seguridad,
         "estado_manto": estado_manto["estado"],
         "riesgo_falla": estado_manto["riesgo_falla"],
         "incertidumbre_pinn": uq,
+        "features_glo30_tagee_ae": features_glo30,
         "metricas_fisicas": {
             "difusividad_termica_m2_s": round(difusividad_termica, 10),
             "conductividad_termica_W_mK": round(conductividad_termica, 4),
@@ -184,6 +223,66 @@ def ejecutar_calcular_pinn(
         },
         "interpretacion": estado_manto["interpretacion"],
         "alertas_pinn": estado_manto["alertas"]
+    }
+
+
+def _aplicar_features_glo30(
+    factor_seguridad: float,
+    curvatura_horizontal: float | None,
+    curvatura_vertical: float | None,
+    drift_embedding_ae: float | None,
+) -> dict:
+    """
+    Ajusta el factor de seguridad PINN con features GLO-30/TAGEE/AlphaEarth.
+
+    Efectos físicos:
+    - curvatura_horizontal > 0 (convergencia): concentra flujo de nieve →
+      aumenta tensión de cizalle efectiva → reduce FS
+    - curvatura_vertical < 0 (convexa): zona de inicio geométricamente
+      favorecida → reduce FS levemente
+    - drift_embedding_ae alto: posibles cambios en start zones →
+      agrega alerta sin modificar FS (incertidumbre, no efecto físico directo)
+    """
+    ajuste_total = 0.0
+    notas = []
+    usando_glo30 = False
+
+    if curvatura_horizontal is not None:
+        usando_glo30 = True
+        if curvatura_horizontal > 0.3:
+            # Convergencia fuerte → FS reducido ~5%
+            ajuste_total -= 0.05
+            notas.append(f"TAGEE curv_h={curvatura_horizontal:.2f}: convergencia alta, FS reducido")
+        elif curvatura_horizontal > 0.1:
+            ajuste_total -= 0.02
+            notas.append(f"TAGEE curv_h={curvatura_horizontal:.2f}: convergencia moderada")
+
+    if curvatura_vertical is not None:
+        usando_glo30 = True
+        if curvatura_vertical < -0.2:
+            # Convexa fuerte → zona inicio preferida → FS reducido ~3%
+            ajuste_total -= 0.03
+            notas.append(f"TAGEE curv_v={curvatura_vertical:.2f}: geometría convexa, zona inicio")
+
+    alertas_ae = []
+    if drift_embedding_ae is not None and drift_embedding_ae > 0.05:
+        alertas_ae.append(
+            f"AlphaEarth drift={drift_embedding_ae:.3f}: posibles cambios en start zones históricas"
+        )
+
+    fs_ajustado = round(max(0.1, factor_seguridad + ajuste_total), 3)
+
+    return {
+        "fs_ajustado": fs_ajustado,
+        "ajuste_aplicado": round(ajuste_total, 4),
+        "usando_glo30_tagee": usando_glo30,
+        "notas_ajuste": notas,
+        "alertas_alphaearth": alertas_ae,
+        "features_activos": {
+            "curvatura_horizontal": curvatura_horizontal,
+            "curvatura_vertical": curvatura_vertical,
+            "drift_embedding_ae": drift_embedding_ae,
+        },
     }
 
 
