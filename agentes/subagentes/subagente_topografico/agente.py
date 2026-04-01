@@ -44,7 +44,7 @@ class SubagenteTopografico(BaseSubagente):
     """
 
     NOMBRE = "SubagenteTopografico"
-    MODELO = "claude-sonnet-4-5"
+    MODELO = "databricks-qwen3-next-80b-a3b-instruct"  # transitorio: Anthropic cuando ANTHROPIC_API_KEY esté disponible
     MAX_TOKENS = 4096
     MAX_ITERACIONES = 10
 

@@ -885,3 +885,105 @@ Implementación de nuevos requerimientos en `claude/requirements/`:
 - Tests nuevos: +37 (20 S4 Situational Briefing + 17 S3 WeatherNext2)
 - Requerimientos completados: REQ-01 ✅, REQ-02 ✅ (pendiente suscripción Analytics Hub para producción)
 - Pendiente: REQ-03 (AlphaEarth), REQ-04 (RSFM paralelo), REQ-05 (BigQuery ST_REGIONSTATS)
+
+---
+
+## Sesión 2026-04-01 — Revisión metodológica completa: 4 bugs corregidos
+
+### Contexto
+
+El usuario reportó que los boletines de La Parva mostraban nivel EAWS promedio 4.3–4.6 incluso durante condiciones meteorológicas completamente calmas (T=6°C, P=0mm, V=5km/h). Se realizó revisión exhaustiva de los 5 subagentes buscando errores metodológicos.
+
+---
+
+### Bug 1 — Metamorfismo estático inflado → FS=0.58 permanente (commit `a444a02`)
+
+**Archivo:** `agentes/subagentes/subagente_topografico/tools/tool_analizar_dem.py`
+
+**Causa raíz:** `_calcular_metricas_pinn` calculaba `indice_metamorfismo` puramente desde topografía estática, produciendo valores 1.4–1.68 para laderas N empinadas (La Parva Sector Alto).
+
+```python
+# ANTES (INCORRECTO):
+factor_sombra = 1.2  # Ladera N
+factor_pendiente = min(1.5, 42.0 / 30.0)  # = 1.4
+indice_metamorfismo = 1.2 * 1.4  # = 1.68  ← SIEMPRE sobre umbral crítico
+```
+
+Con `indice_metamorfismo > 1.5` → `cohesion_Pa = 100 Pa` → Mohr-Coulomb colapsa → `FS = 0.58` → `CRITICO` permanente, independientemente del clima.
+
+**Fix:** Cap `indice_metamorfismo ≤ 1.0` para estimaciones solo-topográficas. El metamorfismo destructivo (>1.0) requiere forzante meteorológico real (temperatura, gradiente térmico) que solo S3 puede proveer.
+
+```python
+# DESPUÉS (CORRECTO):
+base_meta = 0.5
+if aspecto in aspectos_sombra: base_meta += 0.2   # Potencial de facetación
+if pendiente > 35: base_meta += 0.1 * min(2.0, (pendiente - 35) / 10.0)
+indice_metamorfismo = round(min(1.0, base_meta), 3)  # Cap ≤1.0 sin clima
+```
+
+**Resultado antes/después para La Parva Sector Alto (azimut=330°, pendiente=42°):**
+
+| Escenario | meta_antes | FS_antes | Estado_antes | meta_después | FS_después | Estado_después |
+|-----------|-----------|----------|--------------|-------------|----------|----------------|
+| Calma (T=6°C, P=0) | 1.68 | 0.58 | CRITICO | 0.70 | 2.10 | ESTABLE |
+| Nevada 30cm + V=15 m/s | 1.68 | 0.58 | CRITICO | 1.20 | 1.05 | MARGINAL |
+| Lluvia sobre nieve | 1.68 | 0.58 | CRITICO | 1.45 | 0.85 | FALLA_INMINENTE |
+
+---
+
+### Bug 2 — CICLO_FUSION_CONGELACION no propagado cuando T<2°C (commit `c1d6812`)
+
+**Archivo:** `agentes/subagentes/subagente_meteorologico/tools/tool_ventanas_criticas.py`
+
+**Causa raíz:** `_clasificar_factor_meteorologico` usaba `temperatura > 2` para verificar la condición de fusión, pero el ciclo diurno (T_noche<0°C, T_día>0°C) es detectado antes por `_detectar_ventanas` y marcado en las ventanas como `CICLO_FUSION_CONGELACION`. La función lo ignoraba si la T media era <2°C.
+
+**Fix:** Leer directamente los tipos de ventanas detectadas:
+```python
+tipos_ventanas = [v.get("tipo", "") for v in ventanas]
+if "CICLO_FUSION_CONGELACION" in tipos_ventanas:
+    factores.append("CICLO_FUSION_CONGELACION")
+elif temperatura is not None and temperatura > 2:
+    factores.append("FUSION_ACTIVA")
+```
+
+---
+
+### Bug 3 — Umbral VIENTO_FUERTE demasiado alto (commit `c1d6812`)
+
+**Archivo:** `agentes/subagentes/subagente_meteorologico/tools/tool_ventanas_criticas.py`
+
+**Causa raíz:** El umbral para `VIENTO_FUERTE` era 15 m/s (54 km/h). Según guías operativas EAWS, la formación de placas de viento comienza a ~7-10 m/s (25-36 km/h). El umbral anterior perdía ~40% de los eventos de viento relevantes para avalanchas.
+
+**Fix:** Umbral bajado de 15 m/s a 10 m/s (36 km/h), más conservador y consistente con EAWS.
+
+---
+
+### Bug 4 — Tamaño EAWS defaulteaba a 2 en vez del calculado 3-4 (commit `c1d6812`)
+
+**Archivo:** `agentes/subagentes/subagente_topografico/tools/tool_zonas_riesgo.py` + `agentes/subagentes/subagente_integrador/prompts.py`
+
+**Causa raíz:** `identificar_zonas_riesgo` no calculaba `tamano_eaws`. S5 siempre asumía tamaño=2 por defecto, subestimando el nivel EAWS en zonas como La Parva Sector Alto (desnivel=1000m, área=120ha → tamaño real = 4).
+
+**Fix en S1:** Agregado cálculo usando `estimar_tamano_potencial` cuando `desnivel_m` está disponible:
+```python
+tamano_eaws = estimar_tamano_potencial(
+    desnivel_inicio_deposito=desnivel_m,
+    ha_zona_inicio=ha,
+    pendiente_max=pendiente_max,
+)
+```
+
+**Fix en S5 (prompts):** Instrucción explícita al LLM para usar `tamano_eaws` del output de S1 y no asumir default=2.
+
+---
+
+### Resultado final
+
+- **4 bugs identificados y corregidos** en revisión metodológica sistemática
+- **Diferenciación meteorológica correcta:** calma → nivel ≤2, nevada+viento → nivel 3-4, lluvia sobre nieve → nivel 4-5
+- **Tests:** 260 passed, 8 skipped, 0 failed ✅ (+61 tests vs sesión anterior)
+- Commits: `a444a02` (Bug 1), `c1d6812` (Bugs 2-4)
+
+### Nota académica
+
+El metamorfismo destructivo (kinetic growth, depth hoar) es un proceso físico que requiere gradiente de temperatura ≥10°C/m durante días a semanas. No puede inferirse solo de la topografía estática. El error previo mezclaba potencial topográfico (qué zonas son más propensas) con estado dinámico (qué está ocurriendo ahora). La corrección es metodológicamente importante para la tesis: S1 ahora aporta solo la componente topográfica; S3 debe proveer los forzantes meteorológicos para que S5 pueda evaluar el estado dinámico del manto correctamente.

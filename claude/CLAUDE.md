@@ -122,10 +122,16 @@ bq query --use_legacy_sql=false \
 
 | ID | Métrica | Umbral | Estado |
 |----|---------|--------|--------|
-| H1 | F1-macro EAWS | ≥75% | Pendiente ≥50 boletines |
+| H1 | F1-macro EAWS | ≥75% | ⏳ Validación Swiss SLF en curso (notebook 07) |
 | H2 | Delta NLP | >5pp | ✅ +7.9pp (sintético, notebook 06) |
-| H3 | Transfer SLF | QWK Techel 2022 | Pendiente datos |
-| H4 | vs Snowlab | Kappa≥0.60 | Pendiente datos |
+| H3 | Transfer SLF | QWK Techel 2022 | ⏳ Validación Swiss SLF en curso (notebook 07) |
+| H4 | vs Snowlab | Kappa≥0.60 | ❌ Bloqueada (snowlab_boletines = 0 rows en BQ) |
+
+**Dataset validación suiza (H1/H3):**
+- Ground truth: `climas-chileno.validacion_avalanchas.slf_danger_levels_qc` (45k filas, 2001-2024)
+- Mapeo: Interlaken→canton Bern(4xxx), Zermatt→Valais(2xxx), St Moritz→Graubünden(6xxx)
+- Boletines: 10 fechas invierno 2023-2024 × 3 estaciones = 30 pares
+- Script validación: `notebooks_validacion/07_validacion_slf_suiza.py`
 
 ## Marco Teórico — Auditoría (2026-03-17)
 
@@ -151,11 +157,24 @@ Brechas B1–B11: todas cerradas. Pendiente solo: ≥50 boletines reales para H1
 ✅ Fase -1  Reorganizar repositorio
 ✅ Fase  0  Diagnosticar datos nulos
 ✅ Fase  1  Cargar relatos (3,131 rutas)
-✅ Fase  2  5 subagentes construidos
+✅ Fase  2  5 subagentes construidos (REQ-01 a REQ-05 completados)
 ✅ Fase  3  Archivos despliegue Cloud Run
 ✅ Fase  4  Schema boletines 33 campos (confirmado BQ 2026-03-18)
-✅ Fase  5  Tests actualizados (135+ passed)
-⬜ Fase  6  Generar ≥50 boletines para métricas H1/H4
+✅ Fase  5  Tests actualizados (260 passed, 8 skipped — 2026-04-01)
+✅ Fase  6  212 boletines en BQ (incl. 30 Swiss para H1/H3)
+⏳ Fase  7  Validación H1/H3 con datos SLF (notebook 07)
 ```
 
 **Regla de oro: no avanzar de fase sin que los tests pasen.**
+
+## Requerimientos implementados
+
+| # | Requerimiento | Estado | Commit |
+|---|---|---|---|
+| REQ-01 | S4 Situational Briefing (Qwen3-80B/Databricks) | ✅ | 9e4ae33 |
+| REQ-02 | S3 WeatherNext 2 aditivo (pendiente suscripción) | ✅ código | fe79532 |
+| REQ-03 | S1 AlphaEarth + GLO-30 + TAGEE | ✅ | fcc079a |
+| REQ-04 | S2 vía Earth AI paralela al ViT | ✅ | fcc079a |
+| REQ-05 | BigQuery ST_REGIONSTATS + zonas_objetivo | ✅ | 218faa1 |
+| — | Fix metodológico: metamorfismo estático | ✅ | a444a02 |
+| — | Fix: viento(15→10 m/s), ciclo fusión, tamaño EAWS | ✅ | c1d6812 |

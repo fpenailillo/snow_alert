@@ -74,9 +74,9 @@ REGISTRO_PROMPTS = {
     "integrador": {
         "modulo": "agentes.subagentes.subagente_integrador.prompts",
         "variable": "SYSTEM_PROMPT_INTEGRADOR",
-        "version": "3.1.0",
-        "descripcion": "Integración S1-S4 + extracción datos climáticos cuantitativos + proyecciones por tendencia",
-        "hash_sha256": "225e6a9d4ecf376a",
+        "version": "3.2.0",
+        "descripcion": "Integración S1-S4 + tamano_eaws desde S1 (no asumir default 2)",
+        "hash_sha256": "224d677d35d4469f",
     },
 }
 
