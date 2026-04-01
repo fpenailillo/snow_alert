@@ -1,11 +1,12 @@
 """
-Subagente Meteorológico.
+Subagente Meteorológico (v2).
 
 Analiza condiciones climáticas y detecta ventanas de riesgo usando:
 - Condiciones actuales desde BigQuery condiciones_actuales
 - Tendencia de 72h (historial 24h + pronóstico horario si disponible)
 - Pronóstico de días desde BigQuery pronostico_dias
 - Detección de ventanas críticas: nevada+viento, fusión, lluvia sobre nieve
+- Pronóstico ensemble multi-fuente (WeatherNext 2 cuando USE_WEATHERNEXT2=true)
 """
 
 from agentes.subagentes.base_subagente import BaseSubagente
@@ -23,6 +24,9 @@ from agentes.subagentes.subagente_meteorologico.tools.tool_pronostico_dias impor
 from agentes.subagentes.subagente_meteorologico.tools.tool_ventanas_criticas import (
     TOOL_VENTANAS_CRITICAS, ejecutar_detectar_ventanas_criticas
 )
+from agentes.subagentes.subagente_meteorologico.tools.tool_pronostico_ensemble import (
+    TOOL_PRONOSTICO_ENSEMBLE, ejecutar_obtener_pronostico_ensemble
+)
 
 
 class SubagenteMeteorologico(BaseSubagente):
@@ -34,6 +38,7 @@ class SubagenteMeteorologico(BaseSubagente):
     2. Analizar tendencia de 72h y ciclos temperatura
     3. Revisar pronóstico de días próximos
     4. Detectar ventanas críticas para avalanchas
+    5. (Opcional) Pronóstico ensemble multi-fuente con percentiles WN2
     """
 
     NOMBRE = "SubagenteMeteorologico"
@@ -47,6 +52,7 @@ class SubagenteMeteorologico(BaseSubagente):
             TOOL_TENDENCIA_72H,
             TOOL_PRONOSTICO_DIAS,
             TOOL_VENTANAS_CRITICAS,
+            TOOL_PRONOSTICO_ENSEMBLE,  # Nueva — multi-fuente con WN2
         ]
 
     def _cargar_ejecutores(self) -> dict:
@@ -55,6 +61,7 @@ class SubagenteMeteorologico(BaseSubagente):
             "analizar_tendencia_72h": ejecutar_analizar_tendencia_72h,
             "obtener_pronostico_dias": ejecutar_obtener_pronostico_dias,
             "detectar_ventanas_criticas": ejecutar_detectar_ventanas_criticas,
+            "obtener_pronostico_ensemble": ejecutar_obtener_pronostico_ensemble,
         }
 
     def _obtener_system_prompt(self) -> str:

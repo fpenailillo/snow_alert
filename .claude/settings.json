@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(bq query *)",
+      "Bash(gcloud logging read *)",
+      "Bash(gsutil ls *)",
+      "Bash(bq show *)",
+      "Bash(gcloud run jobs describe *)",
+      "Bash(gcloud functions logs read *)",
+      "Bash(gcloud storage ls *)",
+      "Bash(gcloud builds list *)",
+      "Bash(gcloud scheduler jobs list *)",
+      "Bash(gcloud functions describe *)",
+      "Bash(gcloud builds describe *)",
+      "Bash(gcloud functions list *)",
+      "Bash(gcloud scheduler jobs describe *)",
+      "Bash(gcloud run services describe *)",
+      "Bash(gcloud run services list *)",
+      "Bash(bq ls *)",
+      "Bash(gcloud run jobs executions list *)",
+      "Bash(gcloud projects get-iam-policy *)",
+      "Bash(gcloud auth list *)",
+      "Bash(gsutil cat *)"
+    ]
+  }
+}

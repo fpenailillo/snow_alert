@@ -1,5 +1,63 @@
 # Log de Progreso — snow_alert
 
+## Sesión 2026-04-01 — REQ-01 S4 Situational Briefing + REQ-02 S3 WeatherNext 2
+
+### Tarea #1: REQ-01 — Nuevo S4 Situational Briefing (AgenteSituationalBriefing) ✅
+
+**Estado:** Implementado y testeado. 19 tests nuevos — todos pasando.
+
+- Nuevo módulo `agentes/subagentes/subagente_situational_briefing/` con:
+  - `agente.py`: `AgenteSituationalBriefing` — ejecuta 4 tools + Gemini 2.5 Flash + fallback textual
+  - `schemas.py`: schemas Pydantic `SituationalBriefing`, `CondicionesRecientes`, `ContextoHistorico`, `CaracteristicasZona`
+  - `tools/tool_clima_reciente.py`: condiciones 72h desde BQ (condiciones_actuales + tendencia)
+  - `tools/tool_contexto_historico.py`: época estacional + desviación vs promedio histórico
+  - `tools/tool_caracteristicas_zona.py`: constantes topográficas + enriquecimiento desde pendientes_detalladas
+  - `tools/tool_eventos_pasados.py`: eventos históricos documentados de avalanchas
+  - `prompts/system_prompt.md`: identidad, alcance, restricciones anti-alucinación
+- Integración con S5: `prompts.py` del integrador actualizado para consumir `factores_atencion_eaws`, `narrativa_integrada` y campos de compatibilidad
+- Compatibilidad mantenida: output incluye `indice_riesgo_historico`, `tipo_alud_predominante`, `total_relatos_analizados`, `confianza_historica`, `resumen_nlp`
+- Tests: `agentes/tests/test_situational_briefing.py` — 19 tests (schemas, 4 tools, agente completo, fallback, compatibilidad S5)
+
+### Tarea #2: REQ-02 — WeatherNext 2 aditivo en S3 ✅
+
+**Estado:** Implementado y testeado. 17 tests nuevos — todos pasando.
+
+- Nuevo módulo `agentes/subagentes/subagente_meteorologico/fuentes/` con patrón Strategy:
+  - `base.py`: interfaz abstracta `FuenteMeteorologica` + dataclass `PronosticoMeteorologico`
+  - `fuente_open_meteo.py`: fuente primaria (comportamiento existente, sin cambios)
+  - `fuente_era5_land.py`: fuente secundaria reanálisis (comportamiento existente, sin cambios)
+  - `fuente_weathernext2.py`: nueva fuente — 64 miembros ensemble vía BQ Analytics Hub
+    - Flag `USE_WEATHERNEXT2=false` (default): siempre desactivado
+    - Con flag=true: query BQ, calcula P10/P50/P90, detecta divergencia vs OM
+    - Caveats Chile documentados: resolución 0.25°, sin snow depth/SWE, sesgos orográficos
+  - `consolidador.py`: `ConsolidadorMeteorologico` con estrategias y fallback automático
+- Nueva tool `tools/tool_pronostico_ensemble.py`: `obtener_pronostico_ensemble` — expone consolidador a S3
+- `agente.py` S3 actualizado: registra la nueva tool manteniendo las 4 originales
+- Fix crítico: `ConsultorBigQuery` movido a import nivel-módulo en fuente_open_meteo.py y fuente_era5_land.py (permite mocking correcto en tests)
+- Tests: `agentes/tests/test_weathernext2.py` — 17 tests (schema, fuentes, consolidador, tool, regresión S3)
+
+### Estado tests (2026-04-01)
+- Suite completa: **198 passed, 8 skipped, 0 failed**
+- Nuevos tests REQ-01: 19 | Nuevos tests REQ-02: 17 | Total nuevos: +36
+- Sin regresiones en los 162 tests anteriores
+
+### Pendientes (requieren acceso GCP manual)
+- REQ-02 Fase A.1-A.4: suscripción a Analytics Hub `weathernext_2` en `climas-chileno`
+- REQ-01 Fase C.4: activar Gemini 2.5 Flash en Vertex AI (credenciales producción)
+- REQ-01 Fase F.1-F.2: desplegar Cloud Run Job actualizado
+
+---
+
+## Sesión 2026-03-27 (continuación 9) — Tarea #1 completada: backfill histórico 27 boletines
+
+### Tarea #1: Generar boletines históricos restantes (27 boletines) — COMPLETADA ✅
+
+- **Estado:** completed
+- **Resultado:** 27/27 boletines generados, 0 errores
+- Cubre periodos 2024-09-01/15 + inviernos 2025 (jun-sep) × 3 ubicaciones chilenas
+
+---
+
 ## Sesión 2026-03-27 (continuación 8) — Auditoría meteo+integrador + fix reintentos API + backfill histórico
 
 ### Auditoría SubagenteMeteorológico y SubagenteIntegrador ✅ (sin bugs críticos)

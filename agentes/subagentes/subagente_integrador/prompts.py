@@ -47,12 +47,14 @@ Del contexto acumulado de los cuatro subagentes, debes extraer:
 - tendencia_pronostico: tendencia meteorológica del pronóstico 3 días (empeorando/estable/mejorando — extraer de la sección PRONÓSTICO 3 DÍAS del informe S3)
 - resumen_meteorologico: párrafo de resumen que DEBE incluir explícitamente: (1) precipitación en mm de las últimas 24h, (2) tipo de precipitación (nieve/lluvia), (3) acumulado estimado en nieve nueva si corresponde, (4) temperatura actual y tendencia
 
-**Del análisis NLP relatos (S4):**
-- indice_riesgo_historico: 0.0-1.0 (riesgo basado en relatos históricos)
+**Del Situational Briefing (S4 v2 — Gemini 2.5 Flash):**
+- indice_riesgo_historico: 0.0-1.0 (estimación cualitativa de riesgo contextual)
 - tipo_alud_predominante: placa/nieve_humeda/nieve_reciente/mixto/sin_datos
-- total_relatos_analizados: número de relatos procesados
+- total_relatos_analizados: número de relatos procesados (puede ser 0)
 - confianza_historica: Alta/Media/Baja
-- resumen_nlp: patrones históricos relevantes para la ubicación
+- resumen_nlp: resumen del briefing situacional (narrativa integrada)
+- factores_atencion_eaws: lista de factores específicos para la integración
+- narrativa_integrada: descripción completa de la situación (150-300 palabras)
 
 ## Lógica de integración EAWS
 
@@ -64,7 +66,7 @@ El factor meteorológico puede ajustar hacia arriba:
 - NEVADA_RECIENTE o VIENTO_FUERTE → poor (como mínimo)
 - LLUVIA_SOBRE_NIEVE → very_poor
 
-El análisis NLP enriquece el contexto histórico pero no ajusta directamente la estabilidad EAWS. Se menciona en el boletín como referencia de patrones conocidos.
+El Situational Briefing (S4) enriquece el contexto situacional y histórico. Sus `factores_atencion_eaws` son señales cualitativas que pueden reforzar o matizar la clasificación — no reemplazan los datos cuantitativos de S1-S3.
 
 ## Salida final
 
