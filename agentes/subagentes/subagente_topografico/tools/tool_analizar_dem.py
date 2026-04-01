@@ -222,13 +222,19 @@ def _calcular_metricas_pinn(
         max(150.0, densidad_base - 50.0 * factor_elevacion), 1
     )
 
-    # Índice de metamorfismo: función de pendiente y aspecto
-    # Aspectos de sombra (N, NE, NW) → metamorfismo lento = mayor índice
+    # Índice de metamorfismo: potencial topográfico de metamorfismo (0.3–1.0).
+    # Representa la tendencia estructural de la zona, NO el estado actual del
+    # manto (que depende de precipitación/temperatura reciente y cambia con S3).
+    # Rango deliberadamente acotado a ≤1.0 para condiciones sin forzante
+    # meteorológico reciente — evita que la topografía sola clasifique la zona
+    # como CRITICO/INESTABLE independientemente de las condiciones del día.
     aspectos_sombra = {"N", "NE", "NW", "NO"}
-    factor_sombra = 1.2 if aspecto in aspectos_sombra else 0.8
-    # Pendientes mayores → más estrés mecánico → mayor metamorfismo
-    factor_pendiente = min(1.5, pendiente / 30.0)
-    indice_metamorfismo = round(factor_sombra * factor_pendiente, 3)
+    base_meta = 0.5
+    if aspecto in aspectos_sombra:
+        base_meta += 0.2   # N-facing: mayor potencial de facetación (depth hoar)
+    if pendiente > 35:
+        base_meta += 0.1 * min(2.0, (pendiente - 35) / 10.0)  # Estrés mecánico
+    indice_metamorfismo = round(min(1.0, base_meta), 3)
 
     # Energía de fusión (J/kg): proporional al balance radiativo
     # Aspectos soleados (S, SE, SW) → mayor radiación → mayor fusión

@@ -154,6 +154,76 @@ Bugs corregidos en backfill script: `math` import, bandas `A00-A63` (no `dim_0`)
 
 ---
 
+## Sesión 2026-04-01 (continuación 3) — Fix metodológico: sesgo de sobreestimación EAWS
+
+### Bug crítico identificado y corregido: metamorfismo estático → niveles EAWS inflados ✅
+
+**Síntoma:** La Parva producía nivel EAWS 4.3–4.6 promedio en 102 boletines, incluso con
+T=6°C, P=0mm, V=5km/h (condiciones de primavera tranquila). Nivel 5 observado el 26 abril.
+
+**Causa raíz:** `_calcular_metricas_pinn` en `tool_analizar_dem.py` calculaba el índice de
+metamorfismo puramente con topografía estática:
+```python
+# Antes (INCORRECTO)
+factor_sombra = 1.2  # N-facing
+factor_pendiente = min(1.5, pendiente / 30.0)  # 42°/30 = 1.4
+indice_metamorfismo = factor_sombra × factor_pendiente  # = 1.68 ← colapso cohesión
+```
+Con `indice_metamorfismo = 1.68 > 1.5`, la cohesión caía a 100 Pa (mínimo hardcodeado),
+produciendo FS = 0.58 → CRITICO → very_poor → nivel EAWS 4-5 **permanentemente**,
+sin importar las condiciones meteorológicas del día.
+
+Cadena de amplificación:
+1. `_calcular_metricas_pinn` → metamorfismo = 1.68 (topografía estática)
+2. `ejecutar_calcular_pinn` → FS = 0.58 → estado = CRITICO
+3. `ejecutar_evaluar_estabilidad_manto` → score = 8 → estabilidad_eaws = "very_poor"
+4. `ejecutar_clasificar_riesgo_eaws_integrado` → worst-case → nivel 4–5 siempre
+
+**Fix implementado:** `agentes/subagentes/subagente_topografico/tools/tool_analizar_dem.py`
+```python
+# Después (CORRECTO)
+base_meta = 0.5
+if aspecto in aspectos_sombra:
+    base_meta += 0.2   # potencial de facetación, no estado actual
+if pendiente > 35:
+    base_meta += 0.1 × min(2.0, (pendiente - 35) / 10.0)
+indice_metamorfismo = min(1.0, base_meta)  # Cap ≤1.0 sin forzante meteorológico
+```
+
+**Valores resultantes para La Parva (condiciones calmadas):**
+
+| Sector      | Meta antes | Meta ahora | FS antes | FS ahora | Estado antes | Estado ahora |
+|-------------|-----------|------------|----------|----------|--------------|--------------|
+| Sector Bajo | 1.40      | 0.70       | 0.83     | 1.874    | CRITICO      | ESTABLE      |
+| Sector Medio| 1.52      | 0.73       | 0.68     | 1.676    | CRITICO      | ESTABLE      |
+| Sector Alto | 1.68      | 0.77       | 0.58     | 1.454    | CRITICO      | MARGINAL     |
+
+**Diferenciación meteorológica recuperada:**
+
+| Condición                  | Nivel 24h antes | Nivel 24h después |
+|----------------------------|-----------------|-------------------|
+| Calma (T=6°C, P=0, V=5km/h)| 4–5             | 2 (Moderado) ✅   |
+| Nevada moderada             | 4–5             | 3 (Notable) ✅    |
+| Nevada + viento 50km/h     | 4–5             | 4 (Fuerte) ✅     |
+| Precipitación crítica+viento| 5               | 4–5 ✅            |
+| Lluvia sobre nieve          | 5               | 5 (Muy alto) ✅   |
+
+**Tests:** 4 nuevos en `TestMetamorfismoFormula` (test_s1_glo30.py):
+- `test_metamorfismo_maximo_uno_para_condiciones_estaticas` — 12 combinaciones pendiente×aspecto
+- `test_la_parva_sector_alto_no_es_critico_en_calma`
+- `test_la_parva_sectores_producen_fs_diferenciado_por_pendiente`
+- `test_calma_vs_nevada_produce_niveles_eaws_distintos` — diferencia calma vs tormenta
+
+**Estado tests:** 260 passed, 8 skipped, 0 failed
+
+**Nota académica:** La fórmula topográfica representa el *potencial estructural* de metamorfismo
+(aspecto N + pendiente empinada → mayor tendencia histórica a facetación). El estado *actual*
+del manto es modulado por las condiciones meteorológicas recientes desde S3 (factor_meteorologico).
+Esta separación — potencial topográfico vs estado dinámico — es metodológicamente más correcta
+y permite validación por separado de cada componente (Hipótesis H1, H2).
+
+---
+
 ## Sesión 2026-03-27 (continuación 9) — Tarea #1 completada: backfill histórico 27 boletines
 
 ### Tarea #1: Generar boletines históricos restantes (27 boletines) — COMPLETADA ✅

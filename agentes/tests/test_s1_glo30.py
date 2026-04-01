@@ -355,3 +355,121 @@ class TestConsultorBigQueryTageeAe:
         assert isinstance(resultado["embedding_centroide_zona"], list)
         assert len(resultado["embedding_centroide_zona"]) == 64
         assert isinstance(resultado["similitud_anios_previos"], dict)
+
+
+# ─── TestMetamorfismoFormula ──────────────────────────────────────────────────
+
+class TestMetamorfismoFormula:
+    """
+    Valida que la fórmula de metamorfismo topográfico produzca valores
+    dentro del rango físicamente realista (≤1.0) para condiciones estables.
+
+    Error metodológico corregido: la fórmula anterior producía valores de
+    1.4-1.68 para pendientes empinadas N-facing (La Parva), lo que colapsaba
+    la cohesión a 100 Pa → FS < 1.0 → CRITICO permanente independiente de
+    las condiciones meteorológicas del día.
+    """
+
+    def _meta_y_fs(self, pendiente, aspecto, elevacion_max=3000):
+        from agentes.subagentes.subagente_topografico.tools.tool_analizar_dem import (
+            _calcular_metricas_pinn,
+        )
+        from agentes.subagentes.subagente_topografico.tools.tool_calcular_pinn import (
+            ejecutar_calcular_pinn,
+        )
+        metricas = _calcular_metricas_pinn(
+            pendiente=pendiente,
+            elevacion_max=elevacion_max,
+            elevacion_min=elevacion_max - 600,
+            desnivel=600,
+            aspecto=aspecto,
+        )
+        pinn = ejecutar_calcular_pinn(
+            gradiente_termico_C_100m=metricas["gradiente_termico_C_100m"],
+            densidad_kg_m3=metricas["densidad_kg_m3"],
+            indice_metamorfismo=metricas["indice_metamorfismo"],
+            energia_fusion_J_kg=metricas["energia_fusion_J_kg"],
+            pendiente_grados=pendiente,
+        )
+        return metricas["indice_metamorfismo"], pinn["factor_seguridad_base"], pinn["estado_manto"]
+
+    def test_metamorfismo_maximo_uno_para_condiciones_estaticas(self):
+        """Sin forzante meteorológico, metamorfismo ≤ 1.0 en todos los sectores."""
+        for pendiente in [30, 35, 38, 42, 45, 50]:
+            for aspecto in ["N", "NE", "NW", "S", "SE", "SW"]:
+                meta, _, _ = self._meta_y_fs(pendiente, aspecto)
+                assert meta <= 1.0, (
+                    f"metamorfismo={meta} > 1.0 para pendiente={pendiente}° aspecto={aspecto} "
+                    "— topografía sola no debe clasificar como estado crítico"
+                )
+
+    def test_la_parva_sector_alto_no_es_critico_en_calma(self):
+        """La Parva Sector Alto (42°, N) no debe ser CRITICO con tiempo calmado."""
+        _, fs, estado = self._meta_y_fs(42, "N", elevacion_max=3600)
+        assert estado != "CRITICO", (
+            f"Sector Alto: FS={fs}, estado={estado} — "
+            "condiciones calmadas no deben producir CRITICO"
+        )
+        assert fs >= 1.0, f"FS={fs} < 1.0 sin evento meteorológico activo"
+
+    def test_la_parva_sectores_producen_fs_diferenciado_por_pendiente(self):
+        """Pendiente mayor → FS menor (gradiente correcto)."""
+        _, fs_bajo,  _ = self._meta_y_fs(35, "N", elevacion_max=2800)
+        _, fs_medio, _ = self._meta_y_fs(38, "N", elevacion_max=3200)
+        _, fs_alto,  _ = self._meta_y_fs(42, "N", elevacion_max=3600)
+        assert fs_bajo > fs_medio > fs_alto, (
+            f"FS debe decrecer con pendiente: bajo={fs_bajo} medio={fs_medio} alto={fs_alto}"
+        )
+
+    def test_calma_vs_nevada_produce_niveles_eaws_distintos(self):
+        """El pipeline debe diferenciar calma (nivel ≤3) de tormenta (nivel ≥3)."""
+        import sys
+        sys.path.insert(0, "datos")
+        from agentes.subagentes.subagente_topografico.tools.tool_estabilidad_manto import (
+            ejecutar_evaluar_estabilidad_manto,
+        )
+        from agentes.subagentes.subagente_integrador.tools.tool_clasificar_eaws import (
+            ejecutar_clasificar_riesgo_eaws_integrado,
+        )
+
+        def nivel_eaws(estado_pinn, fs, factor_meteo, frecuencia, viento=5):
+            estab = ejecutar_evaluar_estabilidad_manto(
+                estado_pinn=estado_pinn,
+                factor_seguridad=fs,
+                riesgo_topografico="alto",
+                alertas_topograficas=["PENDIENTE_CRITICA_INICIO_AVALANCHA"],
+            )
+            res = ejecutar_clasificar_riesgo_eaws_integrado(
+                estabilidad_topografica=estab["estabilidad_eaws"],
+                factor_meteorologico=factor_meteo,
+                frecuencia_topografica=frecuencia,
+                tamano_eaws="2",
+                viento_kmh=viento,
+            )
+            return res["nivel_eaws_24h"]
+
+        def nivel_eaws_tam(estado_pinn, fs, factor_meteo, frecuencia, viento=5, tamano="2"):
+            estab = ejecutar_evaluar_estabilidad_manto(
+                estado_pinn=estado_pinn,
+                factor_seguridad=fs,
+                riesgo_topografico="alto",
+                alertas_topograficas=["PENDIENTE_CRITICA_INICIO_AVALANCHA"],
+            )
+            res = ejecutar_clasificar_riesgo_eaws_integrado(
+                estabilidad_topografica=estab["estabilidad_eaws"],
+                factor_meteorologico=factor_meteo,
+                frecuencia_topografica=frecuencia,
+                tamano_eaws=tamano,
+                viento_kmh=viento,
+            )
+            return res["nivel_eaws_24h"]
+
+        nivel_calma  = nivel_eaws("MARGINAL", 1.45, "ESTABLE", "a_few", viento=5)
+        nivel_nevada = nivel_eaws("INESTABLE", 1.0, "NEVADA_RECIENTE+VIENTO_FUERTE", "some", viento=55)
+        # Lluvia sobre nieve → avalanchas de gran tamaño (tam=3 es más realista)
+        nivel_lluvia = nivel_eaws_tam("CRITICO", 0.8, "LLUVIA_SOBRE_NIEVE", "many", viento=30, tamano="3")
+
+        assert nivel_calma <= 3, f"Tiempo calmado → nivel {nivel_calma} (esperado ≤3)"
+        assert nivel_nevada >= 3, f"Nevada+viento → nivel {nivel_nevada} (esperado ≥3)"
+        assert nivel_lluvia >= 4, f"Lluvia sobre nieve (tam=3) → nivel {nivel_lluvia} (esperado ≥4)"
+        assert nivel_lluvia > nivel_calma, "Tormenta severa debe producir nivel mayor que calma"
