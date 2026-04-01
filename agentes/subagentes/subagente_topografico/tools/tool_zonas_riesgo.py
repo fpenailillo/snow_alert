@@ -5,6 +5,15 @@ Identifica y prioriza las zonas de mayor riesgo de avalancha dentro de
 una ubicación, combinando datos topográficos con el resultado PINN.
 """
 
+import sys
+import os
+
+_ROOT = os.path.join(os.path.dirname(__file__), '../../../..')  # → snow_alert/
+sys.path.insert(0, _ROOT)
+sys.path.insert(0, os.path.join(_ROOT, 'datos'))  # → snow_alert/datos/
+
+from analizador_avalanchas.eaws_constantes import estimar_tamano_potencial
+
 TOOL_ZONAS_RIESGO = {
     "name": "identificar_zonas_riesgo",
     "description": (
@@ -39,6 +48,14 @@ TOOL_ZONAS_RIESGO = {
             "frecuencia_estimada_eaws": {
                 "type": "string",
                 "description": "Frecuencia EAWS: many, some, a_few, nearly_none"
+            },
+            "desnivel_m": {
+                "type": "number",
+                "description": "Desnivel vertical zona inicio–depósito en metros (para estimar tamaño EAWS)"
+            },
+            "pendiente_max_grados": {
+                "type": "number",
+                "description": "Pendiente máxima en grados (para estimar tamaño EAWS)"
             }
         },
         "required": [
@@ -57,7 +74,9 @@ def ejecutar_identificar_zonas_riesgo(
     estado_pinn: str,
     riesgo_falla: str,
     zona_inicio_ha: float = None,
-    frecuencia_estimada_eaws: str = None
+    frecuencia_estimada_eaws: str = None,
+    desnivel_m: float = None,
+    pendiente_max_grados: float = None,
 ) -> dict:
     """
     Identifica y prioriza zonas de riesgo de avalancha.
@@ -101,6 +120,19 @@ def ejecutar_identificar_zonas_riesgo(
         riesgo=riesgo_combinado
     )
 
+    # Estimar tamaño EAWS desde topografía para pasar al integrador S5
+    tamano_eaws = None
+    fuente_tamano = "no_calculado"
+    if desnivel_m and desnivel_m > 0:
+        ha = zona_inicio_ha if zona_inicio_ha and zona_inicio_ha > 0 else 25.0
+        pendiente_max = pendiente_max_grados if pendiente_max_grados else pendiente_media_inicio
+        tamano_eaws = estimar_tamano_potencial(
+            desnivel_inicio_deposito=desnivel_m,
+            ha_zona_inicio=ha,
+            pendiente_max=pendiente_max,
+        )
+        fuente_tamano = "estimar_tamano_potencial"
+
     return {
         "riesgo_topografico_combinado": riesgo_combinado,
         "frecuencia_inicio_ajustada": frecuencia_ajustada,
@@ -109,6 +141,9 @@ def ejecutar_identificar_zonas_riesgo(
         "zona_inicio_ha": zona_inicio_ha,
         "aspecto_critico": aspecto_predominante,
         "pendiente_critica_grados": pendiente_media_inicio,
+        "desnivel_m": desnivel_m,
+        "tamano_eaws": tamano_eaws,
+        "fuente_tamano": fuente_tamano,
         "recomendaciones_terreno": _generar_recomendaciones(
             pendiente=pendiente_media_inicio,
             aspecto=aspecto_predominante,

@@ -258,22 +258,37 @@ def _clasificar_factor_meteorologico(
 
     Returns:
         "PRECIPITACION_CRITICA", "NEVADA_RECIENTE", "VIENTO_FUERTE",
-        "FUSION_ACTIVA", "ESTABLE" o combinaciones
+        "FUSION_ACTIVA", "CICLO_FUSION_CONGELACION", "LLUVIA_SOBRE_NIEVE",
+        "ESTABLE" o combinaciones.
+
+    Umbrales revisados (Müller et al. 2025 / EAWS operational guidelines):
+    - VIENTO_FUERTE: >10 m/s (36 km/h) — placas forman desde ~25-36 km/h;
+      el umbral anterior (15 m/s = 54 km/h) era demasiado conservador y
+      perdía eventos de wind slab frecuentes en La Parva.
+    - CICLO_FUSION_CONGELACION: se propaga desde las ventanas detectadas;
+      el ciclo es relevante EAWS independientemente de que la temperatura
+      media sea > o < 2°C (puede haber ciclo con T_min < 0 y T_max > 0).
     """
     factores = []
+    tipos_ventanas = [v.get("tipo", "") for v in ventanas]
 
     if precipitacion > 30:
         factores.append("PRECIPITACION_CRITICA")
     elif precipitacion > 10:
         factores.append("NEVADA_RECIENTE")
 
-    if viento > 15:
+    # Umbral bajado de 15 a 10 m/s: formación de wind slab comienza ~7-10 m/s
+    if viento > 10:
         factores.append("VIENTO_FUERTE")
 
-    if temperatura is not None and temperatura > 2:
+    # CICLO_FUSION_CONGELACION: leer directamente desde ventanas detectadas
+    # (la función ejecutar_detectar_ventanas_criticas ya lo evalúa correctamente)
+    if "CICLO_FUSION_CONGELACION" in tipos_ventanas:
+        factores.append("CICLO_FUSION_CONGELACION")
+    elif temperatura is not None and temperatura > 2:
+        # FUSION_ACTIVA como señal débil cuando no hay ciclo explícito detectado
         factores.append("FUSION_ACTIVA")
 
-    tipos_ventanas = [v.get("tipo", "") for v in ventanas]
     if "LLUVIA_SOBRE_NIEVE" in tipos_ventanas:
         factores.append("LLUVIA_SOBRE_NIEVE")
 

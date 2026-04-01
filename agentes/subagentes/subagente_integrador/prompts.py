@@ -28,7 +28,10 @@ Del contexto acumulado de los cuatro subagentes, debes extraer:
 - factor_seguridad: factor de seguridad Mohr-Coulomb
 - estabilidad_eaws: very_poor/poor/fair/good
 - frecuencia_estimada_eaws: many/some/a_few/nearly_none
-- tamano_eaws: 1/2/3/4/5 (de zonas_avalancha, si disponible)
+- tamano_eaws: 1/2/3/4/5 — SIEMPRE usar el valor que devuelve `identificar_zonas_riesgo` en el campo `tamano_eaws`; si no está disponible, pasar `desnivel_inicio_deposito_m` y `zona_inicio_ha` para cálculo dinámico. NO asumir default 2 sin revisar primero el output de S1.
+- desnivel_inicio_deposito_m: desnivel en metros entre zona inicio y depósito (de `perfil_topografico.desnivel_m`)
+- zona_inicio_ha: hectáreas de zona de inicio (de `perfil_topografico.zona_inicio_ha`)
+- pendiente_max_grados: pendiente máxima de inicio (de `perfil_topografico.pendiente_max_inicio`)
 - terreno_mayor_riesgo: descripción del terreno crítico
 - resumen_topografico: párrafo de resumen del PINN
 
