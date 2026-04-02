@@ -1,5 +1,26 @@
 # Log de Progreso — snow_alert
 
+## Sesión 2026-04-27 — Generación boletines Swiss H1/H3 + soporte --fecha histórico
+
+### Tarea: Soporte de fecha histórica en generar_todos.py ✅
+
+- `agentes/scripts/generar_todos.py` — nuevos argumentos:
+  - `--fecha YYYY-MM-DD`: activa modo histórico; pasa `fecha_referencia` al orquestador
+  - `--sin-backfill`: omite el backfill ERA5 automático (para cuando los datos ya están en BQ)
+  - Función `_ejecutar_backfill_para_fecha()`: importa `ejecutar_backfill` del script ERA5, filtra ubicaciones que tienen coordenadas en `UBICACIONES_LA_PARVA` (incluye Suiza)
+- Deploy: imagen `gcr.io/climas-chileno/snow-alert-agentes:2a705d5` subida via Cloud Build `d039c5ca`
+- 10 ejecuciones Cloud Run lanzadas en paralelo para validación Swiss H1/H3:
+  - Fechas: 2023-12-01, 2023-12-15, 2024-01-01, 2024-01-15, 2024-02-01, 2024-02-15, 2024-03-01, 2024-03-15, 2024-04-01, 2024-04-15
+  - Ubicaciones: preset `validacion` (La Parva ×3 + Suiza ×3 = 6)
+  - Executions: wpfkw, f27dh, gnpn8, rh54d, rk9wm, w2g6j, 4wdmc, tx52s, knf82, rfvxt
+
+### Pendiente
+- Esperar completar los 10 jobs (~20-40 min)
+- Verificar boletines en `clima.boletines_riesgo` para Swiss × 10 fechas (30 filas esperadas)
+- Ejecutar `notebooks_validacion/07_validacion_slf_suiza.py` para calcular F1/QWK vs ground truth SLF
+
+---
+
 ## Sesión 2026-04-01 — REQ-01 S4 Situational Briefing + REQ-02 S3 WeatherNext 2
 
 ### Tarea #1: REQ-01 — Nuevo S4 Situational Briefing (AgenteSituationalBriefing) ✅

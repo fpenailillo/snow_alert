@@ -9,6 +9,7 @@ Uso:
     python agentes/scripts/generar_todos.py --guardar
     python agentes/scripts/generar_todos.py --guardar --ubicaciones "La Parva Sector Bajo,Matterhorn Zermatt"
     python agentes/scripts/generar_todos.py --guardar --preset validacion
+    python agentes/scripts/generar_todos.py --guardar --preset validacion --fecha 2023-12-15
 """
 
 import argparse
@@ -18,6 +19,7 @@ import sys
 import os
 import time
 from datetime import datetime, timezone
+from typing import Optional
 
 # Agregar raíz del proyecto al path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../..'))
@@ -74,7 +76,64 @@ def parsear_argumentos() -> argparse.Namespace:
         default=None,
         help='Preset de ubicaciones: "validacion" → La Parva + Suiza (6 ubicaciones)'
     )
+    parser.add_argument(
+        '--fecha',
+        type=str,
+        default=None,
+        metavar='YYYY-MM-DD',
+        help=(
+            'Fecha histórica para generación retroactiva. '
+            'Activa backfill ERA5 automático antes de generar boletines. '
+            'Ejemplo: --fecha 2023-12-15'
+        )
+    )
+    parser.add_argument(
+        '--sin-backfill',
+        action='store_true',
+        help='Con --fecha: omite el backfill ERA5 (asume datos ya en BQ)'
+    )
     return parser.parse_args()
+
+
+def _ejecutar_backfill_para_fecha(ubicaciones: list, fecha_str: str) -> bool:
+    """
+    Dispara ERA5 backfill para las ubicaciones y fecha dadas.
+    Retorna True si al menos una ubicación tuvo éxito.
+    """
+    try:
+        from agentes.datos.backfill.backfill_clima_historico import (
+            ejecutar_backfill,
+            UBICACIONES_LA_PARVA,
+        )
+    except ImportError as e:
+        logger.error(f"No se pudo importar backfill: {e}")
+        return False
+
+    # Filtrar solo las coordenadas de las ubicaciones solicitadas
+    coords_disponibles = UBICACIONES_LA_PARVA
+    coords_backfill = {
+        nombre: coords
+        for nombre, coords in coords_disponibles.items()
+        if nombre in ubicaciones
+    }
+
+    if not coords_backfill:
+        logger.warning(
+            f"Ninguna de las ubicaciones tiene coordenadas en UBICACIONES_LA_PARVA: "
+            f"{ubicaciones}"
+        )
+        return False
+
+    logger.info(
+        f"Backfill ERA5: {len(coords_backfill)} ubicaciones para {fecha_str} ..."
+    )
+    resumen = ejecutar_backfill(coords_backfill, [fecha_str])
+    logger.info(
+        f"Backfill completo: exitosas={resumen.get('exitosas', 0)}, "
+        f"omitidas={resumen.get('omitidas', 0)}, "
+        f"fallidas={resumen.get('fallidas', 0)}"
+    )
+    return resumen.get("exitosas", 0) > 0 or resumen.get("omitidas", 0) > 0
 
 
 def main() -> int:
@@ -83,6 +142,16 @@ def main() -> int:
 
     inicio = datetime.now(timezone.utc)
     logger.info("Iniciando generación masiva de boletines (modo incremental)")
+
+    # Parsear fecha histórica si se proporcionó
+    fecha_referencia: Optional[datetime] = None
+    if args.fecha:
+        try:
+            fecha_referencia = datetime.fromisoformat(args.fecha).replace(tzinfo=timezone.utc)
+            logger.info(f"Modo histórico: fecha de referencia = {args.fecha}")
+        except ValueError:
+            print(f"✗ Fecha inválida: '{args.fecha}' — usar formato YYYY-MM-DD", file=sys.stderr)
+            return 1
 
     try:
         agente = AgenteRiesgoAvalancha()
@@ -110,6 +179,12 @@ def main() -> int:
     total = len(ubicaciones)
     logger.info(f"Procesando {total} ubicaciones")
 
+    # Backfill ERA5 automático cuando se especifica fecha histórica
+    if fecha_referencia and not args.sin_backfill:
+        print(f"\n→ Ejecutando backfill ERA5 para {args.fecha} ...")
+        _ejecutar_backfill_para_fecha(ubicaciones, args.fecha)
+        print()
+
     exitosos = []
     fallidos = []
     guardados = 0
@@ -117,7 +192,7 @@ def main() -> int:
     for idx, ubicacion in enumerate(ubicaciones, 1):
         logger.info(f"[{idx}/{total}] Iniciando: {ubicacion}")
         try:
-            resultado = agente.generar_boletin(ubicacion)
+            resultado = agente.generar_boletin(ubicacion, fecha_referencia=fecha_referencia)
             exitosos.append(resultado)
             nivel = resultado.get("nivel_eaws_24h", "?")
             duracion = resultado.get("duracion_segundos", "?")
