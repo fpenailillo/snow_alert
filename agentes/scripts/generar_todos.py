@@ -37,12 +37,13 @@ logger = logging.getLogger(__name__)
 
 PAUSA_ENTRE_UBICACIONES = 3  # segundos entre cada ubicación
 
-# Ubicaciones de validación: La Parva (Chile) + Suiza
+# Ubicaciones de validación: La Parva + Valle Nevado (Chile) + Suiza
 # Usadas para calcular métricas H1/H4 sin necesitar el LLM de producción
 UBICACIONES_VALIDACION = [
     "La Parva Sector Alto",
     "La Parva Sector Bajo",
     "La Parva Sector Medio",
+    "Valle Nevado",
     "Matterhorn Zermatt",
     "Interlaken",
     "St Moritz",

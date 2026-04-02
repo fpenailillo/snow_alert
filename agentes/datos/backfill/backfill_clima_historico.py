@@ -68,11 +68,12 @@ BANDAS_ERA5 = [
     'snow_cover',
 ]
 
-# Coordenadas de las ubicaciones de La Parva
+# Coordenadas de las ubicaciones de La Parva y Valle Nevado
 UBICACIONES_LA_PARVA = {
     "La Parva Sector Bajo":  {"latitud": -33.363, "longitud": -70.301},
     "La Parva Sector Medio": {"latitud": -33.352, "longitud": -70.290},
     "La Parva Sector Alto":  {"latitud": -33.344, "longitud": -70.280},
+    "Valle Nevado":          {"latitud": -33.357, "longitud": -70.270},
     # Ubicaciones de validación H3 (Alpes suizos — hemisferio norte)
     "Matterhorn Zermatt":    {"latitud": 45.9766, "longitud": 7.6586},
     "Interlaken":            {"latitud": 46.6863, "longitud": 7.8632},

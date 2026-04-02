@@ -416,7 +416,23 @@ def guardar_boletin(resultado_boletin: dict) -> dict:
 
         # Upsert: eliminar boletín previo si existe para la misma ubicación+fecha
         if _ya_existe_boletin(cliente_bq, nombre_ubicacion, fecha_emision):
-            _eliminar_boletin_existente(cliente_bq, nombre_ubicacion, fecha_emision)
+            try:
+                _eliminar_boletin_existente(cliente_bq, nombre_ubicacion, fecha_emision)
+            except Exception as e_del:
+                if "streaming buffer" in str(e_del).lower():
+                    # Fila recién insertada vía streaming — no se puede DELETE todavía.
+                    # El boletín existente es fresco (< 90 min), se omite re-inserción.
+                    logger.warning(
+                        f"Boletín {nombre_ubicacion} en streaming buffer — "
+                        "omitiendo re-inserción (datos recientes válidos)"
+                    )
+                    return {
+                        "guardado": True,
+                        "razon": "ya_existe_streaming_buffer",
+                        "uri_gcs": None,
+                        "errores": [],
+                    }
+                raise
 
         errores_bq = cliente_bq.insert_rows_json(tabla_ref, [fila])
 
