@@ -49,6 +49,15 @@ UBICACIONES_VALIDACION = [
     "St Moritz",
 ]
 
+# Preset Chile-only: La Parva + Valle Nevado
+# Usado para reprocesamiento de boletines chilenos sin afectar Swiss
+UBICACIONES_LAPARVA = [
+    "La Parva Sector Alto",
+    "La Parva Sector Bajo",
+    "La Parva Sector Medio",
+    "Valle Nevado",
+]
+
 
 def parsear_argumentos() -> argparse.Namespace:
     """Parsea los argumentos de línea de comando."""
@@ -73,9 +82,13 @@ def parsear_argumentos() -> argparse.Namespace:
     )
     parser.add_argument(
         '--preset',
-        choices=['validacion'],
+        choices=['validacion', 'laparva'],
         default=None,
-        help='Preset de ubicaciones: "validacion" → La Parva + Suiza (6 ubicaciones)'
+        help=(
+            'Preset de ubicaciones: '
+            '"validacion" → La Parva + Valle Nevado + Suiza (7 ubicaciones); '
+            '"laparva" → solo Chile: La Parva + Valle Nevado (4 ubicaciones)'
+        )
     )
     parser.add_argument(
         '--fecha',
@@ -162,9 +175,12 @@ def main() -> int:
         return 1
 
     # Determinar lista de ubicaciones
-    if args.preset == 'validacion':
+    if args.preset == 'laparva':
+        ubicaciones = UBICACIONES_LAPARVA
+        logger.info(f"Preset 'laparva': {len(ubicaciones)} ubicaciones (Chile)")
+    elif args.preset == 'validacion':
         ubicaciones = UBICACIONES_VALIDACION
-        logger.info(f"Preset 'validacion': {len(ubicaciones)} ubicaciones (La Parva + Suiza)")
+        logger.info(f"Preset 'validacion': {len(ubicaciones)} ubicaciones (La Parva + Valle Nevado + Suiza)")
     elif args.ubicaciones:
         ubicaciones = [u.strip() for u in args.ubicaciones.split(',') if u.strip()]
         logger.info(f"Ubicaciones explícitas: {ubicaciones}")
