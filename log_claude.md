@@ -18,10 +18,16 @@ todos los históricos con la metodología corregida.
 - `almacenador.py`: manejo de error "streaming buffer" en upsert (graceful skip)
 - `generar_todos.py`: preset `laparva` (4 ubicaciones Chile: La Parva ×3 + Valle Nevado)
 
-**Ejecuciones lanzadas (2026-04-28):**
-- 14 jobs Chile (invierno 2024+2025): `--preset laparva` — con backfill ERA5 automático para Valle Nevado
-- 3 jobs Swiss-Interlaken faltantes (2023-12-01, 2023-12-15, 2024-01-01): `--sin-backfill`
-- Jobs corriendo secuencialmente para evitar QPS Databricks (lección aprendida)
+**Ejecuciones completadas (2026-04-28):**
+- 14 jobs Chile (invierno 2024+2025): `--preset laparva` — con backfill ERA5 automático para Valle Nevado ✅
+- 3 jobs Swiss-Interlaken faltantes: `--sin-backfill` ✅
+- 3 jobs Valle Nevado retry (2024-09-15, 2025-07-01, 2025-07-15): todos ✅
+
+**Resultado final:**
+- La Parva ×3: 42/42 boletines inviernos 2024+2025 ✅
+- Valle Nevado: 14/14 boletines inviernos 2024+2025 ✅
+- Swiss: 30/30 pares para H1/H3 ✅
+- Total boletines en BQ (todas ubicaciones): ~287 filas
 
 **Swiss H1/H3 (27/30 ya en BQ):**
 - Fechas 2023-12-01 a 2024-04-15 × 3 estaciones = 30 pares
@@ -41,7 +47,7 @@ Distribución niveles invierno 2024-2025 La Parva (post-fix vs pre-fix):
 | Alto   | 5 permanente      | 2-5, media ~3.3 ✅  | Correcto para exposición N |
 | V.Nevado | sin previos    | 2-4, ERA5 parcial ✅ | 3 fechas aún pendientes |
 
-Faltantes Valle Nevado (3 de 14): 2024-09-15, 2025-07-01, 2025-07-15 → relanzados.
+Valle Nevado 14/14 completos ✅ — variabilidad real: invierno 2024 nivel 4, fin temporada 2025 niveles 2-3.
 
 ### Validación H1/H3 con SLF Suiza — EJECUTADA ✅
 
