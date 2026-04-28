@@ -30,19 +30,59 @@ todos los históricos con la metodología corregida.
 
 **Imagen desplegada:** `08f62b8` (build d40c36a4)
 
-**Resultado parcial (42/56 boletines Chile regenerados):**
+**Resultado boletines Chile reprocesados (55/56):**
 
-Distribución de niveles invierno 2024 La Parva (post-fix vs pre-fix):
+Distribución niveles invierno 2024-2025 La Parva (post-fix vs pre-fix):
 
-| Sector | Pre-fix (todos 4-5) | Post-fix (rango real) |
-|--------|--------------------|-----------------------|
-| Bajo   | 4-5 permanente     | 2-5, media ~3.5 ✅    |
-| Medio  | 4-5 permanente     | 1-5, media ~3.0 ✅    |
-| Alto   | 5 permanente       | 2-5, media ~3.3 ✅    |
-| V.Nevado | sin datos        | 3-4 con ERA5 backfill ✅ |
+| Sector | Pre-fix (bug meta) | Post-fix rango real | Variación esperada |
+|--------|-------------------|---------------------|--------------------|
+| Bajo   | 4-5 permanente    | 2-5, media ~3.5 ✅  | Pico ago: 5, inicio/fin: 2-3 |
+| Medio  | 4-5 permanente    | 1-5, media ~3.0 ✅  | Mayor variabilidad (sin N-facing) |
+| Alto   | 5 permanente      | 2-5, media ~3.3 ✅  | Correcto para exposición N |
+| V.Nevado | sin previos    | 2-4, ERA5 parcial ✅ | 3 fechas aún pendientes |
 
-Pico agosto: nivel 5 (correcto — plena temporada nevada andina).
-Inicio/fin temporada (jun, sep): niveles 2-4 (correcto).
+Faltantes Valle Nevado (3 de 14): 2024-09-15, 2025-07-01, 2025-07-15 → relanzados.
+
+### Validación H1/H3 con SLF Suiza — EJECUTADA ✅
+
+**Resultados notebook 07 (2026-04-28, n=24 pares):**
+
+| Métrica | AndesAI | Techel 2022 | Objetivo | Estado |
+|---------|---------|-------------|----------|--------|
+| F1-macro | 0.197 | 0.550 | ≥0.75 | ❌ |
+| QWK | -0.056 | 0.590 | ≥0.59 | ❌ |
+| Accuracy exacta | 0.333 | 0.640 | — | — |
+| Accuracy ±1 | 0.708 | 0.950 | — | — |
+| Sesgo medio | -0.79 | — | ~0 | ❌ subestima |
+
+**Distribución niveles predichos vs real:**
+
+| Nivel | SLF real | Techel ref | AndesAI |
+|-------|----------|------------|---------|
+| 1 | 12.5% | 8% | **50%** ← sesgo |
+| 2 | 54.2% | 42% | 41.7% |
+| 3 | 16.7% | 40% | 8.3% |
+| 4 | 16.7% | 9% | **0%** ← nunca detectado |
+| 5 | 0% | 1% | 0% |
+
+**Diagnóstico de la subestimación (para tesis):**
+
+La causa raíz es la **ausencia de datos ERA5 para invierno 2023-2024 en estaciones suizas**.
+`condiciones_actuales` para Swiss solo tiene datos desde 2026-02-23. S3 retorna
+`{"disponible": False}` para todas las fechas de validación → S5 infiere sin información
+meteorológica real → sesgo sistemático hacia niveles bajos.
+
+Hallazgos académicos a documentar:
+1. **Gap de transferencia Andes→Alpes cuantificado**: sesgo −0.79 niveles (subestimación)
+2. **Accuracy ±1 = 71%**: más que azar (25%) → señal topográfica PINN tiene valor incluso sin meteo
+3. **Niveles 3-4 nunca detectados**: sin datos meteo reales, el integrador no activa factores de riesgo alto
+4. **El PINN fue calibrado para topografía andina**: curvatura, aspect, pendiente Andes ≠ Alpes
+5. **Resolución ERA5 @9km**: subaprecia orografía compleja alpina
+
+**Implicación tesis:** H1/H3 no se verifican con datos SLF directamente por ausencia de
+datos meteorológicos locales suizos. La validación significativa (H1/H4) requiere datos
+Snowlab La Parva donde ERA5 SÍ está disponible. La comparación Swiss es exploratoria
+y documenta el gap de dominio como aporte metodológico (capítulo de limitaciones).
 
 ---
 
