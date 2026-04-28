@@ -30,6 +30,20 @@ todos los históricos con la metodología corregida.
 
 **Imagen desplegada:** `08f62b8` (build d40c36a4)
 
+**Resultado parcial (42/56 boletines Chile regenerados):**
+
+Distribución de niveles invierno 2024 La Parva (post-fix vs pre-fix):
+
+| Sector | Pre-fix (todos 4-5) | Post-fix (rango real) |
+|--------|--------------------|-----------------------|
+| Bajo   | 4-5 permanente     | 2-5, media ~3.5 ✅    |
+| Medio  | 4-5 permanente     | 1-5, media ~3.0 ✅    |
+| Alto   | 5 permanente       | 2-5, media ~3.3 ✅    |
+| V.Nevado | sin datos        | 3-4 con ERA5 backfill ✅ |
+
+Pico agosto: nivel 5 (correcto — plena temporada nevada andina).
+Inicio/fin temporada (jun, sep): niveles 2-4 (correcto).
+
 ---
 
 ## Sesión 2026-04-27 — Generación boletines Swiss H1/H3 + soporte --fecha histórico
