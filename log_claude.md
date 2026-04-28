@@ -1,5 +1,37 @@
 # Log de Progreso — snow_alert
 
+## Sesión 2026-04-28 — Reprocesamiento La Parva + Valle Nevado + Swiss completo
+
+### Tarea: Reprocesar boletines con mejoras metodológicas
+
+**Motivación:** Boletines generados antes de commits `a444a02` y `c1d6812` (fix metamorfismo,
+viento 15→10 m/s, ciclo fusión, tamaño EAWS) producían niveles inflados. Se regeneran
+todos los históricos con la metodología corregida.
+
+**Estado inicial BQ:**
+- La Parva (×3): 103 boletines, ninguno con metodología corregida (pre-a444a02)
+- Valle Nevado: sin boletines históricos, ERA5 solo desde 2026-02-23
+- Swiss: 27/30 boletines presentes (Interlaken faltaba para 2023-12-01/15 y 2024-01-01)
+
+**Cambios de código:**
+- `backfill_clima_historico.py`: Valle Nevado agregado a UBICACIONES_LA_PARVA
+- `almacenador.py`: manejo de error "streaming buffer" en upsert (graceful skip)
+- `generar_todos.py`: preset `laparva` (4 ubicaciones Chile: La Parva ×3 + Valle Nevado)
+
+**Ejecuciones lanzadas (2026-04-28):**
+- 14 jobs Chile (invierno 2024+2025): `--preset laparva` — con backfill ERA5 automático para Valle Nevado
+- 3 jobs Swiss-Interlaken faltantes (2023-12-01, 2023-12-15, 2024-01-01): `--sin-backfill`
+- Jobs corriendo secuencialmente para evitar QPS Databricks (lección aprendida)
+
+**Swiss H1/H3 (27/30 ya en BQ):**
+- Fechas 2023-12-01 a 2024-04-15 × 3 estaciones = 30 pares
+- Interlaken faltante en 3 fechas → completado con jobs adicionales
+- Listo para ejecutar `notebooks_validacion/07_validacion_slf_suiza.py` cuando completen
+
+**Imagen desplegada:** `08f62b8` (build d40c36a4)
+
+---
+
 ## Sesión 2026-04-27 — Generación boletines Swiss H1/H3 + soporte --fecha histórico
 
 ### Tarea: Soporte de fecha histórica en generar_todos.py ✅
