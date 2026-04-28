@@ -87,6 +87,30 @@ TOOL_GENERAR_BOLETIN = {
             "tendencia_pronostico": {
                 "type": "string",
                 "description": "Tendencia meteorológica para los próximos días: empeorando, estable, mejorando"
+            },
+            "temperatura_actual_c": {
+                "type": "number",
+                "description": "Temperatura actual en °C (extraer de condiciones actuales S3)"
+            },
+            "viento_actual_kmh": {
+                "type": "number",
+                "description": "Velocidad del viento actual en km/h (1 m/s = 3.6 km/h)"
+            },
+            "pronostico_dias_meteo": {
+                "type": "array",
+                "description": "Pronóstico por día: lista de hasta 3 objetos con datos diarios",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "dia": {"type": "string", "description": "Fecha YYYY-MM-DD o etiqueta 'Día N'"},
+                        "temp_max_c": {"type": "number", "description": "Temperatura máxima °C"},
+                        "temp_min_c": {"type": "number", "description": "Temperatura mínima °C"},
+                        "precip_mm": {"type": "number", "description": "Precipitación esperada mm"},
+                        "nieve_cm": {"type": "number", "description": "Nieve nueva estimada cm (10mm≈10cm si T<0°C)"},
+                        "viento_kmh": {"type": "number", "description": "Viento máximo esperado km/h"},
+                        "condicion": {"type": "string", "description": "Condición climática esperada"}
+                    }
+                }
             }
         },
         "required": [
@@ -144,7 +168,10 @@ def ejecutar_redactar_boletin_eaws(
     confianza: str = "Media",
     precipitacion_reciente_mm: float = None,
     nieve_reciente_cm: float = None,
-    tendencia_pronostico: str = None
+    tendencia_pronostico: str = None,
+    temperatura_actual_c: float = None,
+    viento_actual_kmh: float = None,
+    pronostico_dias_meteo: list = None
 ) -> dict:
     """
     Redacta el boletín EAWS completo en formato estándar.
@@ -168,6 +195,12 @@ def ejecutar_redactar_boletin_eaws(
         precipitacion_reciente_mm=precipitacion_reciente_mm,
         nieve_reciente_cm=nieve_reciente_cm
     )
+    seccion_meteo = _seccion_datos_meteorologicos(
+        temperatura_actual_c=temperatura_actual_c,
+        viento_actual_kmh=viento_actual_kmh,
+        precipitacion_reciente_mm=precipitacion_reciente_mm,
+        pronostico_dias_meteo=pronostico_dias_meteo
+    )
     seccion_terreno = _seccion_terreno_riesgo(
         terreno_mayor_riesgo, nivel_eaws_24h
     )
@@ -180,15 +213,20 @@ def ejecutar_redactar_boletin_eaws(
         estabilidad_eaws, frecuencia_eaws, tamano_eaws, confianza
     )
 
-    boletin_texto = "\n\n".join([
+    secciones = [
         seccion_encabezado,
         seccion_manto,
         seccion_factores,
+    ]
+    if seccion_meteo:
+        secciones.append(seccion_meteo)
+    secciones.extend([
         seccion_terreno,
         seccion_pronostico,
         seccion_recomendaciones,
-        seccion_factores_eaws
+        seccion_factores_eaws,
     ])
+    boletin_texto = "\n\n".join(secciones)
 
     return {
         "boletin_texto": boletin_texto,
@@ -276,6 +314,64 @@ def _seccion_factores_riesgo(
         )
 
     return "\n".join(partes)
+
+
+def _seccion_datos_meteorologicos(
+    temperatura_actual_c: float = None,
+    viento_actual_kmh: float = None,
+    precipitacion_reciente_mm: float = None,
+    pronostico_dias_meteo: list = None
+) -> str:
+    """Genera la sección de datos meteorológicos cuantitativos.
+
+    Retorna cadena vacía si no hay datos suficientes para mostrar.
+    """
+    partes = []
+
+    # Condiciones actuales
+    actuales = []
+    if temperatura_actual_c is not None:
+        actuales.append(f"Temperatura: {temperatura_actual_c:.1f}°C")
+    if viento_actual_kmh is not None:
+        actuales.append(f"Viento: {viento_actual_kmh:.0f} km/h")
+    if precipitacion_reciente_mm is not None:
+        actuales.append(f"Precipitación 24h: {precipitacion_reciente_mm:.1f} mm")
+
+    if actuales:
+        partes.append("Condiciones actuales:\n  " + " | ".join(actuales))
+
+    # Pronóstico por día
+    if pronostico_dias_meteo:
+        filas = []
+        for dia_data in pronostico_dias_meteo[:3]:
+            dia = dia_data.get("dia", "")
+            t_max = dia_data.get("temp_max_c")
+            t_min = dia_data.get("temp_min_c")
+            precip = dia_data.get("precip_mm")
+            nieve = dia_data.get("nieve_cm")
+            viento = dia_data.get("viento_kmh")
+            condicion = dia_data.get("condicion", "")
+
+            cols = [f"  {dia}"]
+            if t_max is not None and t_min is not None:
+                cols.append(f"T {t_max:.0f}°C/{t_min:.0f}°C")
+            if precip is not None:
+                cols.append(f"Precip {precip:.0f} mm")
+            if nieve is not None and nieve > 0:
+                cols.append(f"Nieve ~{nieve:.0f} cm")
+            if viento is not None:
+                cols.append(f"Viento {viento:.0f} km/h")
+            if condicion:
+                cols.append(condicion)
+            filas.append(" | ".join(cols))
+
+        if filas:
+            partes.append("Pronóstico 3 días:\n" + "\n".join(filas))
+
+    if not partes:
+        return ""
+
+    return "DATOS METEOROLÓGICOS\n" + "-" * 30 + "\n" + "\n".join(partes)
 
 
 def _seccion_terreno_riesgo(terreno: str, nivel: int) -> str:

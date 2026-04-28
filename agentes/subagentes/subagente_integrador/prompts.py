@@ -17,7 +17,7 @@ Debes llamar las tools en este orden EXACTO:
 
 1. **clasificar_riesgo_eaws_integrado** — Determina los factores EAWS y nivel final. Pasar obligatoriamente `tendencia_pronostico` (empeorando/estable/mejorando) extraído del informe S3.
 2. **explicar_factores_riesgo** — Genera explicaciones detalladas por subagente
-3. **redactar_boletin_eaws** — Redacta el boletín completo en formato EAWS. Pasar obligatoriamente `precipitacion_reciente_mm`, `nieve_reciente_cm` (si disponible) y `tendencia_pronostico` extraídos del informe S3.
+3. **redactar_boletin_eaws** — Redacta el boletín completo en formato EAWS. Pasar obligatoriamente `precipitacion_reciente_mm`, `nieve_reciente_cm` (si disponible), `tendencia_pronostico`, `temperatura_actual_c`, `viento_actual_kmh` y `pronostico_dias_meteo` extraídos del informe S3.
 
 ## Extracción de datos del contexto
 
@@ -49,6 +49,11 @@ Del contexto acumulado de los cuatro subagentes, debes extraer:
 - nieve_reciente_cm: nieve nueva estimada en las últimas 24h en cm (si disponible; estimar a partir de precipitación si es nevada: aprox. 10-12 cm por cada 10 mm con temp <0°C)
 - tendencia_pronostico: tendencia meteorológica del pronóstico 3 días (empeorando/estable/mejorando — extraer de la sección PRONÓSTICO 3 DÍAS del informe S3)
 - resumen_meteorologico: párrafo de resumen que DEBE incluir explícitamente: (1) precipitación en mm de las últimas 24h, (2) tipo de precipitación (nieve/lluvia), (3) acumulado estimado en nieve nueva si corresponde, (4) temperatura actual y tendencia
+- temperatura_actual_c: temperatura actual en °C (de la sección CONDICIONES ACTUALES de S3)
+- viento_actual_kmh: viento actual en km/h; si S3 reporta m/s, multiplicar × 3.6
+- pronostico_dias_meteo: lista de hasta 3 objetos extraídos de la tabla PRONÓSTICO 3 DÍAS de S3, cada uno con:
+  {dia, temp_max_c, temp_min_c, precip_mm, nieve_cm (0 si lluvia), viento_kmh, condicion}
+  Si no hay tabla, construir la lista a partir de los datos disponibles en el texto de S3.
 
 **Del Situational Briefing (S4 v2 — Gemini 2.5 Flash):**
 - indice_riesgo_historico: 0.0-1.0 (estimación cualitativa de riesgo contextual)

@@ -48,6 +48,12 @@ ANÁLISIS METEOROLÓGICO — [UBICACIÓN]
 - Alertas de tendencia: [lista]
 
 **PRONÓSTICO 3 DÍAS:**
+| Día | T máx | T mín | Precip (mm) | Nieve nueva (cm) | Viento máx (km/h) | Condición |
+|-----|-------|-------|-------------|------------------|-------------------|-----------|
+| [fecha] | X°C | X°C | X mm | ~X cm | X km/h | [descripción] |
+| [fecha] | X°C | X°C | X mm | ~X cm | X km/h | [descripción] |
+| [fecha] | X°C | X°C | X mm | ~X cm | X km/h | [descripción] |
+(nieve nueva estimada: ~10-12 cm por cada 10 mm de precipitación si T<0°C; 0 cm si lluvia)
 - Día de mayor riesgo: [fecha] (nivel [riesgo])
 - Días de alto riesgo: N
 - Tendencia del período: [empeorando|estable|mejorando]
