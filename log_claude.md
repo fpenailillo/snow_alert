@@ -1,5 +1,46 @@
 # Log de Progreso — snow_alert
 
+## Sesión 2026-04-28 (continuación) — Sección meteorológica + reprocesamiento completo
+
+### Tarea: Agregar datos meteorológicos al boletín (commit 933a507)
+
+**Motivación:** Los boletines no mostraban datos cuantitativos por día: temperatura, viento, mm precipitación, cm nieve nueva.
+
+**Cambios implementados (3 archivos):**
+- `tool_generar_boletin.py`: nuevos parámetros `temperatura_actual_c`, `viento_actual_kmh`, `pronostico_dias_meteo`; función `_seccion_datos_meteorologicos()` que genera sección estructurada
+- `subagente_meteorologico/prompts.py`: tabla obligatoria en PRONÓSTICO 3 DÍAS (T máx/mín, mm, cm nieve, km/h viento)
+- `subagente_integrador/prompts.py`: extracción y paso de los 3 nuevos campos a `redactar_boletin_eaws`
+
+**Resultado:** Boletines ahora incluyen sección DATOS METEOROLÓGICOS:
+```
+DATOS METEOROLÓGICOS
+------------------------------
+Condiciones actuales:
+  Temperatura: -3.5°C | Viento: 42 km/h | Precipitación 24h: 15.0 mm
+Pronóstico 3 días:
+  2024-08-15 | T 2°C/-8°C | Precip 15 mm | Nieve ~18 cm | Viento 55 km/h | Nevada moderada
+  2024-08-16 | T 4°C/-5°C | Precip 5 mm  | Nieve ~6 cm  | Viento 30 km/h | Parcialmente nublado
+  2024-08-17 | T 7°C/-2°C | Precip 0 mm  |              | Viento 20 km/h | Despejado
+```
+Tests: 260 passed, 8 skipped — sin regresiones.
+
+### Tarea: Reprocesar 126 boletines con nueva sección meteorológica
+
+**Deploy:** commit `933a507` → Cloud Run (build `36492b8b`, imagen `gcr.io/climas-chileno/snow-alert-agentes:933a507`)
+
+**Jobs ejecutados:** 24 Cloud Run jobs secuenciales, 12:05–18:50 UTC
+
+| Bloque | Preset | Fechas | Boletines | Estado |
+|--------|--------|--------|-----------|--------|
+| Swiss validación | `validacion` (7 ubicaciones) | 10 fechas 2023-12-01→2024-04-15 | 70 | ✅ 10/10 |
+| Chile invierno 2024 | `laparva` (4 ubicaciones) | 7 fechas Jun-Sep 2024 | 28 | ✅ 7/7 (1 reintento por red) |
+| Chile invierno 2025 | `laparva` (4 ubicaciones) | 7 fechas Jun-Sep 2025 | 28 | ✅ 7/7 |
+
+**Total:** 24/24 jobs exitosos, ~126 boletines regenerados con sección meteorológica.
+**Incidente:** `2024-06-15` falló por error DNS transitorio (`oauth2.googleapis.com`); reejecutado manualmente → exitoso.
+
+---
+
 ## Sesión 2026-04-28 — Reprocesamiento La Parva + Valle Nevado + Swiss completo
 
 ### Tarea: Reprocesar boletines con mejoras metodológicas
@@ -1100,3 +1141,123 @@ tamano_eaws = estimar_tamano_potencial(
 ### Nota académica
 
 El metamorfismo destructivo (kinetic growth, depth hoar) es un proceso físico que requiere gradiente de temperatura ≥10°C/m durante días a semanas. No puede inferirse solo de la topografía estática. El error previo mezclaba potencial topográfico (qué zonas son más propensas) con estado dinámico (qué está ocurriendo ahora). La corrección es metodológicamente importante para la tesis: S1 ahora aporta solo la componente topográfica; S3 debe proveer los forzantes meteorológicos para que S5 pueda evaluar el estado dinámico del manto correctamente.
+
+---
+
+## Sesión 2026-04-30 — Validación H4: carga Snowlab BQ + análisis preliminar
+
+### Tarea 1: Carga boletines Snowlab a BigQuery
+
+**Script:** `notebooks_validacion/cargar_snowlab_bq.py`
+
+**Tabla:** `climas-chileno.validacion_avalanchas.snowlab_boletines`
+
+**Datos cargados:** 30 boletines (14 temporada 2024 + 16 temporada 2025)
+- Fuente: PDF "BOLETINES DE AVALANCHAS — ZONA LA PARVA", Domingo Valdivieso Ducci (L2 CAA)
+- Schema: `id_boletin, temporada, numero_boletin, fecha_publicacion, fecha_inicio_validez, fecha_fin_validez, nivel_alta, nivel_media, nivel_baja, nivel_max, problema_principal, url_instagram, fuente`
+- Tabla anterior (schema distinto) fue eliminada y recreada
+
+**Distribución:** 2024 avg=1.79, máx=5 (tormenta jun 2024 ~160cm); 2025 avg=1.69, máx=3
+
+### Tarea 2: Análisis H4 preliminar (QWK vs ground truth Snowlab)
+
+**Script:** `notebooks_validacion/08_validacion_snowlab.py`
+
+**Resultado preliminar (NO VÁLIDO — sesgo de muestreo):**
+
+| Métrica | Valor |
+|---------|-------|
+| Pares | 87 |
+| MAE | 2.17 |
+| Sesgo (AI−Snowlab) | **+2.03** (sobreestimación) |
+| QWK | -0.020 |
+| H4 | ✗ RECHAZADA |
+
+**Causa raíz identificada — sesgo de muestreo:**
+- AndesAI La Parva procesó solo 14 fechas específicas de **eventos de tormenta** (el 1° y 15 de cada mes del invierno)
+- Snowlab publicó **cada semana**, incluyendo 69% de semanas en nivel 1 (condiciones tranquilas)
+- AndesAI jamás procesa nivel 1 para esas fechas (tempestades), generando sesgo artificial +2 niveles
+
+**Distribución reveladora:**
+```
+Snowlab: nivel-1=60, nivel-2=15, nivel-3=8, nivel-4=3, nivel-5=1
+AndesAI: nivel-1=2,  nivel-2=2,  nivel-3=37, nivel-4=39, nivel-5=7
+```
+
+**Conclusión académica:** H4 no puede evaluarse con el dataset actual. Se requiere muestreo representativo (no solo eventos de tormenta).
+
+### Tarea 3: Backfill ERA5 para 16 fechas Snowlab faltantes
+
+**Script:** `agentes/datos/backfill/backfill_clima_historico.py`
+**Fechas:** 16 fechas (2024-06-21 a 2025-09-19 — las que no tienen AndesAI a ≤3 días)
+**Estado:** En ejecución (PID 34209) — 48 operaciones (16 fechas × 3 sectores)
+**ETA:** ~8-10 minutos
+
+### Tarea 3: Backfill ERA5 + reprocessing 16 fechas Snowlab ✅
+
+**Backfill ERA5:** 48 operaciones (16 fechas × 3 sectores) — 48/48 exitosas
+**Reprocessing Cloud Run:** 16 jobs (`--preset laparva --sin-backfill`) — 16/16 exitosos (09:31–11:57 local)
+**Script:** `/tmp/reprocesar_snowlab_fechas.sh`
+
+### Tarea 4: Análisis H4 definitivo — `08_validacion_snowlab.py`
+
+**Dataset completo:** 157 boletines AndesAI, 30 Snowlab, 87 pares (85/87 a ≤3 días)
+
+#### Métricas globales
+
+| Métrica | Valor |
+|---------|-------|
+| Pares | 87 |
+| Distancia media | 1.4 días |
+| MAE | 2.10 |
+| Sesgo (AI−Snowlab) | **+1.99** (sobreestimación sistemática) |
+| QWK | -0.016 |
+| Kappa lineal | -0.004 |
+| F1-macro | 0.104 |
+| **H4** | **✗ RECHAZADA** |
+
+#### Distribución de niveles
+
+| Nivel | Snowlab | AndesAI |
+|-------|---------|---------|
+| 1 | 60 (69%) | 1 (1%) |
+| 2 | 15 (17%) | 2 (2%) |
+| 3 | 8 (9%) | 44 (51%) |
+| 4 | 3 (3%) | 33 (38%) |
+| 5 | 1 (1%) | 7 (8%) |
+
+#### Hallazgo crítico — patrón de sesgo asimétrico
+
+```
+Snowlab ≥ 3 (tormentas, n=12):  MAE=0.75  sesgo=-0.08  ← casi perfecto
+Snowlab ≤ 2 (calma, n=75):      MAE=2.32  sesgo=+2.32  ← siempre predice 3-4
+```
+
+**AndesAI es un buen detector de tormentas pero tiene piso efectivo en nivel 3.**
+
+Cuando Snowlab dice nivel 1, AndesAI predice:
+- Nivel 3: 55% de los casos
+- Nivel 4: 33%
+- Nivel 5: 10%
+- Nivel ≤ 2: 2%
+
+#### Interpretación académica
+
+El sistema muestra un **sesgo positivo estructural** (~+2 niveles) en semanas tranquilas. Causas probables:
+
+1. **PINN topográfico constante**: La componente S1 calcula riesgo geomorfológico fijo independientemente de condiciones meteo → siempre aporta "señal de riesgo" base
+2. **ERA5 resolución 9 km en Andes**: Sobreestima precipitación orográfica y velocidad de viento a 3000-4000 msnm → S3 reporta condiciones más extremas que las observadas in situ
+3. **Sin modelo de estado del manto**: AndesAI no tiene acceso al estado real del manto nivoso (humedad, estratigrafía) — solo infiere desde forzantes meteorológicos. El forecaster Snowlab evalúa el manto físicamente.
+4. **Calibración conservadora de S5**: Tras las correcciones de subestimación (bugs 1-4 de sesión anterior), el LLM puede haber quedado sobrecompensado hacia valores altos.
+
+#### Valor académico de H4 rechazada
+
+La hipótesis se rechaza, pero el hallazgo es **publicable y significativo**:
+- El sistema tiene **alta sensibilidad para tormentas** (MAE=0.75 en eventos nivel ≥3)
+- Falla en especificidad de calma → no puede ser usado como confirmador de "condiciones seguras"
+- Requiere capa de calibración post-procesamiento (isotonic regression o Platt scaling) para corregir el piso en nivel 3
+- Resultado coherente con H1/H3 Suiza: el sistema sobreestima cuando falta contexto situacional (H1/H3: falta ERA5; H4: falta estado manto)
+
+#### Contribución a la tesis
+
+H4 documenta una limitación fundamental de sistemas multi-agente basados en LLM sin acceso a datos in situ: la incapacidad de distinguir calma de riesgo bajo sin retroalimentación del manto real. Propone línea de trabajo futura: integración de datos NIVOLOG/CEAZA o sensor de snowpack para calibrar S5.
