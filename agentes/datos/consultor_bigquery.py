@@ -1159,7 +1159,7 @@ class ConsultorBigQuery:
         """
         Busca relatos que mencionen términos específicos de condiciones de riesgo.
 
-        Útil para el SubagenteNLP para encontrar patrones históricos relacionados
+        Útil para el AgenteSituationalBriefing para encontrar patrones históricos relacionados
         con condiciones actuales (ej: "placa", "viento", "nieve blanda").
 
         Args:

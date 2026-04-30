@@ -2,7 +2,7 @@
 Schemas Pydantic para el Situational Briefing (S4 v2).
 
 SituationalBriefing es el artefacto principal que produce el agente.
-Compatible con Gemini 2.5 Flash structured output (response_schema).
+Producido por AgenteSituationalBriefing (Qwen3-80B vía Databricks).
 """
 
 from datetime import datetime

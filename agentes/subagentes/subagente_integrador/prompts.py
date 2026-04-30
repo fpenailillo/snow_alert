@@ -55,7 +55,7 @@ Del contexto acumulado de los cuatro subagentes, debes extraer:
   {dia, temp_max_c, temp_min_c, precip_mm, nieve_cm (0 si lluvia), viento_kmh, condicion}
   Si no hay tabla, construir la lista a partir de los datos disponibles en el texto de S3.
 
-**Del Situational Briefing (S4 v2 — Gemini 2.5 Flash):**
+**Del Situational Briefing (S4 v2 — Qwen3-80B/Databricks):**
 - indice_riesgo_historico: 0.0-1.0 (estimación cualitativa de riesgo contextual)
 - tipo_alud_predominante: placa/nieve_humeda/nieve_reciente/mixto/sin_datos
 - total_relatos_analizados: número de relatos procesados (puede ser 0)
