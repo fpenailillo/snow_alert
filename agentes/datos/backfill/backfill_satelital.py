@@ -179,7 +179,7 @@ def extraer_sar(lat: float, lon: float, fecha: str) -> dict:
 
         # Fecha real de la imagen
         ts_ms   = img.get("system:time_start").getInfo()
-        fecha_r = datetime.utcfromtimestamp(ts_ms / 1000).strftime("%Y-%m-%d")
+        fecha_r = datetime.fromtimestamp(ts_ms / 1000, tz=timezone.utc).strftime("%Y-%m-%d")
         orbita  = img.get("orbitProperties_pass").getInfo() or "UNKNOWN"
 
         return {
@@ -450,7 +450,7 @@ def extraer_sentinel2(lat: float, lon: float, fecha: str) -> dict:
 
         # Fecha real imagen
         ts_ms   = img.get("system:time_start").getInfo()
-        fecha_r = datetime.utcfromtimestamp(ts_ms / 1000).strftime("%Y-%m-%d")
+        fecha_r = datetime.fromtimestamp(ts_ms / 1000, tz=timezone.utc).strftime("%Y-%m-%d")
         nubes   = img.get("CLOUDY_PIXEL_PERCENTAGE").getInfo()
 
         return {
