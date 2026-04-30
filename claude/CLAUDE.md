@@ -52,13 +52,14 @@ snow_alert/
 │   └── references/            ← eaws_matrix_2025.md, evidencia_estabilidad.md
 ├── datos/                     ← Cloud Functions GCP (NO modificar sin confirmación)
 ├── agentes/                   ← Sistema multi-agente (aquí trabajamos)
-│   ├── datos/consultor_bigquery.py
-│   ├── subagentes/{topografico,satelital,meteorologico,nlp,integrador}/
+│   ├── datos/consultor_bigquery.py + constantes_zonas.py
+│   ├── datos/backfill/        ← backfill_clima_historico.py, backfill_satelital.py
+│   ├── subagentes/{topografico,satelital,meteorologico,situational_briefing,integrador}/
 │   ├── orquestador/agente_principal.py
-│   ├── salidas/almacenador.py + schema_boletines.json (33 campos)
+│   ├── salidas/almacenador.py + schema_boletines.json (34 campos)
 │   ├── validacion/metricas_eaws.py
 │   ├── despliegue/Dockerfile + cloudbuild.yaml
-│   └── tests/
+│   └── tests/                 ← 256 passed, 8 skipped
 ├── notebooks_validacion/      ← H1-H4
 └── docs/                      ← Decisiones de diseño, ética, arquitectura
 ```
@@ -82,11 +83,11 @@ snow_alert/
 
 | # | Subagente | Técnica | Output |
 |---|-----------|---------|--------|
-| S1 | Topográfico | PINNs + DEM SRTM + UQ Taylor | `clase_estabilidad_eaws`, IC 95% FS |
-| S2 | Satelital | ViT (H=2, MHA) + MODIS | `alertas_satelitales`, `anomalia_score` |
-| S3 | Meteorológico | Google Weather API | `ventanas_criticas` |
-| S4 | NLP | Relatos + base andina 15 zonas | `indice_riesgo_historico` |
-| S5 | Integrador | Matriz EAWS 2025 | Boletín 24h/48h/72h |
+| S1 | Topográfico | PINNs + GLO-30 + TAGEE + AlphaEarth 64D + UQ Taylor | `clase_estabilidad_eaws`, IC 95% FS, drift interanual |
+| S2 | Satelital | ViT (H=2, MHA) + SAR Sentinel-1 + Gemini 2.5 multispectral (A/B, flag `S2_VIA`) | `alertas_satelitales`, `anomalia_score`, `via` |
+| S3 | Meteorológico | ConsolidadorMeteorologico: Open-Meteo + ERA5-Land + WeatherNext 2 (flag `USE_WEATHERNEXT2`) | `ventanas_criticas`, P10/P50/P90 |
+| S4 | SituationalBriefing | AgenteSituationalBriefing — Qwen3-80B; 4 tools: clima 72h, contexto histórico, zona, eventos | `narrativa_integrada`, `factores_atencion_eaws` |
+| S5 | Integrador | Matriz EAWS 2025 (Müller, Techel & Mitterer) — Qwen3-80B | Boletín 24h/48h/72h |
 
 S4 es no-crítico: si falla, pipeline continúa con `subagentes_degradados`.
 
@@ -120,21 +121,25 @@ bq query --use_legacy_sql=false \
 
 ## Hipótesis
 
-| ID | Métrica | Umbral | Estado |
-|----|---------|--------|--------|
-| H1 | F1-macro EAWS | ≥75% | ⚠️ 0.197 con Swiss SLF — requiere Snowlab La Parva (datos meteo ERA5 ausentes en Swiss) |
-| H2 | Delta NLP | >5pp | ✅ +7.9pp (sintético, notebook 06) |
-| H3 | Transfer SLF | QWK Techel 2022 | ⚠️ QWK=-0.056 Swiss — gap dominio documentado (sesgo -0.79 por falta ERA5 Swiss) |
-| H4 | vs Snowlab | Kappa≥0.60 | ❌ Bloqueada (snowlab_boletines = 0 rows en BQ) |
+| ID | Métrica | Umbral | Resultado | Estado |
+|----|---------|--------|-----------|--------|
+| H1 | F1-macro EAWS vs SLF Suiza | ≥75% | 0.191 (n=24) | ❌ Rechazada |
+| H2 | Delta NLP ablación | >5pp | +7.9pp | ✅ Confirmada (sintético, notebook 06) |
+| H3 | QWK vs Techel 2022 (0.59) en SLF | ≥0.59 | 0.1087 (n=24) | ❌ Rechazada |
+| H4 | QWK vs Snowlab La Parva | ≥0.60 | -0.016 (n=87) | ❌ Rechazada |
 
-**Dataset validación suiza (H1/H3) — EJECUTADO 2026-04-28:**
-- Ground truth: `climas-chileno.validacion_avalanchas.slf_danger_levels_qc` (45k filas, 2001-2024)
-- Mapeo: Interlaken→canton Bern(4xxx), Zermatt→Valais(2xxx), St Moritz→Graubünden(6xxx)
-- Boletines: 30/30 pares en BQ. Emparejados: 24/30 (6 sin datos SLF en esas fechas)
-- Resultado: F1=0.197, QWK=-0.056 — sesgo sistemático de subestimación (-0.79 niveles)
-- Causa: ERA5 Swiss ausente para invierno 2023-2024 → S3 sin datos → niveles bajos
-- Conclusión: H1/H3 requieren validación con Snowlab La Parva (ERA5 disponible allí)
-- Script validación: `notebooks_validacion/07_validacion_slf_suiza.py`
+**H1/H3 — Swiss SLF (re-validado 2026-04-30 con datos satelitales):**
+- Ground truth: `validacion_avalanchas.slf_danger_levels_qc`; mapeo: Interlaken→Bern(4xxx), Zermatt→Valais(2xxx), St Moritz→Graubünden(6xxx)
+- 30 filas backfill satelital (SAR+ERA5+S2) insertadas en `imagenes_satelitales` → 30 boletines regenerados
+- QWK mejoró de -0.056 a +0.1087 (+0.165) al agregar datos satelitales; sesgo de -0.79 a -0.54
+- Factor dominante: gap dominio Andes→Alpes (AndesAI predice 45.8% nivel 1, SLF registra 12.5%)
+- Script: `notebooks_validacion/07_validacion_slf_suiza.py`
+
+**H4 — Snowlab La Parva (ejecutada 2026-04-28):**
+- Ground truth: `validacion_avalanchas.snowlab_boletines` (30 boletines L2 CAA, Domingo Valdivieso Ducci)
+- Sesgo asimétrico: tormentas (n=12) MAE=0.75 casi perfecto; calma (n=75) MAE=2.32 sobreestima (+2.32)
+- Piso efectivo en nivel 3 por: PINN topográfico sin forzante meteo + ERA5 sobreestima orografía + sin modelo manto
+- Script: `notebooks_validacion/08_validacion_snowlab.py`
 
 ## Marco Teórico — Auditoría (2026-03-17)
 
@@ -162,11 +167,12 @@ Brechas B1–B11: todas cerradas. Pendiente solo: ≥50 boletines reales para H1
 ✅ Fase  1  Cargar relatos (3,131 rutas)
 ✅ Fase  2  5 subagentes construidos (REQ-01 a REQ-05 completados)
 ✅ Fase  3  Archivos despliegue Cloud Run
-✅ Fase  4  Schema boletines 33 campos (confirmado BQ 2026-03-18)
-✅ Fase  5  Tests actualizados (260 passed, 8 skipped — 2026-04-01)
-✅ Fase  6  212 boletines + reprocesados Chile con fixes metodológicos
-✅ Fase  7  Validación H1/H3 con SLF ejecutada — gap dominio documentado (F1=0.197)
-⏳ Fase  8  Validación H1/H4 con Snowlab La Parva (requiere datos usuario)
+✅ Fase  4  Schema boletines 34 campos (confirmado BQ 2026-03-18)
+✅ Fase  5  Tests actualizados (256 passed, 8 skipped — 2026-04-01)
+✅ Fase  6  ~287 boletines + reprocesados Chile con fixes metodológicos
+✅ Fase  7  Validación H1/H3 con SLF ejecutada — backfill satelital Swiss, QWK +0.1087
+✅ Fase  8  Validación H4 con Snowlab ejecutada — QWK=-0.016, piso nivel 3 documentado
+⏳ Fase  9  Calibración post-procesamiento (isotonic regression) + datos manto in situ
 ```
 
 **Regla de oro: no avanzar de fase sin que los tests pasen.**

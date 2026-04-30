@@ -1,24 +1,21 @@
 # Sistema Multi-Agente de Predicción de Avalanchas
 
-Sistema basado en la API de Anthropic (Claude) que genera boletines de riesgo de avalanchas EAWS (niveles 1-5) en español, consultando datos de BigQuery desde el proyecto `climas-chileno`.
+Sistema basado en Qwen3-80B vía Databricks (producción) o Claude/Anthropic (local) que genera boletines de riesgo EAWS (niveles 1-5) en español, consultando datos de BigQuery desde el proyecto `climas-chileno`.
 
 ## Arquitectura
 
 ```
-Prompt usuario
+Orquestador (agente_principal.py)
+    │
+    ├── S1: SubagenteTopografico ──────→ zonas_avalancha + pendientes_detalladas (GLO-30, TAGEE, AlphaEarth)
+    ├── S2: SubagenteSatelital ────────→ imagenes_satelitales (SAR, NDSI, ViT, Gemini A/B)
+    ├── S3: SubagenteMeteorologico ────→ condiciones_actuales + pronostico_* (Open-Meteo, ERA5, WeatherNext2)
+    ├── S4: AgenteSituationalBriefing ─→ situational briefing contextual (Qwen3-80B)
+    └── S5: SubagenteIntegrador ───────→ Boletín EAWS 24h/48h/72h (Matriz Müller-Techel 2025)
     │
     ▼
-AgenteRiesgoAvalancha (agentic loop)
-    │
-    ├── analizar_terreno    → BigQuery: zonas_avalancha
-    ├── monitorear_nieve    → BigQuery: imagenes_satelitales
-    ├── analizar_meteorologia → BigQuery: condiciones_actuales + pronostico_*
-    └── clasificar_riesgo_eaws → Matriz EAWS (eaws_constantes.py)
-    │
-    ▼
-Boletín EAWS nivel 1-5 en español
-    │
-    ├── BigQuery: clima.boletines_riesgo
+almacenador.py
+    ├── BigQuery: clima.boletines_riesgo (34 campos)
     └── GCS: gs://climas-chileno-datos-clima-bronce/boletines/
 ```
 
@@ -26,14 +23,14 @@ Boletín EAWS nivel 1-5 en español
 
 - Python 3.11+
 - GCP con Application Default Credentials: `gcloud auth application-default login`
-- Variable de entorno `CLAUDE_CODE_OAUTH_TOKEN` (disponible automáticamente en Claude Code)
-- Paquetes: `anthropic`, `google-cloud-bigquery`, `google-cloud-storage`, `pytest`
+- Variable de entorno `DATABRICKS_TOKEN` (producción: Secret Manager) o `ANTHROPIC_API_KEY` (local)
+- Paquetes: ver `despliegue/requirements.txt`
 
 ## Instalación
 
 ```bash
-cd ~/Desktop/avalanche_report/snow_alert
-pip install anthropic google-cloud-bigquery google-cloud-storage pytest
+cd ~/Desktop/avalanche_report/snow_alert/agentes
+pip install -r despliegue/requirements.txt
 gcloud auth application-default login
 ```
 
@@ -48,34 +45,58 @@ python agentes/scripts/generar_boletin.py --ubicacion "La Parva Sector Bajo"
 # Solo imprimir (sin guardar en BigQuery/GCS)
 python agentes/scripts/generar_boletin.py --ubicacion "Valle Nevado" --solo-imprimir
 
+# Boletín para fecha histórica
+python agentes/scripts/generar_boletin.py --ubicacion "La Parva Sector Alto" --fecha 2024-08-15
+
 # Listar ubicaciones con datos disponibles
 python agentes/scripts/generar_boletin.py --listar-ubicaciones
 
 # Salida en formato JSON
-python agentes/scripts/generar_boletin.py --ubicacion "Portillo" --json
+python agentes/scripts/generar_boletin.py --ubicacion "La Parva Sector Bajo" --json
 ```
 
 ### Boletines masivos
 
 ```bash
-# Generar para todas las ubicaciones (sin guardar)
+# Generar para todas las ubicaciones y guardar (default)
 python agentes/scripts/generar_todos.py
 
-# Generar y guardar en BigQuery + GCS
-python agentes/scripts/generar_todos.py --guardar
+# Generar para una fecha histórica sin backfill ERA5
+python agentes/scripts/generar_todos.py --fecha 2024-08-15 --sin-backfill
+
+# Preset específico de ubicaciones
+python agentes/scripts/generar_todos.py --preset laparva
+```
+
+### Backfill de datos satelitales
+
+```bash
+# Backfill para estaciones de validación suiza (dry-run)
+python agentes/datos/backfill/backfill_satelital.py --preset validacion_suiza --dry-run
+
+# Backfill para La Parva (todas las fuentes disponibles)
+python agentes/datos/backfill/backfill_satelital.py --preset laparva --fuentes sar modis era5 s2
+
+# Backfill ERA5 para fechas históricas
+python agentes/datos/backfill/backfill_clima_historico.py
 ```
 
 ## Tests
 
 ```bash
-# 1. Tests de conexión (verificar BigQuery)
-python -m pytest agentes/tests/test_conexion.py -v
+# Suite completa (sin credenciales externas)
+python -m pytest agentes/tests/ -q
+# → 256 passed, 8 skipped
 
-# 2. Tests de tools individuales
-python -m pytest agentes/tests/test_tools.py -v
+# Por subagente
+python -m pytest agentes/tests/test_situational_briefing.py -v   # S4 — 20 tests
+python -m pytest agentes/tests/test_weathernext2.py -v           # S3 WeatherNext 2 — 17 tests
+python -m pytest agentes/tests/test_s1_glo30.py -v               # S1 GLO-30/TAGEE/AlphaEarth — 23 tests
+python -m pytest agentes/tests/test_s2_earth_ai.py -v            # S2 Gemini multispectral — 15 tests
+python -m pytest agentes/tests/test_req05_st_regionstats.py -v   # ST_REGIONSTATS — 19 tests
 
-# 3. Test end-to-end (con salida detallada del agentic loop)
-python -m pytest agentes/tests/test_boletin_completo.py -v -s
+# Test E2E (requiere ANTHROPIC_API_KEY o Databricks token)
+python -m pytest agentes/tests/test_sistema_completo.py -v -s
 ```
 
 ## Estructura de archivos
@@ -83,73 +104,147 @@ python -m pytest agentes/tests/test_boletin_completo.py -v -s
 ```
 agentes/
 ├── datos/
-│   └── consultor_bigquery.py      # Acceso centralizado a BigQuery (retorna dict)
-├── tools/
-│   ├── tool_topografico.py        # Tool 1: perfil de terreno SRTM
-│   ├── tool_satelital.py          # Tool 2: estado del manto nival (satelital)
-│   ├── tool_meteorologico.py      # Tool 3: condiciones y pronóstico
-│   └── tool_eaws.py               # Tool 4: clasificación EAWS (lookup matrix)
+│   ├── consultor_bigquery.py          # Acceso centralizado a BigQuery (retorna dict)
+│   ├── constantes_zonas.py            # COORDENADAS_ZONAS, BBOX_ZONAS, POLIGONOS_ZONAS — fuente única
+│   ├── cliente_llm.py                 # ClienteAnthropic + ClienteDatabricks (fallback)
+│   └── backfill/
+│       ├── backfill_clima_historico.py  # ERA5 histórico para condiciones_actuales
+│       └── backfill_satelital.py        # SAR+MODIS+ERA5+S2 multi-región (idempotente)
+│
+├── subagentes/
+│   ├── base_subagente.py              # Clase base: agentic loop, retries, logging
+│   │
+│   ├── subagente_topografico/         # S1: Análisis físico del terreno
+│   │   ├── agente.py
+│   │   └── tools/
+│   │       ├── tool_analizar_dem.py         # DEM GLO-30, pendiente, aspecto, morfología
+│   │       ├── tool_calcular_pinn.py        # Factor de seguridad + UQ Taylor + GLO-30 ajustes
+│   │       ├── tool_evaluar_estabilidad.py  # Score EAWS (very_poor → good)
+│   │       ├── tool_clasificar_riesgo.py    # Clasificación final nivel 1-5
+│   │       ├── tool_tagee_terreno.py        # Curvatura H/V, northness/eastness, convergencia
+│   │       └── tool_alphaearth.py           # Embeddings 64D AlphaEarth, drift interanual
+│   │
+│   ├── subagente_satelital/           # S2: Análisis satelital multi-fuente
+│   │   ├── agente.py
+│   │   ├── schemas.py                 # DeteccionSatelital (via: vit/gemini/rsfm)
+│   │   ├── comparador/
+│   │   │   └── ab_runner.py           # ComparadorS2: A/B ViT vs Gemini → s2_comparaciones
+│   │   └── tools/
+│   │       ├── tool_analizar_sar.py         # Sentinel-1: humedad manto, wet/dry snow
+│   │       ├── tool_analizar_ndsi.py        # Sentinel-2/MODIS: NDSI, snowline, cobertura
+│   │       ├── tool_detectar_anomalias.py   # ViT: anomalia_score, patron_detectado
+│   │       └── tool_gemini_multispectral.py # Gemini 2.5 multispectral (flag S2_VIA)
+│   │
+│   ├── subagente_meteorologico/       # S3: Meteorología multi-fuente
+│   │   ├── agente.py
+│   │   ├── fuentes/
+│   │   │   ├── base.py                # Interfaz FuenteMeteorologica + PronosticoMeteorologico
+│   │   │   ├── fuente_open_meteo.py   # Fuente primaria (siempre activa)
+│   │   │   ├── fuente_era5_land.py    # Reanálisis (siempre activa)
+│   │   │   ├── fuente_weathernext2.py # 64 miembros ensemble (flag USE_WEATHERNEXT2)
+│   │   │   └── consolidador.py        # ConsolidadorMeteorologico: fusión + detección divergencias
+│   │   └── tools/
+│   │       ├── tool_condiciones_actuales.py
+│   │       ├── tool_pronostico.py
+│   │       ├── tool_ventanas_criticas.py
+│   │       └── tool_pronostico_ensemble.py  # Expone ConsolidadorMeteorologico al agente
+│   │
+│   ├── subagente_situational_briefing/ # S4: Situational briefing contextual
+│   │   ├── agente.py                  # AgenteSituationalBriefing (Qwen3-80B/Databricks)
+│   │   ├── schemas.py                 # SituationalBriefing, CondicionesRecientes, ContextoHistorico, CaracteristicasZona
+│   │   ├── prompts/
+│   │   │   └── system_prompt.md
+│   │   └── tools/
+│   │       ├── tool_clima_reciente.py       # Condiciones 72h desde BQ
+│   │       ├── tool_contexto_historico.py   # Época estacional + desviación vs promedio
+│   │       ├── tool_caracteristicas_zona.py # Topografía + constantes EAWS por zona
+│   │       └── tool_eventos_pasados.py      # Histórico de avalanchas documentadas
+│   │
+│   └── subagente_integrador/          # S5: Integración EAWS + redacción boletín
+│       ├── agente.py
+│       └── tools/
+│           ├── tool_clasificar_riesgo_eaws.py
+│           └── tool_generar_boletin.py
+│
 ├── orquestador/
-│   ├── agente_principal.py        # Agentic loop con tool_use nativo
-│   └── prompts.py                 # System prompt en español
+│   └── agente_principal.py            # Coordina S1→S2→S3→S4→S5; manejo de degradación
+│
 ├── salidas/
-│   ├── almacenador.py             # Guarda en BigQuery y GCS
-│   └── schema_boletines.json      # Schema tabla clima.boletines_riesgo
+│   ├── almacenador.py                 # DELETE+INSERT idempotente en BQ; upload GCS
+│   └── schema_boletines.json          # Schema 34 campos (particionado por fecha_emision)
+│
+├── validacion/
+│   └── metricas_eaws.py               # F1-macro, Cohen's Kappa, QWK, Techel 2022
+│
 ├── scripts/
-│   ├── generar_boletin.py         # CLI por ubicación individual
-│   └── generar_todos.py           # Genera boletines para todas las ubicaciones
-├── tests/
-│   ├── test_conexion.py
-│   ├── test_tools.py
-│   └── test_boletin_completo.py
-└── README.md
+│   ├── generar_boletin.py             # CLI por ubicación individual
+│   └── generar_todos.py               # Genera boletines para preset de ubicaciones
+│
+├── despliegue/
+│   ├── Dockerfile
+│   ├── cloudbuild.yaml
+│   ├── job_cloud_run.yaml
+│   └── requirements.txt
+│
+└── tests/
+    ├── test_subagentes.py
+    ├── test_situational_briefing.py   # 20 tests — S4
+    ├── test_weathernext2.py           # 17 tests — S3 WeatherNext 2
+    ├── test_s1_glo30.py               # 23 tests — S1 GLO-30/TAGEE/AlphaEarth
+    ├── test_s2_earth_ai.py            # 15 tests — S2 Gemini multispectral
+    ├── test_req05_st_regionstats.py   # 19 tests — ST_REGIONSTATS
+    └── test_sistema_completo.py       # E2E (requiere credenciales)
 ```
 
-## Autenticación
+## Subagentes — descripción técnica
 
-```python
-import anthropic, os
+### S1 — Subagente Topográfico
 
-# Dentro de Claude Code (CLAUDE_CODE_OAUTH_TOKEN disponible automáticamente)
-cliente = anthropic.Anthropic(
-    auth_token=os.environ.get("CLAUDE_CODE_OAUTH_TOKEN")
-)
+Calcula el factor de seguridad (FS) del manto nival usando PINNs con datos de Copernicus GLO-30 (DEM 30m), atributos TAGEE (curvatura horizontal/vertical, northness/eastness, zonas de convergencia de runout) y embeddings AlphaEarth (64 dimensiones multi-sensor, señal de cambio interanual). Aplica UQ Taylor para IC 95% del FS. El drift interanual de AlphaEarth activa alerta de incertidumbre sin modificar el FS.
 
-# Fuera de Claude Code (usar ANTHROPIC_API_KEY)
-cliente = anthropic.Anthropic()
-```
+### S2 — Subagente Satelital
+
+Analiza el estado del manto desde tres vías:
+- **ViT** (siempre activo): Vision Transformer con multi-head attention H=2, entrenado sobre parches MODIS/Sentinel-2
+- **SAR Sentinel-1**: detección de nieve húmeda (VV < -15 dB = húmeda, -15 a -8 dB = seca, Nagler et al. 2016)
+- **Gemini 2.5 multispectral** (flag `S2_VIA=ambas_*`): análisis cualitativo paralelo para A/B testing; resultados persisten en `s2_comparaciones`
+
+### S3 — Subagente Meteorológico
+
+`ConsolidadorMeteorologico` fusiona tres fuentes con patrón Strategy:
+- **Open-Meteo**: fuente primaria, siempre activa
+- **ERA5-Land**: reanálisis, siempre activo
+- **WeatherNext 2** (flag `USE_WEATHERNEXT2=true`): 64 miembros ensemble vía BigQuery Analytics Hub; calcula P10/P50/P90; detecta divergencias >3°C temperatura o >50% precipitación
+
+### S4 — AgenteSituationalBriefing
+
+Reemplaza el antiguo subagente NLP de relatos. Genera un briefing situacional estructurado (`SituationalBriefing`) con 4 tools:
+- `tool_clima_reciente`: condiciones 72h desde `condiciones_actuales`
+- `tool_contexto_historico`: época estacional + desviación vs promedio histórico ERA5
+- `tool_caracteristicas_zona`: constantes topográficas EAWS por zona
+- `tool_eventos_pasados`: histórico de eventos avalancha documentados
+
+Output: narrativa 150-300 palabras + lista de factores EAWS + estimación cualitativa de riesgo. Mantiene compatibilidad con S5 a través de campos heredados.
+
+### S5 — Subagente Integrador
+
+Aplica la Matriz EAWS 2025 (Müller, Techel & Mitterer) integrando los outputs de S1-S4. Genera el boletín final con niveles 24h/48h/72h, horizonte de 5 días, tipo de problema predominante y factores contribuyentes. Redacción en español de Chile con terminología EAWS estándar.
 
 ## Factores EAWS
 
-El sistema determina 3 factores para consultar la matriz EAWS:
+El integrador determina 3 factores para aplicar la matriz EAWS:
 
-| Factor | Fuente |
-|--------|--------|
-| **Estabilidad** | Alertas dinámicas de nieve + meteorología |
-| **Frecuencia** | `frecuencia_estimada_eaws` de zonas_avalancha + ajuste eólico |
-| **Tamaño** | `tamano_estimado_eaws` de zonas_avalancha (estático) |
+| Factor | Fuente principal |
+|--------|-----------------|
+| **Estabilidad** | S1 (FS + clase_estabilidad_eaws) + S2 (alertas satelitales) + S3 (ventanas críticas) |
+| **Frecuencia** | `frecuencia_estimada_eaws` + ajuste eólico dinámico |
+| **Tamaño** | `tamano_estimado_eaws` + corrección por condiciones de humedad |
 
-### Lógica de estabilidad dinámica
+## Variables de entorno relevantes
 
-- `NEVADA_RECIENTE` o `PRECIPITACION_CRITICA` → **poor**
-- `NEVADA_RECIENTE` + `FUSION_ACTIVA` → **very_poor**
-- `NIEVE_HUMEDA_SAR` → **poor**
-- `FUSION_ACTIVA` sola → **poor**
-- Sin alertas críticas → **fair**
-- Clasificación topográfica "bajo" y sin alertas → **good**
-
-## Tabla BigQuery generada
-
-`clima.boletines_riesgo` — particionada por `fecha_emision`:
-
-| Campo | Tipo | Descripción |
-|-------|------|-------------|
-| `nombre_ubicacion` | STRING REQUIRED | Nombre de la ubicación |
-| `fecha_emision` | TIMESTAMP REQUIRED | Fecha/hora de emisión |
-| `nivel_eaws_24h` | INT64 | Nivel 1-5 para 24h |
-| `nivel_eaws_48h` | INT64 | Nivel 1-5 para 48h |
-| `nivel_eaws_72h` | INT64 | Nivel 1-5 para 72h |
-| `boletin_texto` | STRING | Texto completo EAWS |
-| `tools_llamadas` | STRING (JSON) | Registro del agentic loop |
-| `confianza` | STRING | Alta / Media / Baja |
-| `modelo` | STRING | ID del modelo usado |
+| Variable | Default | Descripción |
+|----------|---------|-------------|
+| `USE_WEATHERNEXT2` | `false` | Activa WeatherNext 2 en S3 |
+| `S2_VIA` | `vit_actual` | Vía satelital S2: `vit_actual`, `ambas_consolidar_vit`, `ambas_consolidar_gemini` |
+| `DATABRICKS_TOKEN` | — | Token Databricks (producción desde Secret Manager) |
+| `ANTHROPIC_API_KEY` | — | API key Anthropic (uso local) |
