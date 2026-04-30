@@ -5,7 +5,7 @@ Coordina 5 subagentes independientes de Claude en secuencia:
 1. SubagenteTopografico — análisis DEM + PINNs
 2. SubagenteSatelital — análisis satelital + ViT
 3. SubagenteMeteorologico — condiciones y ventanas críticas
-4. SubagenteNLP — análisis de relatos históricos de montañistas
+4. AgenteSituationalBriefing — contexto situacional y relatos históricos
 5. SubagenteIntegrador — clasificación EAWS + boletín final
 
 El contexto se acumula de cada subagente al siguiente.
@@ -55,7 +55,7 @@ class OrquestadorAvalancha:
     1. Topográfico (DEM + PINNs)
     2. Satelital (imágenes + ViT)
     3. Meteorológico (condiciones + ventanas críticas)
-    4. Situational Briefing (contexto cualitativo, Gemini 2.5 Flash) ← v2
+    4. Situational Briefing (contexto situacional, Qwen3-80B/Databricks) ← v2
     5. Integrador (EAWS + boletín final, Qwen3-80B vía Databricks)
 
     El contexto se acumula de cada subagente al siguiente para
@@ -193,10 +193,10 @@ class OrquestadorAvalancha:
                 f"{resultado_meteo.get('duracion_segundos', 0)}s"
             )
 
-            # ─── Subagente 4: NLP Relatos ─────────────────────────────────────
-            # NLP es no-crítico: si falla, el pipeline continúa con los datos
+            # ─── Subagente 4: Situational Briefing ───────────────────────────
+            # No-crítico: si falla, el pipeline continúa con los datos
             # de los 3 subagentes anteriores + integrador
-            logger.info("\n--- Subagente 4: NLP Relatos ---")
+            logger.info("\n--- Subagente 4: Situational Briefing ---")
             try:
                 resultado_nlp = self.subagente_nlp.ejecutar(
                     nombre_ubicacion=nombre_ubicacion,
@@ -207,19 +207,19 @@ class OrquestadorAvalancha:
 
                 contexto_acumulado = self._construir_contexto(
                     contexto_previo=contexto_acumulado,
-                    nombre_subagente="ANÁLISIS NLP RELATOS",
+                    nombre_subagente="SITUATIONAL BRIEFING",
                     analisis=resultado_nlp.get("analisis", "")
                 )
                 logger.info(
-                    f"✓ Subagente NLP completado en "
+                    f"✓ Subagente Situational Briefing completado en "
                     f"{resultado_nlp.get('duracion_segundos', 0)}s"
                 )
             except Exception as exc_nlp:
                 logger.warning(
-                    f"⚠ Subagente NLP falló (no-crítico, continuando): {exc_nlp}"
+                    f"⚠ Subagente Situational Briefing falló (no-crítico, continuando): {exc_nlp}"
                 )
                 resultados_subagentes["nlp"] = {
-                    "analisis": f"[SubagenteNLP no disponible: {exc_nlp}]",
+                    "analisis": f"[SituationalBriefing no disponible: {exc_nlp}]",
                     "tools_llamadas": [],
                     "iteraciones": 0,
                     "duracion_segundos": 0,
@@ -228,7 +228,7 @@ class OrquestadorAvalancha:
                 }
                 contexto_acumulado = self._construir_contexto(
                     contexto_previo=contexto_acumulado,
-                    nombre_subagente="ANÁLISIS NLP RELATOS",
+                    nombre_subagente="SITUATIONAL BRIEFING",
                     analisis="[No disponible — sin datos históricos de relatos]"
                 )
 
