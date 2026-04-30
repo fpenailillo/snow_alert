@@ -1,5 +1,57 @@
 # Log de Progreso — snow_alert
 
+## Sesión 2026-04-30 — Backfill satelital suizo + Re-validación H1/H3
+
+### Tarea: Backfill `imagenes_satelitales` para estaciones suizas ✅
+
+**Motivación:** H1/H3 rechazadas en 2026-04-28 con QWK=-0.056. Hipótesis: `imagenes_satelitales` tenía 0 filas para las 3 estaciones suizas (Matterhorn Zermatt, Interlaken, St Moritz) → S2 (ViT) ejecutaba sin señal satelital → subestimación sistemática.
+
+**Script creado:** `agentes/datos/backfill/backfill_satelital.py` (commits `b174f06`, `a432a27`)
+- Multi-fuente: SAR Sentinel-1 (COPERNICUS/S1_GRD), MODIS/061, ERA5-Land, Sentinel-2 SR
+- UBICACIONES region-agnóstico: Chile + Alpes Suizos
+- PRESET `validacion_suiza`: 10 fechas × 3 estaciones = 30 filas objetivo
+- Idempotente: `obtener_existentes()` evita duplicados
+- Campo `fuente_principal` para trazabilidad (ConsolidadorSatelital futuro)
+
+**Bugs corregidos durante desarrollo:**
+1. `uri_thumbnail_lst` / `uri_thumbnail_sar` → no existen en BQ schema (causaban 30/30 fallos)
+2. MODIS/006 → MODIS/061 (deprecado); bandas `Basic_QA` → `NDSI_Snow_Cover_Basic_QA`
+3. `datetime.utcfromtimestamp()` deprecado → `datetime.fromtimestamp(..., tz=timezone.utc)`
+
+**Resultado:** 30 filas insertadas en `imagenes_satelitales` (SAR+ERA5+S2; MODIS sin cobertura en Alpes en invierno).
+
+### Re-validación H1/H3 con datos satelitales ✅
+
+**30 boletines regenerados** (3 estaciones × 10 fechas) usando nuevos datos satelitales.
+Ejecutado vía batch local (`generar_boletin.py` × 30, sin `--solo-imprimir`).
+
+**Resultados H1/H3 (n=24 pares emparejados, 2026-04-30):**
+
+| Métrica | Ronda 1 (sin satélite) | Ronda 2 (con satélite) | Δ | Objetivo | Estado |
+|---------|----------------------|----------------------|---|----------|--------|
+| F1-macro | 0.197 | 0.191 | -0.006 | ≥0.75 | ❌ |
+| QWK | -0.056 | **+0.1087** | **+0.165** | ≥0.59 | ❌ |
+| Accuracy exacta | 0.333 | 0.250 | -0.083 | — | — |
+| Accuracy ±1 | 0.708 | 0.750 | +0.042 | — | — |
+| Sesgo medio | -0.79 | **-0.54** | +0.25 | ~0 | mejoró |
+
+**Distribución niveles predichos vs SLF:**
+
+| Nivel | SLF real | Techel ref | AndesAI R1 | AndesAI R2 |
+|-------|----------|------------|------------|------------|
+| 1 | 12.5% | 8% | 50% | **45.8%** |
+| 2 | 54.2% | 42% | 41.7% | **29.2%** |
+| 3 | 16.7% | 40% | 8.3% | **20.8%** |
+| 4 | 16.7% | 9% | 0% | **4.2%** |
+
+**Conclusiones:**
+- Datos satelitales SÍ tienen efecto positivo: QWK pasó de negativo (-0.056) a positivo (+0.1087), mejora de +0.165 puntos. Sesgo reducido de -0.79 a -0.54.
+- El factor dominante del fallo es **gap de dominio Andes→Alpes**: sistema calibrado para topografía andina predice 45.8% nivel 1 donde SLF registra 12.5%.
+- Diagnóstico ronda 1 ("ERA5 no disponible") era incorrecto — ERA5 siempre estuvo disponible para las fechas suizas.
+- H1/H3 definitivamente rechazadas. Resultado negativo documentado y publicable como análisis de transferibilidad de dominio para capítulo de limitaciones de tesis.
+
+---
+
 ## Sesión 2026-04-28 (continuación) — Sección meteorológica + reprocesamiento completo
 
 ### Tarea: Agregar datos meteorológicos al boletín (commit 933a507)
