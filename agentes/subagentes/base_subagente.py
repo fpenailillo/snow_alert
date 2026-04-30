@@ -11,6 +11,7 @@ Autenticación: usa CLAUDE_CODE_OAUTH_TOKEN del entorno.
 import json
 import logging
 import os
+import re
 import time
 from abc import ABC, abstractmethod
 from datetime import datetime, timezone
@@ -239,6 +240,52 @@ class BaseSubagente(ABC):
                     (b.text for b in respuesta.content if hasattr(b, 'text')),
                     ""
                 )
+
+                # Detectar <tool_call> crudos en el texto (quirk de Qwen3: emite
+                # el XML en lugar de hacer la llamada real al framework)
+                tool_calls_crudos = _extraer_tool_calls_texto(analisis_texto)
+                if tool_calls_crudos and iteracion < self.MAX_ITERACIONES:
+                    logger.warning(
+                        f"{self.NOMBRE}: {len(tool_calls_crudos)} <tool_call> "
+                        f"detectados en texto end_turn (Qwen3 quirk) — ejecutando"
+                    )
+                    mensajes.append({
+                        "role": "assistant",
+                        "content": [{"type": "text", "text": analisis_texto}]
+                    })
+                    resultados_tools = []
+                    for idx_tc, tc in enumerate(tool_calls_crudos):
+                        nombre_tool = tc.get("name", "")
+                        argumentos = tc.get("arguments", tc.get("parameters", {}))
+                        ejecutor = self._tools_ejecutores.get(nombre_tool)
+                        inicio_tool = time.time()
+                        if ejecutor:
+                            try:
+                                resultado = ejecutor(**argumentos)
+                            except Exception as exc:
+                                logger.error(f"{self.NOMBRE} ✗ {nombre_tool}: {exc}")
+                                resultado = {"error": str(exc)}
+                        else:
+                            resultado = {"error": f"Tool no registrada: {nombre_tool}"}
+                        duracion_tool = round(time.time() - inicio_tool, 2)
+                        tool_id = f"qwen3_fix_{iteracion}_{idx_tc}"
+                        resultados_tools.append({
+                            "type": "tool_result",
+                            "tool_use_id": tool_id,
+                            "content": json.dumps(resultado, ensure_ascii=False, default=str)
+                        })
+                        tools_llamadas.append({
+                            "tool": nombre_tool,
+                            "iteracion": iteracion,
+                            "inputs": argumentos,
+                            "resultado": resultado,
+                            "duracion_segundos": duracion_tool,
+                            "subagente": self.NOMBRE
+                        })
+                    mensajes.append({"role": "user", "content": resultados_tools})
+                    iteracion += 1
+                    continue
+
                 duracion = round(time.time() - inicio, 1)
 
                 logger.info(
@@ -326,3 +373,20 @@ class BaseSubagente(ABC):
             f"{self.NOMBRE}: límite de {self.MAX_ITERACIONES} iteraciones "
             f"alcanzado para '{nombre_ubicacion}'"
         )
+
+
+def _extraer_tool_calls_texto(texto: str) -> list:
+    """Parsea bloques <tool_call>{...}</tool_call> emitidos literalmente por Qwen3.
+
+    Qwen3 a veces produce estos bloques en respuestas end_turn en lugar de usar
+    el mecanismo nativo de tool_use del framework Anthropic.
+    """
+    patron = r'<tool_call>\s*(\{.*?\})\s*</tool_call>'
+    matches = re.findall(patron, texto, re.DOTALL)
+    resultado = []
+    for m in matches:
+        try:
+            resultado.append(json.loads(m))
+        except json.JSONDecodeError:
+            pass
+    return resultado
