@@ -1250,6 +1250,126 @@ class ConsultorBigQuery:
                 "razon": str(exc),
             }
 
+    def obtener_sar_baseline(
+        self,
+        ubicacion: str,
+        n_dias_reciente: int = 7,
+        n_dias_baseline: int = 45,
+    ) -> dict:
+        """
+        Calcula el índice de humedad SAR Sentinel-1 comparando VV reciente vs baseline estacional.
+
+        Estrategia:
+          - Baseline: media de sar_vv_medio_db en ventana [n_dias_baseline, n_dias_reciente] días atrás
+            (excluye la semana más reciente para que el baseline no sea afectado por el evento actual)
+          - Reciente: VV más reciente dentro de los últimos n_dias_reciente días
+          - Delta: vv_reciente - baseline_vv (negativo → más húmedo → manto activado)
+
+        Interpretación EAWS:
+          delta < -3 dB → superficie húmeda → manto activo → riesgo nieve húmeda
+          delta estable o positivo → superficie seca → manto consolidado
+
+        Args:
+            ubicacion: nombre de la ubicación
+            n_dias_reciente: ventana de búsqueda de SAR más reciente en días (default: 7)
+            n_dias_baseline: ventana para calcular el baseline estacional en días (default: 45)
+
+        Returns:
+            dict con sar_vv_db_reciente, sar_baseline_vv, sar_delta_baseline,
+            sar_pct_nieve_humeda, humedad_activa, disponible
+        """
+        logger.info(
+            f"[ConsultorBigQuery] SAR baseline → {ubicacion} "
+            f"(reciente ≤{n_dias_reciente}d, baseline {n_dias_reciente}-{n_dias_baseline}d)"
+        )
+        try:
+            sql_reciente = """
+                SELECT
+                    sar_vv_medio_db,
+                    sar_pct_nieve_humeda,
+                    sar_pct_nieve_seca,
+                    fecha_captura
+                FROM `climas-chileno.clima.imagenes_satelitales`
+                WHERE nombre_ubicacion = @ubicacion
+                  AND sar_disponible = TRUE
+                  AND fecha_captura >= DATE_SUB(CURRENT_DATE(), INTERVAL @n_reciente DAY)
+                ORDER BY fecha_captura DESC
+                LIMIT 1
+            """
+            parametros_reciente = [
+                bigquery.ScalarQueryParameter("ubicacion",  "STRING", ubicacion),
+                bigquery.ScalarQueryParameter("n_reciente", "INT64",  n_dias_reciente),
+            ]
+            filas_reciente = self._ejecutar_query(sql_reciente, parametros_reciente)
+
+            sql_baseline = """
+                SELECT AVG(sar_vv_medio_db) AS baseline_vv
+                FROM `climas-chileno.clima.imagenes_satelitales`
+                WHERE nombre_ubicacion = @ubicacion
+                  AND sar_disponible = TRUE
+                  AND fecha_captura >= DATE_SUB(CURRENT_DATE(), INTERVAL @n_baseline DAY)
+                  AND fecha_captura <  DATE_SUB(CURRENT_DATE(), INTERVAL @n_reciente DAY)
+            """
+            parametros_baseline = [
+                bigquery.ScalarQueryParameter("ubicacion",  "STRING", ubicacion),
+                bigquery.ScalarQueryParameter("n_baseline", "INT64",  n_dias_baseline),
+                bigquery.ScalarQueryParameter("n_reciente", "INT64",  n_dias_reciente),
+            ]
+            filas_baseline = self._ejecutar_query(sql_baseline, parametros_baseline)
+
+            if not filas_reciente:
+                return {
+                    "disponible":          False,
+                    "razon":               "sin datos SAR recientes en imagenes_satelitales",
+                    "sar_vv_db_reciente":  None,
+                    "sar_baseline_vv":     None,
+                    "sar_delta_baseline":  None,
+                    "sar_pct_nieve_humeda": None,
+                    "humedad_activa":      False,
+                }
+
+            vv_reciente = filas_reciente[0].get("sar_vv_medio_db")
+            pct_humeda  = filas_reciente[0].get("sar_pct_nieve_humeda")
+
+            baseline_vv = None
+            if filas_baseline and filas_baseline[0].get("baseline_vv") is not None:
+                baseline_vv = round(float(filas_baseline[0]["baseline_vv"]), 3)
+
+            delta = None
+            if vv_reciente is not None and baseline_vv is not None:
+                delta = round(float(vv_reciente) - float(baseline_vv), 3)
+
+            # VV cae >3 dB respecto al baseline → humedad superficial activa (Nagler 2016)
+            humedad_activa = delta is not None and delta < -3.0
+
+            logger.info(
+                f"[ConsultorBigQuery] SAR '{ubicacion}': "
+                f"VV_reciente={vv_reciente} dB, baseline={baseline_vv} dB, "
+                f"delta={delta} dB, humedad_activa={humedad_activa}"
+            )
+
+            return {
+                "disponible":           True,
+                "sar_vv_db_reciente":   round(float(vv_reciente), 3) if vv_reciente else None,
+                "sar_baseline_vv":      baseline_vv,
+                "sar_delta_baseline":   delta,
+                "sar_pct_nieve_humeda": round(float(pct_humeda), 2) if pct_humeda else None,
+                "humedad_activa":       humedad_activa,
+                "fecha_sar":            str(filas_reciente[0].get("fecha_captura", "")),
+            }
+
+        except Exception as exc:
+            logger.warning(f"Error SAR baseline {ubicacion}: {exc}")
+            return {
+                "disponible":          False,
+                "razon":               str(exc),
+                "sar_vv_db_reciente":  None,
+                "sar_baseline_vv":     None,
+                "sar_delta_baseline":  None,
+                "sar_pct_nieve_humeda": None,
+                "humedad_activa":      False,
+            }
+
     def obtener_estado_manto(self, ubicacion: str, n_dias: int = 7) -> dict:
         """
         Consulta estado térmico del manto: MODIS LST + ERA5-Land temperatura suelo.

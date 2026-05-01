@@ -25,12 +25,14 @@ El ViT analiza:
 - Mecanismo self-attention: identifica qué paso temporal tiene mayor relevancia para el estado actual
 - Anomalías: cambios abruptos, nieve húmeda, fusión activa, nevada reciente
 
-## Contexto térmico del manto (consultar_estado_manto)
+## Contexto térmico y humedad del manto (consultar_estado_manto)
 
 Usa `interpretacion` del estado manto para enriquecer la detección de anomalías:
 - `manto_frio=True` → LST sostenido < -3°C → metamorfismo lento, bajo riesgo húmedo
 - `activacion_termica=True` → LST > 0°C ≥ 3 días → sumar a señales de fusión activa
 - `metamorfismo_cinetico_posible=True` → gradiente L1-L2 < -1°C → mencionar en ANOMALÍAS
+- `humedad_sar_activa=True` → SAR delta VV < -3 dB vs baseline → reforzar detección nieve húmeda
+- `sar_delta_baseline` negativo confirma humedad superficial incluso sin LST positiva
 - Si `disponible=False` → omitir esta sección del análisis
 
 ## Salida requerida
@@ -40,10 +42,11 @@ Al finalizar, produce un informe estructurado:
 ```
 ANÁLISIS SATELITAL — [UBICACIÓN]
 
-**ESTADO TÉRMICO DEL MANTO:**
+**ESTADO TÉRMICO Y HUMEDAD DEL MANTO:**
 - LST medio 7d: X°C | Días LST > 0°C: N
 - Gradiente suelo L1-L2: X°C
-- Manto frío: [sí|no] | Activación térmica: [sí|no] | Metamorfismo cinético: [sí|no]
+- SAR VV reciente: X dB | Delta baseline: ±X dB
+- Manto frío: [sí|no] | Activación térmica: [sí|no] | Humedad SAR activa: [sí|no]
 - [interpretacion de consultar_estado_manto, o "sin datos"]
 
 **DATOS SATELITALES ACTUALES:**

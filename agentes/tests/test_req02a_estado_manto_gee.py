@@ -115,8 +115,19 @@ class TestObtenerEstadoManto:
 
 class TestToolConsultarEstadoManto:
 
+    _SAR_NO_DISPONIBLE = {
+        "disponible": False,
+        "razon": "sin datos SAR en este test",
+        "sar_vv_db_reciente": None,
+        "sar_baseline_vv": None,
+        "sar_delta_baseline": None,
+        "sar_pct_nieve_humeda": None,
+        "humedad_activa": False,
+    }
+
     @patch("agentes.subagentes.subagente_satelital.tools.tool_estado_manto.ConsultorBigQuery")
     def test_manto_frio_confirmado(self, MockConsultor):
+        MockConsultor.return_value.obtener_sar_baseline.return_value = self._SAR_NO_DISPONIBLE
         MockConsultor.return_value.obtener_estado_manto.return_value = {
             "disponible": True,
             "sin_datos": False,
@@ -143,6 +154,7 @@ class TestToolConsultarEstadoManto:
 
     @patch("agentes.subagentes.subagente_satelital.tools.tool_estado_manto.ConsultorBigQuery")
     def test_activacion_termica_cuando_tres_dias_positivos(self, MockConsultor):
+        MockConsultor.return_value.obtener_sar_baseline.return_value = self._SAR_NO_DISPONIBLE
         MockConsultor.return_value.obtener_estado_manto.return_value = {
             "disponible": True,
             "sin_datos": False,
@@ -168,6 +180,7 @@ class TestToolConsultarEstadoManto:
 
     @patch("agentes.subagentes.subagente_satelital.tools.tool_estado_manto.ConsultorBigQuery")
     def test_metamorfismo_cinetico_en_interpretacion(self, MockConsultor):
+        MockConsultor.return_value.obtener_sar_baseline.return_value = self._SAR_NO_DISPONIBLE
         MockConsultor.return_value.obtener_estado_manto.return_value = {
             "disponible": True,
             "sin_datos": False,
@@ -193,6 +206,7 @@ class TestToolConsultarEstadoManto:
     @patch("agentes.subagentes.subagente_satelital.tools.tool_estado_manto.ConsultorBigQuery")
     def test_sin_datos_no_falla_y_retorna_defaults(self, MockConsultor):
         """Constraint crítico: tabla vacía no debe interrumpir el flujo satelital."""
+        MockConsultor.return_value.obtener_sar_baseline.return_value = self._SAR_NO_DISPONIBLE
         MockConsultor.return_value.obtener_estado_manto.return_value = {
             "disponible": False,
             "sin_datos": True,
@@ -217,6 +231,7 @@ class TestToolConsultarEstadoManto:
     @patch("agentes.subagentes.subagente_satelital.tools.tool_estado_manto.ConsultorBigQuery")
     def test_dos_dias_positivos_no_activa_activacion_termica(self, MockConsultor):
         """2 días no son suficientes para confirmar activación (umbral ≥ 3)."""
+        MockConsultor.return_value.obtener_sar_baseline.return_value = self._SAR_NO_DISPONIBLE
         MockConsultor.return_value.obtener_estado_manto.return_value = {
             "disponible": True,
             "sin_datos": False,
