@@ -1,5 +1,26 @@
 # Log de Progreso — snow_alert
 
+## Sesión 2026-05-01 — REQ-02b SAR humedad + REQ-04 SLF + REQ-03 ERA5 + REQ-02a MODIS
+
+### REQ-02b: SAR Sentinel-1 índice humedad superficial en S2 ✅ — commit `c5a886e`
+
+Problema: S2 no detectaba nieve húmeda superficial sin LST positiva — señal SAR VV (C-band) es sensible a agua líquida en superficie antes de que la LST suba.
+
+Cambios:
+- `ConsultorBigQuery.obtener_sar_baseline()`: 2 queries BQ — (1) SAR VV reciente de `imagenes_satelitales` (últimos 7d), (2) media estacional VV (45d con ventana deslizante excluyendo los 7d recientes). Computa `sar_delta_baseline = vv_reciente - baseline_vv`; `humedad_activa = delta < -3.0 dB` (umbral Nagler et al. 2016). Lee tabla existente, sin UPDATE ni nueva tabla.
+- `tool_estado_manto.py` reescrito: integra 3 señales (MODIS LST + ERA5 suelo + SAR VV); degradación graceful por fuente — `disponible=True` si al menos una fuente activa; `_construir_interpretacion()` produce pipe-separated string con todas las señales activas; retorna `humedad_sar_activa`, `sar_delta_baseline`, `sar_pct_nieve_humeda`, `fecha_sar`
+- `prompts.py` S2: sección nueva "Contexto térmico y humedad del manto" con regla `humedad_sar_activa=True → reforzar detección nieve húmeda`; plantilla output incluye "SAR VV reciente / Delta baseline / Humedad SAR activa"
+- `test_req02b_sar_humedad.py` (nuevo): 10 tests — 5 unit (ConsultorBQ) + 5 integración (tool)
+- `test_req02a_estado_manto_gee.py`: fix compatibility — TestToolConsultarEstadoManto ahora mockea `obtener_sar_baseline` con disponible=False
+- 334 total passed, 8 skipped
+
+Constraints críticos verificados:
+- Sin SAR → flujo continúa con señales LST/ERA5 (`disponible=True` si hay datos térmicos)
+- Sin datos térmicos → flujo continúa con SAR (`disponible=True` si hay datos SAR)
+- Sin ninguna fuente → `disponible=False`, sin excepción
+
+---
+
 ## Sesión 2026-05-01 — REQ-04 Mapeo SLF + REQ-03 Corrección ERA5 + REQ-02a MODIS
 
 ### REQ-04: Mapeo estación→sector SLF preciso ✅ — commit `173a89f`
