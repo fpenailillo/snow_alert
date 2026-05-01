@@ -1,5 +1,40 @@
 # Log de Progreso — snow_alert
 
+## Sesión 2026-04-30 (continuación) — REQ-01 Persistencia temporal + REQ-02a MODIS LST
+
+### REQ-01: Feature persistencia temporal en S5 ✅ — commit `a408753`
+
+Problema: S5 evaluaba cada boletín de forma independiente — piso en nivel 3 en calma.
+
+Cambios:
+- `ConsultorBigQuery.obtener_historial_boletines()`: consulta `clima.boletines_riesgo` últimos 7d, calcula `dias_consecutivos_nivel_bajo`
+- `tool_historial_ubicacion.py` (nuevo, S5): retorna `calma_confirmada=True` si ≥ 4 días nivel ≤ 2
+- `tool_clasificar_eaws.py` (S5): cap en `fair` cuando calma confirmada + factor ESTABLE
+- `agente.py` S5: `TOOL_HISTORIAL_UBICACION` como primer tool (4 tools total)
+- `prompts.py` S5: sección "Confirmación de calma sostenida" con reglas explícitas
+- 13 tests nuevos — 13/13 pasando
+
+Constraint crítico verificado: días calmos NO afectan nivel cuando hay tormenta activa.
+
+### REQ-02a: MODIS LST + ERA5 suelo como features de estado del manto en S2 ✅ — commit `5910de3`
+
+Problema: S2/S5 sin señales positivas de estabilidad del manto — no puede confirmar manto frío.
+
+Cambios:
+- `backfill_estado_manto_gee.py` (nuevo): pobla `clima.estado_manto_gee` con MODIS LST (MOD11A1/MYD11A1 1km) y ERA5-Land temperatura del suelo L1 (0-7cm) / L2 (7-28cm)
+- `ConsultorBigQuery.obtener_estado_manto()`: calcula `dias_lst_positivo`, `manto_frio` (LST < -3°C), `metamorfismo_cinetico_posible` (gradiente L1-L2 < -1°C)
+- `tool_estado_manto.py` (nuevo, S2): primera tool de S2; degradación graceful si tabla vacía
+- `SubagenteSatelital._cargar_tools()`: 6 tools (TOOL_ESTADO_MANTO primero)
+- `prompts.py` S2: paso 1 nuevo, sección de contexto térmico del manto
+- 15 tests nuevos — 288 total passed, 8 skipped
+
+BQ table `clima.estado_manto_gee` schema:
+  fecha, nombre_ubicacion, lst_celsius, temp_suelo_l1/l2_celsius, gradiente_termico, cobertura_nubosa_pct, fuente_lst (MOD11A1|MYD11A1|ERA5_proxy), ingested_at
+
+Siguiente: REQ-04 (mapeo SLF preciso) o REQ-03 (corrección ERA5 orográfico).
+
+---
+
 ## Sesión 2026-04-30 — Backfill satelital suizo + Re-validación H1/H3
 
 ### Tarea: Backfill `imagenes_satelitales` para estaciones suizas ✅
