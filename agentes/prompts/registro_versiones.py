@@ -53,16 +53,16 @@ REGISTRO_PROMPTS = {
     "satelital": {
         "modulo": "agentes.subagentes.subagente_satelital.prompts",
         "variable": "SYSTEM_PROMPT_SATELITAL",
-        "version": "3.0.0",
-        "descripcion": "ViT temporal sobre NDSI/LST/cobertura, detección anomalías",
-        "hash_sha256": "782bb03aa93bfc1a",
+        "version": "4.0.0",
+        "descripcion": "ViT + estado manto: MODIS LST + ERA5 suelo + SAR humedad superficial (REQ-02a/02b)",
+        "hash_sha256": "be0b1be58880835c",
     },
     "meteorologico": {
         "modulo": "agentes.subagentes.subagente_meteorologico.prompts",
         "variable": "SYSTEM_PROMPT_METEOROLOGICO",
-        "version": "3.0.0",
-        "descripcion": "Tendencia 72h, ventanas críticas, factores EAWS",
-        "hash_sha256": "9f5b1da3a557db4d",
+        "version": "3.1.0",
+        "descripcion": "Tendencia 72h, ventanas críticas, factores EAWS + sección DATOS METEOROLÓGICOS por día",
+        "hash_sha256": "026001a5750a5f82",
     },
     "nlp": {
         "modulo": "agentes.subagentes.subagente_nlp.prompts",
@@ -74,14 +74,14 @@ REGISTRO_PROMPTS = {
     "integrador": {
         "modulo": "agentes.subagentes.subagente_integrador.prompts",
         "variable": "SYSTEM_PROMPT_INTEGRADOR",
-        "version": "3.2.0",
-        "descripcion": "Integración S1-S4 + tamano_eaws desde S1 (no asumir default 2)",
-        "hash_sha256": "224d677d35d4469f",
+        "version": "4.0.0",
+        "descripcion": "Integración S1-S4 + persistencia temporal calma sostenida (REQ-01)",
+        "hash_sha256": "2d68b95e6d62ae25",
     },
 }
 
 # Versión global del conjunto de prompts (se incrementa cuando cambia cualquiera)
-VERSION_GLOBAL = "3.2"
+VERSION_GLOBAL = "4.0"
 
 
 def _calcular_hash(contenido: str) -> str:
