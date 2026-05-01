@@ -264,13 +264,14 @@ class TestComparadorS2:
 
 class TestSubagenteSatelitalV2:
 
-    def test_cinco_tools_registradas(self):
-        """S2 ahora tiene 5 tools (1 nueva: Earth AI)."""
+    def test_seis_tools_registradas(self):
+        """S2 ahora tiene 6 tools (REQ-02a agrega consultar_estado_manto)."""
         from agentes.subagentes.subagente_satelital.agente import SubagenteSatelital
         with patch("agentes.subagentes.base_subagente.crear_cliente", return_value=MagicMock()):
             agente = SubagenteSatelital()
         tools = [t["name"] for t in agente._cargar_tools()]
-        assert len(tools) == 5
+        assert len(tools) == 6
+        assert "consultar_estado_manto" in tools
         assert "procesar_ndsi" in tools
         assert "analizar_vit" in tools
         assert "detectar_anomalias_satelitales" in tools

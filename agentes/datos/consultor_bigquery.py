@@ -1250,6 +1250,104 @@ class ConsultorBigQuery:
                 "razon": str(exc),
             }
 
+    def obtener_estado_manto(self, ubicacion: str, n_dias: int = 7) -> dict:
+        """
+        Consulta estado térmico del manto: MODIS LST + ERA5-Land temperatura suelo.
+
+        Usado por tool_estado_manto (S2) para detectar señales positivas de estabilidad:
+        manto frío sostenido, activación térmica y metamorfismo cinético.
+
+        Args:
+            ubicacion: nombre de la ubicación
+            n_dias: ventana temporal en días (default: 7)
+
+        Returns:
+            dict con lst_celsius_medio_7d, dias_lst_positivo, gradiente_termico_medio,
+            manto_frio (bool), metamorfismo_cinetico_posible (bool), disponible
+        """
+        logger.info(f"[ConsultorBigQuery] estado manto → {ubicacion} (últimos {n_dias} días)")
+        try:
+            sql = """
+                SELECT
+                    fecha,
+                    lst_celsius,
+                    temp_suelo_l1_celsius,
+                    temp_suelo_l2_celsius,
+                    gradiente_termico,
+                    cobertura_nubosa_pct,
+                    fuente_lst
+                FROM `climas-chileno.clima.estado_manto_gee`
+                WHERE nombre_ubicacion = @ubicacion
+                  AND fecha >= DATE_SUB(CURRENT_DATE(), INTERVAL @n_dias DAY)
+                ORDER BY fecha DESC
+                LIMIT 14
+            """
+            parametros = [
+                bigquery.ScalarQueryParameter("ubicacion", "STRING", ubicacion),
+                bigquery.ScalarQueryParameter("n_dias", "INT64", n_dias),
+            ]
+            filas = self._ejecutar_query(sql, parametros)
+
+            if not filas:
+                return {
+                    "disponible":               False,
+                    "sin_datos":                True,
+                    "razon":                    "sin registros en estado_manto_gee para esta ubicación",
+                    "lst_celsius_medio_7d":     None,
+                    "dias_lst_positivo":        0,
+                    "gradiente_termico_medio":  None,
+                }
+
+            lst_vals  = [f["lst_celsius"] for f in filas if f.get("lst_celsius") is not None]
+            grad_vals = [f["gradiente_termico"] for f in filas if f.get("gradiente_termico") is not None]
+
+            # días consecutivos con LST > 0°C desde el más reciente hacia atrás
+            dias_lst_positivo = 0
+            for fila in filas:
+                if fila.get("lst_celsius") is not None and fila["lst_celsius"] > 0.0:
+                    dias_lst_positivo += 1
+                else:
+                    break
+
+            lst_medio  = round(sum(lst_vals) / len(lst_vals), 2) if lst_vals else None
+            grad_medio = round(sum(grad_vals) / len(grad_vals), 3) if grad_vals else None
+
+            manto_frio   = lst_medio is not None and lst_medio < -3.0
+            metamorfismo = grad_medio is not None and grad_medio < -1.0
+
+            return {
+                "disponible":                   True,
+                "sin_datos":                    False,
+                "n_registros":                  len(filas),
+                "lst_celsius_medio_7d":         lst_medio,
+                "dias_lst_positivo":            dias_lst_positivo,
+                "gradiente_termico_medio":      grad_medio,
+                "temp_suelo_l1_celsius":        filas[0].get("temp_suelo_l1_celsius"),
+                "temp_suelo_l2_celsius":        filas[0].get("temp_suelo_l2_celsius"),
+                "manto_frio":                   manto_frio,
+                "metamorfismo_cinetico_posible": metamorfismo,
+                "fuente_lst":                   filas[0].get("fuente_lst"),
+                "registros": [
+                    {
+                        "fecha":             str(f["fecha"]),
+                        "lst_celsius":       f.get("lst_celsius"),
+                        "gradiente_termico": f.get("gradiente_termico"),
+                    }
+                    for f in filas[:5]
+                ],
+            }
+
+        except Exception as exc:
+            logger.warning(f"Error consultando estado manto {ubicacion}: {exc}")
+            return {
+                "disponible":               False,
+                "sin_datos":                True,
+                "razon":                    str(exc),
+                "lst_celsius_medio_7d":     None,
+                "dias_lst_positivo":        0,
+                "gradiente_termico_medio":  None,
+            }
+
     def buscar_relatos_condiciones(self, terminos: list, limite: int = 10) -> dict:
         """
         Busca relatos que mencionen términos específicos de condiciones de riesgo.

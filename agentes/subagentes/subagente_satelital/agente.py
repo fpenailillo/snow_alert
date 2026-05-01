@@ -38,6 +38,9 @@ from agentes.subagentes.subagente_satelital.tools.tool_snowline import (
 from agentes.subagentes.subagente_satelital.tools.tool_gemini_multispectral import (
     TOOL_GEMINI_MULTISPECTRAL, ejecutar_analizar_via_earth_ai
 )
+from agentes.subagentes.subagente_satelital.tools.tool_estado_manto import (
+    TOOL_ESTADO_MANTO, ejecutar_consultar_estado_manto
+)
 
 _S2_VIA = os.environ.get("S2_VIA", "vit_actual")
 
@@ -61,6 +64,7 @@ class SubagenteSatelital(BaseSubagente):
 
     def _cargar_tools(self) -> list:
         return [
+            TOOL_ESTADO_MANTO,
             TOOL_PROCESAR_NDSI,
             TOOL_ANALIZAR_VIT,
             TOOL_DETECTAR_ANOMALIAS,
@@ -70,6 +74,7 @@ class SubagenteSatelital(BaseSubagente):
 
     def _cargar_ejecutores(self) -> dict:
         return {
+            "consultar_estado_manto": ejecutar_consultar_estado_manto,
             "procesar_ndsi": ejecutar_procesar_ndsi,
             "analizar_vit": ejecutar_analizar_vit,
             "detectar_anomalias_satelitales": ejecutar_detectar_anomalias_satelitales,
