@@ -15,6 +15,10 @@ from agentes.subagentes.subagente_meteorologico.fuentes.base import (
     FuenteMeteorologica,
     PronosticoMeteorologico,
 )
+from agentes.subagentes.subagente_meteorologico.fuentes.correccion_orografica import (
+    aplicar_correccion_orografica,
+    obtener_altitud_zona,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -66,7 +70,7 @@ class FuenteERA5Land(FuenteMeteorologica):
 
             # ERA5 variables disponibles via imagenes_satelitales
             era5_snow = satelital.get("era5_snow_depth_m")
-            lst_dia = satelital.get("lst_dia_celsius")
+            lst_dia   = satelital.get("lst_dia_celsius")
             lst_noche = satelital.get("lst_noche_celsius")
 
             # Temperatura estimada como promedio LST día/noche
@@ -76,6 +80,19 @@ class FuenteERA5Land(FuenteMeteorologica):
             elif lst_dia is not None:
                 temp_est = lst_dia
 
+            # Corrección orográfica ERA5: ajuste multiplicativo por altitud de la zona
+            # ERA5 @9km sobreestima precipitación en topografía compleja
+            altitud_m   = obtener_altitud_zona(zona)
+            precip_raw  = satelital.get("era5_snowfall_m")
+            # era5_snowfall_m está en metros de agua equivalente → convertir a mm
+            precip_mm   = round(float(precip_raw) * 1000, 2) if precip_raw is not None else None
+            precip_corr = aplicar_correccion_orografica(precip_mm, altitud_m)
+            if precip_mm is not None and precip_corr != precip_mm:
+                logger.info(
+                    f"[ERA5Land] Corrección orográfica zona='{zona}' "
+                    f"altitud={altitud_m}m: {precip_mm:.2f}mm → {precip_corr:.2f}mm"
+                )
+
             return PronosticoMeteorologico(
                 fuente=self.nombre,
                 zona=zona,
@@ -83,8 +100,9 @@ class FuenteERA5Land(FuenteMeteorologica):
                 lat=coords[0],
                 lon=coords[1],
                 temperatura_2m_c=temp_est,
+                precipitacion_mm=precip_corr,
                 fuente_disponible=True,
-                requires_local_correction=False,
+                requires_local_correction=False,  # corrección ya aplicada
             )
 
         except Exception as exc:
