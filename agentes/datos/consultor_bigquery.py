@@ -1155,6 +1155,101 @@ class ConsultorBigQuery:
             logger.warning(f"Error obteniendo zona geográfica {ubicacion}: {exc}")
             return {"disponible": False, "razon": str(exc)}
 
+    def obtener_historial_boletines(self, ubicacion: str, n_dias: int = 7) -> dict:
+        """
+        Retorna los últimos N días de boletines propios para calcular features de persistencia.
+
+        Usado por tool_historial_ubicacion (S5) para detectar calma sostenida vs calma puntual.
+
+        Args:
+            ubicacion: nombre de la ubicación
+            n_dias: ventana temporal en días (default: 7)
+
+        Returns:
+            dict con lista de boletines ordenados por fecha DESC y métricas derivadas
+        """
+        logger.info(f"[ConsultorBigQuery] historial boletines → {ubicacion} (últimos {n_dias} días)")
+        try:
+            fecha_ref = _fecha_referencia_global or datetime.now(timezone.utc)
+            sql = """
+                SELECT
+                    DATE(fecha_emision) AS fecha,
+                    nivel_eaws_24h,
+                    factor_meteorologico,
+                    confianza
+                FROM `climas-chileno.clima.boletines_riesgo`
+                WHERE nombre_ubicacion = @ubicacion
+                  AND fecha_emision >= TIMESTAMP_SUB(@fecha_ref, INTERVAL @n_dias DAY)
+                  AND fecha_emision < @fecha_ref
+                ORDER BY fecha_emision DESC
+                LIMIT 14
+            """
+            job_config = bigquery.QueryJobConfig(
+                query_parameters=[
+                    bigquery.ScalarQueryParameter("ubicacion", "STRING", ubicacion),
+                    bigquery.ScalarQueryParameter("fecha_ref", "TIMESTAMP", fecha_ref),
+                    bigquery.ScalarQueryParameter("n_dias", "INT64", n_dias),
+                ]
+            )
+            filas = list(self._ejecutar_query(sql, job_config))
+
+            if not filas:
+                return {
+                    "disponible": True,
+                    "boletines": [],
+                    "n_boletines": 0,
+                    "dias_consecutivos_nivel_bajo": 0,
+                    "nivel_promedio_7d": None,
+                    "tendencia_historica": 0,
+                    "sin_historial": True,
+                }
+
+            boletines = []
+            for f in filas:
+                boletines.append({
+                    "fecha": str(f["fecha"]),
+                    "nivel_eaws_24h": int(f["nivel_eaws_24h"]) if f["nivel_eaws_24h"] else None,
+                    "factor_meteorologico": f.get("factor_meteorologico", "ESTABLE"),
+                    "confianza": f.get("confianza", "Media"),
+                })
+
+            niveles = [b["nivel_eaws_24h"] for b in boletines if b["nivel_eaws_24h"] is not None]
+
+            # días consecutivos con nivel ≤ 2 (desde el más reciente hacia atrás)
+            dias_bajos = 0
+            for b in boletines:
+                if b["nivel_eaws_24h"] is not None and b["nivel_eaws_24h"] <= 2:
+                    dias_bajos += 1
+                else:
+                    break
+
+            nivel_promedio = round(sum(niveles) / len(niveles), 2) if niveles else None
+
+            # tendencia: nivel más reciente - nivel más antiguo de la ventana (negativo = bajando)
+            tendencia = int(niveles[0] - niveles[-1]) if len(niveles) >= 2 else 0
+
+            return {
+                "disponible": True,
+                "boletines": boletines,
+                "n_boletines": len(boletines),
+                "dias_consecutivos_nivel_bajo": dias_bajos,
+                "nivel_promedio_7d": nivel_promedio,
+                "tendencia_historica": tendencia,
+                "sin_historial": False,
+            }
+
+        except Exception as exc:
+            logger.warning(f"Error historial boletines {ubicacion}: {exc}")
+            return {
+                "disponible": False,
+                "boletines": [],
+                "n_boletines": 0,
+                "dias_consecutivos_nivel_bajo": 0,
+                "nivel_promedio_7d": None,
+                "tendencia_historica": 0,
+                "razon": str(exc),
+            }
+
     def buscar_relatos_condiciones(self, terminos: list, limite: int = 10) -> dict:
         """
         Busca relatos que mencionen términos específicos de condiciones de riesgo.

@@ -82,6 +82,10 @@ TOOL_CLASIFICAR_EAWS_INTEGRADO = {
             "tendencia_pronostico": {
                 "type": "string",
                 "description": "Tendencia meteorológica del pronóstico 3 días: empeorando, estable, mejorando"
+            },
+            "dias_consecutivos_nivel_bajo": {
+                "type": "integer",
+                "description": "Días consecutivos con nivel ≤ 2 (de obtener_historial_ubicacion). Si ≥ 4 y factor ESTABLE, confirma calma sostenida."
             }
         },
         "required": [
@@ -117,7 +121,8 @@ def ejecutar_clasificar_riesgo_eaws_integrado(
     desnivel_inicio_deposito_m: float = None,
     zona_inicio_ha: float = None,
     pendiente_max_grados: float = None,
-    tendencia_pronostico: str = None
+    tendencia_pronostico: str = None,
+    dias_consecutivos_nivel_bajo: int = 0,
 ) -> dict:
     """
     Clasifica el riesgo EAWS integrando los análisis de todos los subagentes.
@@ -141,7 +146,8 @@ def ejecutar_clasificar_riesgo_eaws_integrado(
     estabilidad_final = _determinar_estabilidad_dominante(
         estabilidad_topografica=estabilidad_topografica,
         estabilidad_satelital=estabilidad_satelital,
-        factor_meteorologico=factor_meteorologico
+        factor_meteorologico=factor_meteorologico,
+        dias_consecutivos_nivel_bajo=dias_consecutivos_nivel_bajo,
     )
 
     # ─── 2. Ajustar frecuencia ───────────────────────────────────────────────
@@ -217,7 +223,8 @@ def ejecutar_clasificar_riesgo_eaws_integrado(
 def _determinar_estabilidad_dominante(
     estabilidad_topografica: str,
     estabilidad_satelital: str,
-    factor_meteorologico: str
+    factor_meteorologico: str,
+    dias_consecutivos_nivel_bajo: int = 0,
 ) -> str:
     """
     Determina la estabilidad dominante combinando todas las fuentes.
@@ -225,6 +232,8 @@ def _determinar_estabilidad_dominante(
     Reglas:
     - Si el factor meteorológico implica una estabilidad peor → prioridad
     - Si las fuentes topo y satelital difieren → tomar la peor
+    - Si calma sostenida confirmada (días_nivel_bajo ≥ 4 y factor ESTABLE) → cap en 'fair'
+      para evitar el piso artificial en nivel 3 causado por topografía estática del PINN.
     """
     escala = ["good", "fair", "poor", "very_poor"]
 
@@ -240,6 +249,17 @@ def _determinar_estabilidad_dominante(
         idx_final = max(idx_base, idx_meteo)
     else:
         idx_final = idx_base
+
+    # Confirmación de calma sostenida: si ≥ 4 días consecutivos nivel ≤ 2 y sin
+    # factor meteorológico activo, el PINN topográfico puede estar sobreestimando.
+    # Cap en 'fair' (índice 1) para evitar piso artificial en nivel 3.
+    _factor_activo = factor_meteorologico and factor_meteorologico != "ESTABLE"
+    if dias_consecutivos_nivel_bajo >= 4 and not _factor_activo:
+        idx_final = min(idx_final, 1)  # cap en 'fair'
+        logger.info(
+            f"[ClasificarEAWS] Calma sostenida confirmada ({dias_consecutivos_nivel_bajo} días "
+            f"nivel≤2, ESTABLE) — estabilidad capada en 'fair'"
+        )
 
     return escala[idx_final]
 

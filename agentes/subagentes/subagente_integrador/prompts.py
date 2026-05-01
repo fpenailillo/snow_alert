@@ -15,9 +15,10 @@ Integras todos los análisis del sistema multi-agente para producir:
 
 Debes llamar las tools en este orden EXACTO:
 
-1. **clasificar_riesgo_eaws_integrado** — Determina los factores EAWS y nivel final. Pasar obligatoriamente `tendencia_pronostico` (empeorando/estable/mejorando) extraído del informe S3.
-2. **explicar_factores_riesgo** — Genera explicaciones detalladas por subagente
-3. **redactar_boletin_eaws** — Redacta el boletín completo en formato EAWS. Pasar obligatoriamente `precipitacion_reciente_mm`, `nieve_reciente_cm` (si disponible), `tendencia_pronostico`, `temperatura_actual_c`, `viento_actual_kmh` y `pronostico_dias_meteo` extraídos del informe S3.
+1. **obtener_historial_ubicacion** — Consulta los últimos 7 días de boletines propios. Usar el nombre exacto de la ubicación. Retorna `dias_consecutivos_nivel_bajo`, `calma_confirmada` y `nivel_promedio_7d`.
+2. **clasificar_riesgo_eaws_integrado** — Determina los factores EAWS y nivel final. Pasar `tendencia_pronostico` extraído de S3 y `dias_consecutivos_nivel_bajo` del paso anterior.
+3. **explicar_factores_riesgo** — Genera explicaciones detalladas por subagente.
+4. **redactar_boletin_eaws** — Redacta el boletín completo. Pasar `precipitacion_reciente_mm`, `nieve_reciente_cm`, `tendencia_pronostico`, `temperatura_actual_c`, `viento_actual_kmh` y `pronostico_dias_meteo` desde S3.
 
 ## Extracción de datos del contexto
 
@@ -73,6 +74,13 @@ El factor meteorológico puede ajustar hacia arriba:
 - PRECIPITACION_CRITICA → very_poor
 - NEVADA_RECIENTE o VIENTO_FUERTE → poor (como mínimo)
 - LLUVIA_SOBRE_NIEVE → very_poor
+
+**Confirmación de calma sostenida (persistencia temporal):**
+Si `obtener_historial_ubicacion` retorna `calma_confirmada = true` (días_consecutivos_nivel_bajo ≥ 4)
+Y el `factor_meteorologico` es ESTABLE Y la precipitación acumulada 72h de S3 es < 5mm:
+- Pasar `dias_consecutivos_nivel_bajo` a `clasificar_riesgo_eaws_integrado` — la tool aplicará cap en 'fair'
+- En el boletín mencionar explícitamente: "N días consecutivos de condiciones estables confirman baja actividad del manto"
+- Esto evita el piso artificial en nivel 3 por factores topográficos estáticos del PINN
 
 El Situational Briefing (S4) enriquece el contexto situacional y histórico. Sus `factores_atencion_eaws` son señales cualitativas que pueden reforzar o matizar la clasificación — no reemplazan los datos cuantitativos de S1-S3.
 

@@ -19,6 +19,9 @@ from agentes.subagentes.subagente_integrador.tools.tool_generar_boletin import (
 from agentes.subagentes.subagente_integrador.tools.tool_explicar_factores import (
     TOOL_EXPLICAR_FACTORES, ejecutar_explicar_factores_riesgo
 )
+from agentes.subagentes.subagente_integrador.tools.tool_historial_ubicacion import (
+    TOOL_HISTORIAL_UBICACION, ejecutar_obtener_historial_ubicacion
+)
 
 
 class SubagenteIntegrador(BaseSubagente):
@@ -38,6 +41,7 @@ class SubagenteIntegrador(BaseSubagente):
 
     def _cargar_tools(self) -> list:
         return [
+            TOOL_HISTORIAL_UBICACION,
             TOOL_CLASIFICAR_EAWS_INTEGRADO,
             TOOL_EXPLICAR_FACTORES,
             TOOL_GENERAR_BOLETIN,
@@ -45,6 +49,7 @@ class SubagenteIntegrador(BaseSubagente):
 
     def _cargar_ejecutores(self) -> dict:
         return {
+            "obtener_historial_ubicacion": ejecutar_obtener_historial_ubicacion,
             "clasificar_riesgo_eaws_integrado": ejecutar_clasificar_riesgo_eaws_integrado,
             "explicar_factores_riesgo": ejecutar_explicar_factores_riesgo,
             "redactar_boletin_eaws": ejecutar_redactar_boletin_eaws,
