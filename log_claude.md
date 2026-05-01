@@ -1,5 +1,29 @@
 # Log de Progreso — snow_alert
 
+## Sesión 2026-05-01 — REQ-04 Mapeo SLF + REQ-03 Corrección ERA5 + REQ-02a MODIS
+
+### REQ-04: Mapeo estación→sector SLF preciso ✅ — commit `173a89f`
+
+Problema: validación H1/H3 usaba nivel modal del cantón (~±1 nivel de ruido).
+
+Cambios:
+- `mapeo_estaciones_slf.py`: MAPEO_ESTACIONES_SLF con sector_ids exactos (Interlaken→4113, Zermatt→2223, St Moritz→6113), haversine_km(), obtener_sector_slf(), sectores_por_distancia()
+- `07_validacion_slf_suiza.py`: usa obtener_niveles_slf_preciso() por defecto; fallback automático al modal de cantón si el sector exacto no tiene datos; columna via_mapeo en tabla output; flag --mapeo-canton para reproducir comportamiento anterior
+- 18 tests nuevos — 306 total passed
+
+### REQ-03: Corrección orográfica ERA5 en S3 ✅ — commit `eb905e0`
+
+Problema: ERA5 @9km sobreestima precipitación en topografía compleja → sesgo H1/H3 -0.54.
+
+Cambios:
+- `correccion_orografica.py`: ERA5_CORRECCIÓN_OROGRAFICA dict (0-1500m: ×1.0, 1500-2500m: ×0.85, 2500-3500m: ×0.75, >3500m: ×0.65); ALTITUD_REFERENCIA_ZONAS_M para 10 zonas (Chile + Suiza)
+- `fuente_era5_land.py`: aplica corrección a era5_snowfall_m→precipitacion_mm al construir PronosticoMeteorologico; zona desconocida → factor=1.0 (seguro)
+- 18 tests nuevos — 324 total passed
+
+Nota: factores de corrección son iniciales (literatura Muñoz Sabater 2021). Calibrar sobre 24 pares suizos en Ronda 3 para ajustar por zona geográfica.
+
+---
+
 ## Sesión 2026-04-30 (continuación) — REQ-01 Persistencia temporal + REQ-02a MODIS LST
 
 ### REQ-01: Feature persistencia temporal en S5 ✅ — commit `a408753`
