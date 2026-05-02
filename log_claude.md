@@ -1,5 +1,77 @@
 # Log de Progreso — snow_alert
 
+## Sesión 2026-05-02 (tarde) — REQ-06+REQ-03+REQ-07+REQ-01 integración v5.0
+
+### REQ-06: Refactor S3 ciclo diurno — fix causa raíz H4 piso nivel 3 ✅ — commit `8c97d85`
+
+**Problema:** S3 emitía `FUSION_ACTIVA`/`CICLO_FUSION_CONGELACION` en >95% de días de verano andino porque el umbral `T_max>0 AND T_min<0` se cumple geográficamente en La Parva sin que haya riesgo real. S5 recibía esa señal y emitía nivel 3 incluso en calma total.
+
+**Cambios:**
+- `tool_ventanas_criticas.py`: agrega `precipitacion_72h_mm: float = 0` al schema y función. Reescribe `_clasificar_factor_meteorologico()`:
+  - `CICLO_DIURNO_NORMAL`: ciclo térmico SIN precipitación 72h < 10mm → neutro, sin ajuste EAWS
+  - `FUSION_ACTIVA_CON_CARGA`: ciclo térmico CON precipitación_72h ≥ 10mm → poor/very_poor
+- `prompts.py` S3: documenta nueva semántica; instrucción para pasar `precipitacion_72h_mm` desde `analizar_tendencia_72h.eventos_precipitacion.total_mm`
+- `prompts.py` S5 (integrador): tabla factor_meteorologico actualizada; `CICLO_DIURNO_NORMAL → SIN AJUSTE`
+- `registro_versiones.py`: hashes S3+S5 actualizados, `VERSION_GLOBAL = "5.0"`
+
+### REQ-03: Fix corrección orográfica regional Alpes ✅ — commit `8c97d85`
+
+**Problema:** Factores ERA5 calibrados para Andes (0.65-0.85 según altitud) aplicados a Alpes suizos empeoraban el sesgo H1/H3 (−0.50→−0.92 en Ronda 3). Régimen orográfico alpino es distinto.
+
+**Cambios:**
+- `correccion_orografica.py`:
+  - Agrega `_ZONAS_ALPES = frozenset({"Interlaken", "Matterhorn Zermatt", "St Moritz"})`
+  - `es_zona_alpes(zona)`: detecta automáticamente, guard para string vacío
+  - `factor_correccion_orografica(altitud_m, region="andes")`: retorna 1.0 para `region="alpes"`
+  - `aplicar_correccion_orografica(precip, altitud, zona="")`: detecta región desde nombre de zona
+- `fuente_era5_land.py`: pasa `zona=zona` al llamar `aplicar_correccion_orografica`
+- 9 tests nuevos (`es_zona_alpes`, `factor region alpes/andes`, `FuenteERA5Land Interlaken sin reducción`)
+- 27/27 tests REQ-03 pasando
+
+### REQ-07: Cloud Function extractor_historico Open-Meteo ✅ — commit `9e92638`
+
+**Problema:** `pronostico_horas` BQ solo cubre desde mar 2026; fechas Snowlab (jun 2024–sep 2025) usan aproximación con datos actuales → validación retroactiva no es limpia.
+
+**Implementación:**
+- `datos/extractor_historico/main.py`: Cloud Function HTTP, Open-Meteo Historical API (gratuita, datos desde 1940)
+  - Procesa en chunks de 30 días (evita timeout 540s)
+  - Idempotente: verifica horas existentes por ubicación+fuente antes de insertar
+  - Inserta en `clima.condiciones_actuales` con `fuente='openmeteo_historical'`
+  - 6 ubicaciones: La Parva ×3, Interlaken, Matterhorn Zermatt, St Moritz
+  - `dry_run=True` para validar sin insertar
+- `requirements.txt`, `desplegar.sh` incluidos
+- 19 tests nuevos (chunks, parseo, HTTP mock, idempotencia, handler)
+
+### REQ-01: Integrar CICLO_DIURNO_NORMAL en S5 ✅ — commit `9b6dd83`
+
+**Problema:** `tool_clasificar_eaws.py` tenía `_factor_activo = factor != "ESTABLE"` — `CICLO_DIURNO_NORMAL` era tratado como activo, bloqueando el cap de calma sostenida REQ-01.
+
+**Cambios:**
+- `_FACTORES_NEUTROS = frozenset({"ESTABLE", "CICLO_DIURNO_NORMAL"})` — ambos neutros para la lógica de calma
+- `FUSION_ACTIVA_CON_CARGA → poor` en `_AJUSTE_METEOROLOGICO`
+- `_proyectar_nivel`: `CICLO_DIURNO_NORMAL` proyecta como ESTABLE (reducción 72h)
+- 3 tests nuevos verificando el comportamiento REQ-06 en S5
+
+### Resumen v5.0
+
+| Componente | Estado |
+|------------|--------|
+| tool_ventanas_criticas.py | CICLO_DIURNO_NORMAL vs FUSION_ACTIVA_CON_CARGA |
+| correccion_orografica.py | Alpes factor=1.0 |
+| tool_clasificar_eaws.py | CICLO_DIURNO_NORMAL neutro + cap activable |
+| registro_versiones.py | VERSION_GLOBAL = "5.0", hashes actualizados |
+| extractor_historico/ | CF nueva para backfill Open-Meteo |
+
+**Tests:** 365 passed, 8 skipped
+
+**Próximos pasos:**
+1. Desplegar extractor_historico en GCP y ejecutar backfill 2024-06-15 → 2025-09-21
+2. Re-ejecutar `reprocesar_retroactivo.py` con código v5.0 y datos backfilled
+3. Re-ejecutar `08_validacion_snowlab.py` → Ronda 4; esperado: sesgo ≤ +0.80, MAE calma ≤ 1.20
+4. Activar `USE_WEATHERNEXT2=true` cuando llegue suscripción Analytics Hub (máx 2026-05-05)
+
+---
+
 ## Sesión 2026-05-02 — Validación Ronda 3 (v4.0) con replay retroactivo
 
 ### Metodología del reprocesamiento
