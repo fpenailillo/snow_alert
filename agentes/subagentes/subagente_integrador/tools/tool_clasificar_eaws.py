@@ -49,7 +49,7 @@ TOOL_CLASIFICAR_EAWS_INTEGRADO = {
             },
             "factor_meteorologico": {
                 "type": "string",
-                "description": "Factor meteorológico EAWS: PRECIPITACION_CRITICA, NEVADA_RECIENTE, VIENTO_FUERTE, FUSION_ACTIVA, ESTABLE o combinación"
+                "description": "Factor meteorológico EAWS: PRECIPITACION_CRITICA, NEVADA_RECIENTE, VIENTO_FUERTE, FUSION_ACTIVA_CON_CARGA, CICLO_DIURNO_NORMAL (neutro), ESTABLE o combinación"
             },
             "frecuencia_topografica": {
                 "type": "string",
@@ -99,15 +99,20 @@ TOOL_CLASIFICAR_EAWS_INTEGRADO = {
 # Mapa de factores meteorológicos a ajuste de estabilidad
 _AJUSTE_METEOROLOGICO = {
     "PRECIPITACION_CRITICA": "very_poor",
-    "LLUVIA_SOBRE_NIEVE": "very_poor",
-    "NEVADA_RECIENTE+FUSION_ACTIVA": "very_poor",
+    "LLUVIA_SOBRE_NIEVE":    "very_poor",
+    "NEVADA_RECIENTE+FUSION_ACTIVA_CON_CARGA": "very_poor",
     "NEVADA_RECIENTE+VIENTO_FUERTE": "poor",
-    "NEVADA_RECIENTE": "poor",
-    "VIENTO_FUERTE": "poor",
-    "FUSION_ACTIVA": "poor",
-    "CICLO_FUSION_CONGELACION": "poor",
-    "ESTABLE": None  # Sin ajuste
+    "NEVADA_RECIENTE":           "poor",
+    "VIENTO_FUERTE":             "poor",
+    "FUSION_ACTIVA_CON_CARGA":   "poor",   # REQ-06: ciclo térmico + carga reciente
+    "FUSION_ACTIVA":             "poor",   # compatibilidad retroactiva
+    "CICLO_FUSION_CONGELACION":  "poor",   # compatibilidad retroactiva
+    "CICLO_DIURNO_NORMAL":       None,     # REQ-06: fenómeno geográfico neutro, sin ajuste
+    "ESTABLE":                   None,     # Sin ajuste
 }
+
+# Factores que NO son activos para la lógica de calma sostenida (REQ-06)
+_FACTORES_NEUTROS = frozenset({"ESTABLE", "CICLO_DIURNO_NORMAL", ""})
 
 
 def ejecutar_clasificar_riesgo_eaws_integrado(
@@ -253,12 +258,16 @@ def _determinar_estabilidad_dominante(
     # Confirmación de calma sostenida: si ≥ 4 días consecutivos nivel ≤ 2 y sin
     # factor meteorológico activo, el PINN topográfico puede estar sobreestimando.
     # Cap en 'fair' (índice 1) para evitar piso artificial en nivel 3.
-    _factor_activo = factor_meteorologico and factor_meteorologico != "ESTABLE"
+    # REQ-06: CICLO_DIURNO_NORMAL es neutro (igual que ESTABLE) para la lógica de calma
+    _factor_activo = bool(
+        factor_meteorologico
+        and factor_meteorologico not in _FACTORES_NEUTROS
+    )
     if dias_consecutivos_nivel_bajo >= 4 and not _factor_activo:
         idx_final = min(idx_final, 1)  # cap en 'fair'
         logger.info(
             f"[ClasificarEAWS] Calma sostenida confirmada ({dias_consecutivos_nivel_bajo} días "
-            f"nivel≤2, ESTABLE) — estabilidad capada en 'fair'"
+            f"nivel≤2, factor={factor_meteorologico}) — estabilidad capada en 'fair'"
         )
 
     return escala[idx_final]
@@ -382,13 +391,13 @@ def _proyectar_nivel(
                 return max(1, nivel_24h - 1)
             return nivel_24h  # Sin mejora confirmada, mantener
 
-    # Factor estable → reducción progresiva
-    if factor_meteorologico == "ESTABLE":
+    # Factor estable o ciclo diurno normal → reducción progresiva (REQ-06)
+    if factor_meteorologico in ("ESTABLE", "CICLO_DIURNO_NORMAL") or factor_meteorologico not in _AJUSTE_METEOROLOGICO:
         if horas == 72:
             return max(1, nivel_24h - 1)
         return nivel_24h
 
-    # Fusión activa o ciclo fusión-congelación → persiste hasta que baje temperatura
+    # Fusión activa con carga, ciclo fusión-congelación (compatibilidad) → persiste
     if "FUSION_ACTIVA" in factor_meteorologico or "CICLO_FUSION_CONGELACION" in factor_meteorologico:
         if horas == 48:
             if empeorando:

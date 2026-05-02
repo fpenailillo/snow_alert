@@ -228,5 +228,57 @@ class TestClasificacionConPersistencia:
         nombres = [t["name"] for t in tools]
         assert "obtener_historial_ubicacion" in nombres
         assert "clasificar_riesgo_eaws_integrado" in nombres
-        # La nueva tool debe preceder a la clasificación
         assert nombres.index("obtener_historial_ubicacion") < nombres.index("clasificar_riesgo_eaws_integrado")
+
+    def test_ciclo_diurno_normal_activa_cap_calma(self):
+        """REQ-06: CICLO_DIURNO_NORMAL es neutro — activa cap de calma igual que ESTABLE."""
+        from agentes.subagentes.subagente_integrador.tools.tool_clasificar_eaws import (
+            ejecutar_clasificar_riesgo_eaws_integrado
+        )
+        resultado = ejecutar_clasificar_riesgo_eaws_integrado(
+            estabilidad_topografica="poor",
+            estabilidad_satelital="fair",
+            factor_meteorologico="CICLO_DIURNO_NORMAL",
+            frecuencia_topografica="a_few",
+            dias_consecutivos_nivel_bajo=5,
+        )
+        # Con calma confirmada y ciclo diurno normal, nivel debe capase en ≤ 2
+        assert resultado["nivel_eaws_24h"] <= 2
+
+    def test_fusion_activa_con_carga_no_activa_cap(self):
+        """REQ-06: FUSION_ACTIVA_CON_CARGA es factor activo — días calmos no cambian nivel."""
+        from agentes.subagentes.subagente_integrador.tools.tool_clasificar_eaws import (
+            ejecutar_clasificar_riesgo_eaws_integrado
+        )
+        kwargs = dict(
+            estabilidad_topografica="poor",
+            estabilidad_satelital="fair",
+            factor_meteorologico="FUSION_ACTIVA_CON_CARGA",
+            frecuencia_topografica="a_few",
+        )
+        sin_historia = ejecutar_clasificar_riesgo_eaws_integrado(**kwargs, dias_consecutivos_nivel_bajo=0)
+        con_historia = ejecutar_clasificar_riesgo_eaws_integrado(**kwargs, dias_consecutivos_nivel_bajo=6)
+        # Factor activo: historial calmo no debe cambiar el nivel
+        assert con_historia["nivel_eaws_24h"] == sin_historia["nivel_eaws_24h"]
+
+    def test_ciclo_diurno_normal_ajuste_meteo_es_none(self):
+        """REQ-06: CICLO_DIURNO_NORMAL no ajusta la estabilidad base."""
+        from agentes.subagentes.subagente_integrador.tools.tool_clasificar_eaws import (
+            ejecutar_clasificar_riesgo_eaws_integrado
+        )
+        res_diurno = ejecutar_clasificar_riesgo_eaws_integrado(
+            estabilidad_topografica="good",
+            estabilidad_satelital="good",
+            factor_meteorologico="CICLO_DIURNO_NORMAL",
+            frecuencia_topografica="nearly_none",
+            dias_consecutivos_nivel_bajo=0,
+        )
+        res_estable = ejecutar_clasificar_riesgo_eaws_integrado(
+            estabilidad_topografica="good",
+            estabilidad_satelital="good",
+            factor_meteorologico="ESTABLE",
+            frecuencia_topografica="nearly_none",
+            dias_consecutivos_nivel_bajo=0,
+        )
+        # Ambos factores neutros deben producir el mismo nivel
+        assert res_diurno["nivel_eaws_24h"] == res_estable["nivel_eaws_24h"]
