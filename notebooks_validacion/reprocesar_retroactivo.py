@@ -1,11 +1,16 @@
 """
-Reprocesamiento retroactivo v4 — AndesAI (REQ-01 a REQ-04 implementados)
+Reprocesamiento retroactivo v5 — AndesAI (REQ-06+REQ-03+REQ-07+REQ-01 implementados)
 
 Genera nuevas predicciones para las fechas de validación usando el código
-actualizado y las guarda en clima.boletines_riesgo (upsert, reemplaza v3.2).
+actualizado (v5.0) y las guarda en clima.boletines_riesgo (upsert).
+
+v5.0 cambios respecto a v4.0:
+  - REQ-06: CICLO_DIURNO_NORMAL neutro (ya no empuja nivel 3 en calma andina)
+  - REQ-03: corrección orográfica ERA5 no aplica en Alpes (factor=1.0)
+  - REQ-01: cap calma se activa también con CICLO_DIURNO_NORMAL
 
 Procesamiento CRONOLÓGICO para que REQ-01 (persistencia temporal) pueda
-leer la cadena de predicciones v4 anteriores al evaluar calma sostenida.
+leer la cadena de predicciones v5 anteriores al evaluar calma sostenida.
 
 Fechas procesadas:
   H1/H3 Suiza : 3 estaciones × 10 fechas = 30 runs
@@ -70,14 +75,14 @@ SECTORES_LAPARVA = [
 ]
 
 
-def ya_procesado_v4(cliente: bigquery.Client, ubicacion: str, fecha_str: str) -> bool:
-    """Retorna True si ya existe un boletín v4 para esta (ubicacion, fecha)."""
+def ya_procesado_v5(cliente: bigquery.Client, ubicacion: str, fecha_str: str) -> bool:
+    """Retorna True si ya existe un boletín v5 para esta (ubicacion, fecha)."""
     q = f"""
         SELECT COUNT(*) AS n
         FROM `{GCP_PROJECT}.clima.boletines_riesgo`
         WHERE nombre_ubicacion = @loc
           AND DATE(fecha_emision) = @fecha
-          AND STARTS_WITH(version_prompts, 'v4')
+          AND STARTS_WITH(version_prompts, 'v5')
     """
     job = cliente.query(
         q,
@@ -119,7 +124,7 @@ def ejecutar_replay(dry_run: bool, solo_suiza: bool, solo_snowlab: bool) -> None
     total = len(runs)
 
     print(f"\n{'='*65}")
-    print(f"REPROCESAMIENTO RETROACTIVO v4 — {total} ejecuciones")
+    print(f"REPROCESAMIENTO RETROACTIVO v5 — {total} ejecuciones")
     print(f"Estimado: ~{round(total * 100 / 60)} min ({round(total * 100 / 3600, 1)}h)")
     print(f"Dry-run: {dry_run}")
     print(f"{'='*65}\n")
@@ -132,9 +137,9 @@ def ejecutar_replay(dry_run: bool, solo_suiza: bool, solo_snowlab: bool) -> None
     for i, (ubicacion, fecha_str) in enumerate(runs, start=1):
         prefijo = f"[{i:3d}/{total}]"
 
-        # Saltar si ya procesado con v4
-        if ya_procesado_v4(cliente, ubicacion, fecha_str):
-            logger.info(f"{prefijo} SKIP (ya v4) — {ubicacion} {fecha_str}")
+        # Saltar si ya procesado con v5
+        if ya_procesado_v5(cliente, ubicacion, fecha_str):
+            logger.info(f"{prefijo} SKIP (ya v5) — {ubicacion} {fecha_str}")
             skip += 1
             continue
 
@@ -196,13 +201,16 @@ def ejecutar_replay(dry_run: bool, solo_suiza: bool, solo_snowlab: bool) -> None
         print(f"\nWARNING: {err} ejecuciones fallaron — revisar logs")
 
     if not dry_run and ok > 0:
-        print("\nPróximo paso: re-ejecutar scripts de validación:")
+        print("\nPróximo paso — Ronda 4 validación v5.0:")
         print("  python notebooks_validacion/07_validacion_slf_suiza.py")
         print("  python notebooks_validacion/08_validacion_snowlab.py")
+        print("\nObjetivo v5.0:")
+        print("  H1/H3 sesgo: −0.92 → −0.50 (REQ-03 regional Alpes)")
+        print("  H4 sesgo: +2.02 → ≤ +0.80 (REQ-06 ciclo diurno)")
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Reprocesamiento retroactivo v4")
+    parser = argparse.ArgumentParser(description="Reprocesamiento retroactivo v5")
     parser.add_argument("--dry-run", action="store_true",
                         help="Lista runs sin ejecutar")
     parser.add_argument("--solo-suiza", action="store_true",
