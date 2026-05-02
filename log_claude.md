@@ -2,37 +2,69 @@
 
 ## Sesión 2026-05-02 — Validación Ronda 3 (v4.0) con replay retroactivo
 
-### Reprocesamiento retroactivo v4.0 ✅
+### Metodología del reprocesamiento
 
-120 boletines regenerados con código v4.0 para fechas de validación históricas:
+Para comparar v3.2 vs v4.0 con el mismo ground truth, se regeneraron 120 boletines históricos usando `fecha_referencia` del orquestador — las queries BQ filtran por esa fecha, las APIs externas (ERA5/Open-Meteo) devuelven datos actuales como aproximación. Procesamiento cronológico para que REQ-01 pueda leer la cadena de predicciones v4 anteriores.
+
 - 30 Swiss (3 estaciones × 10 fechas 2023-12 a 2024-04)
 - 90 Snowlab (3 sectores La Parva × 30 fechas 2024-06 a 2025-09)
+- Duración total: ~8h (1 proceso colgado en BQ streaming buffer, relanzado, completado en 19 min la segunda vez)
+- 0 errores, 120/120 OK
+- Scripts: `notebooks_validacion/reprocesar_retroactivo.py`, `agentes/prompts/registro_versiones.py v4.0`
 
-Scripts: `reprocesar_retroactivo.py`, `registro_versiones.py v4.0`
+### H1/H3 — Swiss SLF (n=24 pares, 3 estaciones, 10 fechas invierno 2023-24)
 
-### H1/H3 Ronda 3 — Suiza SLF (sector preciso, n=24)
+| Métrica | Ronda 1 (sin sat.) | Ronda 2 v3.2 | Ronda 3 v4.0 | Techel 2022 | Objetivo |
+|---------|--------------------|--------------|--------------|-------------|----------|
+| QWK | −0.056 | +0.109 | **+0.162** | 0.590 | ≥ 0.59 |
+| F1-macro | 0.197 | 0.191 | 0.155 | 0.550 | ≥ 0.75 |
+| Accuracy exacta | — | 0.250 | 0.250 | 0.640 | — |
+| Accuracy ±1 | 0.708 | 0.750 | **0.792** | 0.950 | — |
+| Sesgo | −0.79 | −0.54 | −0.92 | — | — |
 
-| Métrica | v3.2 baseline | v4.0 Ronda 3 | Δ |
-|---------|--------------|--------------|---|
-| QWK | 0.016 | **0.162** | **+0.146** ↑ |
-| Accuracy ±1 | 0.750 | **0.792** | +0.042 ↑ |
-| Accuracy exacta | 0.208 | 0.250 | +0.042 ↑ |
-| F1-macro | 0.161 | 0.155 | −0.006 ≈ |
-| Sesgo | −0.50 | −0.92 | −0.42 ↓ |
+**Resultado: H1 y H3 NO alcanzadas.** QWK +0.146 entre Ronda 2 y Ronda 3 — mejora real atribuible a REQ-02a/b (señales MODIS LST + SAR enriquecen el análisis satelital).
 
-Mejora real: QWK +0.146. Sesgo más negativo porque REQ-03 (corrección ERA5) reduce precipitación — diseñada para Chile, contraproducente en Alpes. Documentar como limitación geográfica en tesis.
+**Regresión de sesgo (−0.54 → −0.92):** REQ-03 reduce precipitación ERA5 con factores calibrados para Andes (1500-3500m en Chile). En los Alpes la orografía y régimen pluviométrico son diferentes → la reducción sobrepenaliza la señal → el modelo predice aún más conservador en Europa. Limitación geográfica documentada.
 
-### H4 Ronda 3 — SnowLab La Parva (n=87)
+**Causa raíz persistente:** gap de dominio Andes→Alpes. AndesAI predice 62.5% nivel 1 en Alpes; SLF registra solo 12.5% nivel 1. El sistema fue calibrado en topografía andina (PINN, ViT, parámetros EAWS).
 
-| Métrica | v3.2 baseline | v4.0 Ronda 3 | Δ |
-|---------|--------------|--------------|---|
-| Sesgo | +1.989 | +2.023 | +0.034 ≈ sin cambio |
-| QWK | −0.016 | −0.006 | +0.010 ≈ sin cambio |
-| MAE | 2.103 | 2.138 | +0.035 ≈ sin cambio |
+### H4 — SnowLab La Parva (n=87 pares, 3 sectores, 30 boletines 2024+2025)
 
-H4 no mejora. Causa raíz identificada: REQ-01 (persistencia temporal) no puede activarse porque S1/S2/S3 upstream siguen generando nivel 3+ en condiciones calmas → la cadena de calma nunca se forma. El fix correcto requiere intervenir en S1 (PINN sobreestima riesgo topográfico en calma) o en S3 (señal meteo interpreta heladas nocturnas como riesgo cuando no lo es). REQ-01 es correcto en diseño pero está bloqueado por los subagentes upstream.
+| Métrica | Ronda 2 v3.2 | Ronda 3 v4.0 | Δ | Objetivo |
+|---------|--------------|--------------|---|----------|
+| QWK | −0.016 | −0.006 | +0.010 ≈ | ≥ 0.60 |
+| MAE | 2.103 | 2.138 | +0.035 ≈ | — |
+| Sesgo | +1.989 | +2.023 | +0.034 ≈ | ≤ +0.50 |
+| F1-macro | 0.104 | 0.030 | −0.074 ↓ | — |
 
-Archivos: `notebooks_validacion/baseline_v32_ronda2.json`
+**Resultado: H4 NO alcanzada, sin mejora significativa entre rondas.**
+
+**Diagnóstico causa raíz del piso nivel 3 (confirmado en Ronda 3):**
+
+REQ-01 (persistencia temporal) está correctamente implementado pero bloqueado por los subagentes upstream:
+- S1 (PINN): reporta estabilidad EAWS `"fair"` incluso en calma — el PINN calcula riesgo topográfico basado en geometría (pendientes 35-45°, 700+ ha de zona de inicio) que es inherente al terreno, no al estado del manto
+- S3 (Meteorológico): clasifica el ciclo de fusión diurna/congelación nocturna como `FUSION_ACTIVA`, que empuja el nivel a 3 aunque no haya precipitación
+- S5 recibe esas señales y llega a nivel 3 antes de que REQ-01 pueda aplicar el cap
+- La cadena `calma_confirmada=True` (≥4 boletines ≤2) nunca se forma porque el propio modelo genera nivel 3
+
+Distribución comparativa v3.2 vs v4.0 (Snowlab nivel 1, 60 casos):
+- v3.2: 33×3, 20×4, 6×5 (piso 3)
+- v4.0: 32×3, 24×4, 3×5 (piso 3 idéntico)
+
+**Fix correcto para H4 (pendiente):**
+1. S1 prompt: distinguir entre "riesgo topográfico potencial" (geometría) y "riesgo activo" (requiere evento meteo + estado manto) → no contribuir nivel base si no hay precipitación reciente
+2. S3: ponderar `FUSION_ACTIVA` como factor menor cuando no hay precipitación y temperatura máxima < 5°C
+3. Verificar con 1-2 boletines manuales que REQ-01 se activa después del fix upstream
+
+### Archivos de referencia de la validación
+
+| Archivo | Contenido |
+|---------|-----------|
+| `notebooks_validacion/baseline_v32_ronda2.json` | Métricas completas v3.2 (H1/H3/H4) |
+| `notebooks_validacion/reprocesar_retroactivo.py` | Script de replay (120 runs) |
+| `notebooks_validacion/07_validacion_slf_suiza.py` | Validación H1/H3 (mapeo preciso por defecto) |
+| `notebooks_validacion/08_validacion_snowlab.py` | Validación H4 |
+| `agentes/prompts/registro_versiones.py` | Versionado de prompts (v4.0) |
 
 ---
 
