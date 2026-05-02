@@ -1,0 +1,6 @@
+# Dependencias para Cloud Function Extractor Histórico
+# Python 3.11
+
+functions-framework==3.*
+google-cloud-bigquery==3.*
+requests==2.32.*
