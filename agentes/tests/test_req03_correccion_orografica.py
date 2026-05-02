@@ -94,12 +94,33 @@ class TestAplicarCorreccionOrografica:
         )
         assert aplicar_correccion_orografica(15.0, 0) == pytest.approx(15.0)
 
-    def test_factor_alpino_zermatt(self):
-        """Zermatt 2600m → factor 0.75."""
+    def test_andes_2600m_factor_0_75(self):
+        """Zona andina 2600m sin nombre → factor 0.75 (región andes por defecto)."""
         from agentes.subagentes.subagente_meteorologico.fuentes.correccion_orografica import (
             aplicar_correccion_orografica,
         )
         assert aplicar_correccion_orografica(20.0, 2600) == pytest.approx(15.0, abs=0.01)
+
+    def test_alpes_zermatt_sin_correccion(self):
+        """REQ-03: Matterhorn Zermatt (Alpes) → factor 1.0, sin reducción andina."""
+        from agentes.subagentes.subagente_meteorologico.fuentes.correccion_orografica import (
+            aplicar_correccion_orografica,
+        )
+        assert aplicar_correccion_orografica(20.0, 2600, zona="Matterhorn Zermatt") == pytest.approx(20.0, abs=0.01)
+
+    def test_alpes_interlaken_sin_correccion(self):
+        """REQ-03: Interlaken (Alpes) → factor 1.0."""
+        from agentes.subagentes.subagente_meteorologico.fuentes.correccion_orografica import (
+            aplicar_correccion_orografica,
+        )
+        assert aplicar_correccion_orografica(15.0, 1200, zona="Interlaken") == pytest.approx(15.0, abs=0.01)
+
+    def test_alpes_st_moritz_sin_correccion(self):
+        """REQ-03: St Moritz (Alpes) → factor 1.0."""
+        from agentes.subagentes.subagente_meteorologico.fuentes.correccion_orografica import (
+            aplicar_correccion_orografica,
+        )
+        assert aplicar_correccion_orografica(10.0, 1900, zona="St Moritz") == pytest.approx(10.0, abs=0.01)
 
 
 # ── Tests obtener_altitud_zona ────────────────────────────────────────────────
@@ -128,6 +149,47 @@ class TestObtenerAltitudZona:
             obtener_altitud_zona,
         )
         assert obtener_altitud_zona("Estacion Desconocida XYZ") == 0
+
+
+# ── Tests es_zona_alpes ───────────────────────────────────────────────────────
+
+class TestEsZonaAlpes:
+
+    def test_zonas_alpes_detectadas(self):
+        """REQ-03: las tres zonas suizas deben reconocerse como Alpes."""
+        from agentes.subagentes.subagente_meteorologico.fuentes.correccion_orografica import es_zona_alpes
+        assert es_zona_alpes("Interlaken")         is True
+        assert es_zona_alpes("Matterhorn Zermatt") is True
+        assert es_zona_alpes("St Moritz")          is True
+
+    def test_zonas_andes_no_son_alpes(self):
+        from agentes.subagentes.subagente_meteorologico.fuentes.correccion_orografica import es_zona_alpes
+        assert es_zona_alpes("La Parva")              is False
+        assert es_zona_alpes("Valle Nevado")           is False
+        assert es_zona_alpes("La Parva Sector Alto")   is False
+
+    def test_zona_desconocida_no_es_alpes(self):
+        from agentes.subagentes.subagente_meteorologico.fuentes.correccion_orografica import es_zona_alpes
+        assert es_zona_alpes("Estacion Desconocida XYZ") is False
+
+
+class TestFactorCorreccionOrograficaRegion:
+
+    def test_region_alpes_retorna_uno(self):
+        """REQ-03: factor siempre 1.0 para región alpes, independiente de altitud."""
+        from agentes.subagentes.subagente_meteorologico.fuentes.correccion_orografica import (
+            factor_correccion_orografica,
+        )
+        assert factor_correccion_orografica(2600, region="alpes") == pytest.approx(1.0)
+        assert factor_correccion_orografica(1200, region="alpes") == pytest.approx(1.0)
+        assert factor_correccion_orografica(4000, region="alpes") == pytest.approx(1.0)
+
+    def test_region_andes_aplica_tabla(self):
+        from agentes.subagentes.subagente_meteorologico.fuentes.correccion_orografica import (
+            factor_correccion_orografica,
+        )
+        assert factor_correccion_orografica(3000, region="andes") == pytest.approx(0.75)
+        assert factor_correccion_orografica(1800, region="andes") == pytest.approx(0.85)
 
 
 # ── Tests FuenteERA5Land aplica corrección ────────────────────────────────────
@@ -187,6 +249,25 @@ class TestFuenteERA5LandConCorreccion:
         pronostico = fuente.obtener_pronostico("Estacion Sin Datos", 0.0, 0.0)
 
         assert pronostico.precipitacion_mm == pytest.approx(5.0, abs=0.1)
+
+    @patch("agentes.subagentes.subagente_meteorologico.fuentes.fuente_era5_land.ConsultorBigQuery")
+    def test_alpes_interlaken_sin_reduccion(self, MockConsultor):
+        """REQ-03: Interlaken (Alpes, 1200m) → factor=1.0 → precip ERA5 sin reducción."""
+        MockConsultor.return_value.obtener_estado_satelital.return_value = {
+            "disponible": True,
+            "lst_dia_celsius": 4.0,
+            "lst_noche_celsius": -1.0,
+            "era5_snow_depth_m": 0.3,
+            "era5_snowfall_m": 0.015,  # 15mm de agua equivalente
+        }
+        from agentes.subagentes.subagente_meteorologico.fuentes.fuente_era5_land import FuenteERA5Land
+        fuente     = FuenteERA5Land()
+        pronostico = fuente.obtener_pronostico("Interlaken", 46.686, 7.863)
+
+        assert pronostico.fuente_disponible is True
+        assert pronostico.precipitacion_mm is not None
+        # 15mm * factor(Alpes=1.0) = 15mm — sin reducción andina
+        assert pronostico.precipitacion_mm == pytest.approx(15.0, abs=0.1)
 
     @patch("agentes.subagentes.subagente_meteorologico.fuentes.fuente_era5_land.ConsultorBigQuery")
     def test_bq_error_no_rompe_pipeline(self, MockConsultor):

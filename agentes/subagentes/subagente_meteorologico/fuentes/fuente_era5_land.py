@@ -86,7 +86,7 @@ class FuenteERA5Land(FuenteMeteorologica):
             precip_raw  = satelital.get("era5_snowfall_m")
             # era5_snowfall_m está en metros de agua equivalente → convertir a mm
             precip_mm   = round(float(precip_raw) * 1000, 2) if precip_raw is not None else None
-            precip_corr = aplicar_correccion_orografica(precip_mm, altitud_m)
+            precip_corr = aplicar_correccion_orografica(precip_mm, altitud_m, zona=zona)
             if precip_mm is not None and precip_corr != precip_mm:
                 logger.info(
                     f"[ERA5Land] Corrección orográfica zona='{zona}' "

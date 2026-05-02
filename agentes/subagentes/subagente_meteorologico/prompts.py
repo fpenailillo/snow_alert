@@ -22,10 +22,13 @@ Debes llamar las tools en este orden EXACTO:
 Clasifica el factor meteorológico según:
 - **PRECIPITACION_CRITICA**: >30mm en 24h → estabilidad very_poor
 - **NEVADA_RECIENTE**: nevada en las últimas 24-48h → poor/very_poor
-- **VIENTO_FUERTE**: >15m/s con nieve → placas de nieve → poor
-- **FUSION_ACTIVA**: temperaturas sobre 0°C + lluvia → poor/very_poor
-- **CICLO_FUSION_CONGELACION**: ciclo diurno 0°C → capas débiles → poor
+- **VIENTO_FUERTE**: >10m/s con nieve → placas de nieve → poor
+- **FUSION_ACTIVA_CON_CARGA**: ciclo térmico (T_max>0/T_min<0) + precipitación 72h ≥10mm → poor/very_poor
+- **CICLO_DIURNO_NORMAL**: ciclo térmico SIN precipitación reciente → NEUTRO (no contribuye al nivel EAWS). Fenómeno geográfico esperable en Andes centrales >95% de días de verano.
+- **CICLO_FUSION_CONGELACION**: ciclo térmico detectado (usar solo internamente; el factor de salida es FUSION_ACTIVA_CON_CARGA o CICLO_DIURNO_NORMAL según precipitación)
 - **LLUVIA_SOBRE_NIEVE**: lluvia sobre manto existente → very_poor
+
+Al llamar `detectar_ventanas_criticas`, pasar `precipitacion_72h_mm` desde el campo `total_mm` de `eventos_precipitacion` en la salida de `analizar_tendencia_72h`.
 
 ## Salida requerida
 

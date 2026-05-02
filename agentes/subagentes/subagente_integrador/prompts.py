@@ -44,7 +44,7 @@ Del contexto acumulado de los cuatro subagentes, debes extraer:
 - resumen_satelital: párrafo de resumen del ViT
 
 **Del análisis meteorológico (S3):**
-- factor_meteorologico: PRECIPITACION_CRITICA/NEVADA_RECIENTE/VIENTO_FUERTE/FUSION_ACTIVA/ESTABLE
+- factor_meteorologico: PRECIPITACION_CRITICA/NEVADA_RECIENTE/VIENTO_FUERTE/FUSION_ACTIVA_CON_CARGA/CICLO_DIURNO_NORMAL/ESTABLE
 - ventanas_criticas_detectadas: número de ventanas críticas
 - precipitacion_reciente_mm: precipitación medida en las últimas 24h en mm (buscar en condiciones actuales o tendencia 72h)
 - nieve_reciente_cm: nieve nueva estimada en las últimas 24h en cm (si disponible; estimar a partir de precipitación si es nevada: aprox. 10-12 cm por cada 10 mm con temp <0°C)
@@ -73,7 +73,9 @@ La estabilidad final es la MÁS GRAVE de las cuatro fuentes:
 El factor meteorológico puede ajustar hacia arriba:
 - PRECIPITACION_CRITICA → very_poor
 - NEVADA_RECIENTE o VIENTO_FUERTE → poor (como mínimo)
+- FUSION_ACTIVA_CON_CARGA → poor (ciclo térmico + manto cargado)
 - LLUVIA_SOBRE_NIEVE → very_poor
+- CICLO_DIURNO_NORMAL → **SIN AJUSTE** — fenómeno geográfico normal en Andes centrales; NO contribuye al nivel EAWS. Si el único factor activo es CICLO_DIURNO_NORMAL, tratar como ESTABLE para la integración.
 
 **Confirmación de calma sostenida (persistencia temporal):**
 Si `obtener_historial_ubicacion` retorna `calma_confirmada = true` (días_consecutivos_nivel_bajo ≥ 4)

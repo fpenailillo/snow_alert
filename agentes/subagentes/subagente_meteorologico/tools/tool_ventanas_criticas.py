@@ -50,6 +50,10 @@ TOOL_VENTANAS_CRITICAS = {
             "ciclo_fusion_congelacion": {
                 "type": "boolean",
                 "description": "¿Hay ciclo activo de fusión-congelación?"
+            },
+            "precipitacion_72h_mm": {
+                "type": "number",
+                "description": "Precipitación acumulada en las últimas 72h en mm (desde analizar_tendencia_72h)"
             }
         },
         "required": [
@@ -69,7 +73,8 @@ def ejecutar_detectar_ventanas_criticas(
     dias_alto_riesgo: int = 0,
     dia_mayor_riesgo_fecha: str = None,
     dia_mayor_riesgo_nivel: str = None,
-    ciclo_fusion_congelacion: bool = False
+    ciclo_fusion_congelacion: bool = False,
+    precipitacion_72h_mm: float = 0,
 ) -> dict:
     """
     Detecta ventanas críticas de riesgo meteorológico.
@@ -190,6 +195,7 @@ def ejecutar_detectar_ventanas_criticas(
         ventanas=ventanas,
         alertas_tendencia=alertas_tendencia,
         precipitacion=precipitacion_actual_mm,
+        precipitacion_72h=precipitacion_72h_mm,
         viento=velocidad_viento_actual_ms,
         temperatura=temperatura_actual_C
     )
@@ -250,6 +256,7 @@ def _clasificar_factor_meteorologico(
     ventanas: list,
     alertas_tendencia: list,
     precipitacion: float,
+    precipitacion_72h: float,
     viento: float,
     temperatura: float
 ) -> str:
@@ -258,16 +265,18 @@ def _clasificar_factor_meteorologico(
 
     Returns:
         "PRECIPITACION_CRITICA", "NEVADA_RECIENTE", "VIENTO_FUERTE",
-        "FUSION_ACTIVA", "CICLO_FUSION_CONGELACION", "LLUVIA_SOBRE_NIEVE",
-        "ESTABLE" o combinaciones.
+        "FUSION_ACTIVA_CON_CARGA", "CICLO_FUSION_CONGELACION",
+        "CICLO_DIURNO_NORMAL", "LLUVIA_SOBRE_NIEVE", "ESTABLE" o combinaciones.
 
-    Umbrales revisados (Müller et al. 2025 / EAWS operational guidelines):
-    - VIENTO_FUERTE: >10 m/s (36 km/h) — placas forman desde ~25-36 km/h;
-      el umbral anterior (15 m/s = 54 km/h) era demasiado conservador y
-      perdía eventos de wind slab frecuentes en La Parva.
-    - CICLO_FUSION_CONGELACION: se propaga desde las ventanas detectadas;
-      el ciclo es relevante EAWS independientemente de que la temperatura
-      media sea > o < 2°C (puede haber ciclo con T_min < 0 y T_max > 0).
+    REQ-06: distingue CICLO_DIURNO_NORMAL (fenómeno geográfico esperable en
+    Andes centrales, >95% de días de verano) de FUSION_ACTIVA_CON_CARGA
+    (ciclo térmico + manto cargado = riesgo real). El ciclo diurno sin
+    precipitación reciente NO contribuye al nivel EAWS.
+
+    Umbrales (Müller et al. 2025 / EAWS operational guidelines):
+    - VIENTO_FUERTE: >10 m/s (36 km/h) — placas forman desde ~25-36 km/h.
+    - FUSION_ACTIVA_CON_CARGA: ciclo térmico + precipitación_72h ≥ 10mm.
+    - CICLO_DIURNO_NORMAL: ciclo térmico SIN carga reciente (precipitación < 10mm).
     """
     factores = []
     tipos_ventanas = [v.get("tipo", "") for v in ventanas]
@@ -277,17 +286,21 @@ def _clasificar_factor_meteorologico(
     elif precipitacion > 10:
         factores.append("NEVADA_RECIENTE")
 
-    # Umbral bajado de 15 a 10 m/s: formación de wind slab comienza ~7-10 m/s
     if viento > 10:
         factores.append("VIENTO_FUERTE")
 
-    # CICLO_FUSION_CONGELACION: leer directamente desde ventanas detectadas
-    # (la función ejecutar_detectar_ventanas_criticas ya lo evalúa correctamente)
-    if "CICLO_FUSION_CONGELACION" in tipos_ventanas:
-        factores.append("CICLO_FUSION_CONGELACION")
-    elif temperatura is not None and temperatura > 2:
-        # FUSION_ACTIVA como señal débil cuando no hay ciclo explícito detectado
-        factores.append("FUSION_ACTIVA")
+    # REQ-06: diferenciar ciclo diurno normal de fusión con manto cargado.
+    # Un ciclo térmico (T_max > 0 / T_min < 0) ocurre casi todos los días
+    # en climas continentales de alta montaña (Andes centrales, 33°S).
+    # Solo es señal de inestabilidad cuando el manto lleva carga reciente.
+    hay_ciclo = "CICLO_FUSION_CONGELACION" in tipos_ventanas
+    hay_carga = precipitacion_72h >= 10 or precipitacion > 3
+
+    if hay_ciclo or (temperatura is not None and temperatura > 2):
+        if hay_carga:
+            factores.append("FUSION_ACTIVA_CON_CARGA")
+        else:
+            factores.append("CICLO_DIURNO_NORMAL")
 
     if "LLUVIA_SOBRE_NIEVE" in tipos_ventanas:
         factores.append("LLUVIA_SOBRE_NIEVE")

@@ -60,9 +60,9 @@ REGISTRO_PROMPTS = {
     "meteorologico": {
         "modulo": "agentes.subagentes.subagente_meteorologico.prompts",
         "variable": "SYSTEM_PROMPT_METEOROLOGICO",
-        "version": "3.1.0",
-        "descripcion": "Tendencia 72h, ventanas críticas, factores EAWS + sección DATOS METEOROLÓGICOS por día",
-        "hash_sha256": "026001a5750a5f82",
+        "version": "5.0.0",
+        "descripcion": "REQ-06: CICLO_DIURNO_NORMAL neutro vs FUSION_ACTIVA_CON_CARGA; precipitacion_72h_mm chain",
+        "hash_sha256": "819b6fddb6adf48a",
     },
     "nlp": {
         "modulo": "agentes.subagentes.subagente_nlp.prompts",
@@ -74,14 +74,14 @@ REGISTRO_PROMPTS = {
     "integrador": {
         "modulo": "agentes.subagentes.subagente_integrador.prompts",
         "variable": "SYSTEM_PROMPT_INTEGRADOR",
-        "version": "4.0.0",
-        "descripcion": "Integración S1-S4 + persistencia temporal calma sostenida (REQ-01)",
-        "hash_sha256": "2d68b95e6d62ae25",
+        "version": "5.0.0",
+        "descripcion": "REQ-06: CICLO_DIURNO_NORMAL sin ajuste EAWS; FUSION_ACTIVA_CON_CARGA → poor",
+        "hash_sha256": "5f65608c80fc378c",
     },
 }
 
 # Versión global del conjunto de prompts (se incrementa cuando cambia cualquiera)
-VERSION_GLOBAL = "4.0"
+VERSION_GLOBAL = "5.0"
 
 
 def _calcular_hash(contenido: str) -> str:
