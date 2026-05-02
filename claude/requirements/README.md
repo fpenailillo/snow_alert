@@ -17,15 +17,21 @@
 
 ---
 
-## Orden de ejecución sugerido
+## Estado de implementación
 
-Ordenado por **dependencias técnicas** y **riesgo bajo → alto**:
+Todos los requerimientos están implementados en `v4.0` (commit `fe79532`):
 
-1. **`01-s4-situational-briefing.md`** — Reemplazo S4 (independiente, valor inmediato)
-2. **`02-s3-weathernext-aditivo.md`** — WeatherNext 2 como fuente paralela en S3
-3. **`03-s1-alphaearth-pinn.md`** — Reemplazo S1 con AlphaEarth + GLO-30 + TAGEE
-4. **`04-s2-rsfm-paralelo.md`** — RSFM/Gemini en S2 corriendo en paralelo al ViT actual
-5. **`05-cross-cutting-bigquery-st.md`** — Optimizaciones transversales (BigQuery `ST_REGIONSTATS`)
+| # | Archivo | Requerimiento | Estado | Commit |
+|---|---------|---------------|--------|--------|
+| 1 | `01-s4-situational-briefing.md` | S4 Situational Briefing (Qwen3-80B/Databricks) | ✅ | `9e4ae33` |
+| 2 | `02-s3-weathernext-aditivo.md` | WeatherNext 2 aditivo en S3 (flag `USE_WEATHERNEXT2`) | ✅ código | `fe79532` |
+| 3 | `03-s1-alphaearth-pinn.md` | S1 AlphaEarth + GLO-30 + TAGEE | ✅ | `fcc079a` |
+| 4 | `04-s2-rsfm-paralelo.md` | S2 vía Earth AI paralela al ViT (flag `S2_VIA`) | ✅ | `fcc079a` |
+| 5 | `05-cross-cutting-bigquery-st.md` | BigQuery `ST_REGIONSTATS` + `zonas_objetivo` | ✅ | `218faa1` |
+
+El archivo `Mejoras04_v1.md` documenta los REQ-01 a REQ-04 adicionales (persistencia temporal, MODIS LST, SAR humedad, corrección orográfica ERA5, mapeo SLF preciso) todos implementados en la misma versión v4.0.
+
+> WeatherNext 2 (REQ-02 de `02-s3-weathernext-aditivo.md`) tiene el código listo pero `USE_WEATHERNEXT2=false` por defecto hasta que se confirme la suscripción Analytics Hub.
 
 ---
 

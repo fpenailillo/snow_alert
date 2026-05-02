@@ -86,14 +86,19 @@ python agentes/datos/backfill/backfill_clima_historico.py
 ```bash
 # Suite completa (sin credenciales externas)
 python -m pytest agentes/tests/ -q
-# → 256 passed, 8 skipped
+# → 334 passed, 8 skipped
 
-# Por subagente
-python -m pytest agentes/tests/test_situational_briefing.py -v   # S4 — 20 tests
-python -m pytest agentes/tests/test_weathernext2.py -v           # S3 WeatherNext 2 — 17 tests
-python -m pytest agentes/tests/test_s1_glo30.py -v               # S1 GLO-30/TAGEE/AlphaEarth — 23 tests
-python -m pytest agentes/tests/test_s2_earth_ai.py -v            # S2 Gemini multispectral — 15 tests
-python -m pytest agentes/tests/test_req05_st_regionstats.py -v   # ST_REGIONSTATS — 19 tests
+# Por subagente / requerimiento
+python -m pytest agentes/tests/test_situational_briefing.py -v          # S4 — 20 tests
+python -m pytest agentes/tests/test_weathernext2.py -v                  # S3 WeatherNext 2 — 17 tests
+python -m pytest agentes/tests/test_s1_glo30.py -v                      # S1 GLO-30/TAGEE/AlphaEarth — 23 tests
+python -m pytest agentes/tests/test_s2_earth_ai.py -v                   # S2 Gemini multispectral — 15 tests
+python -m pytest agentes/tests/test_req01_persistencia_temporal.py -v   # REQ-01 calma sostenida — 12 tests
+python -m pytest agentes/tests/test_req02a_estado_manto_gee.py -v       # REQ-02a MODIS LST — 10 tests
+python -m pytest agentes/tests/test_req02b_sar_humedad.py -v            # REQ-02b SAR humedad — 10 tests
+python -m pytest agentes/tests/test_req03_correccion_orografica.py -v   # REQ-03 ERA5 orográfico — 15 tests
+python -m pytest agentes/tests/test_req04_mapeo_slf.py -v               # REQ-04 mapeo SLF — 10 tests
+python -m pytest agentes/tests/test_req05_st_regionstats.py -v          # ST_REGIONSTATS — 19 tests
 
 # Test E2E (requiere ANTHROPIC_API_KEY o Databricks token)
 python -m pytest agentes/tests/test_sistema_completo.py -v -s
@@ -108,8 +113,10 @@ agentes/
 │   ├── constantes_zonas.py            # COORDENADAS_ZONAS, BBOX_ZONAS, POLIGONOS_ZONAS — fuente única
 │   ├── cliente_llm.py                 # ClienteAnthropic + ClienteDatabricks (fallback)
 │   └── backfill/
-│       ├── backfill_clima_historico.py  # ERA5 histórico para condiciones_actuales
-│       └── backfill_satelital.py        # SAR+MODIS+ERA5+S2 multi-región (idempotente)
+│       ├── backfill_clima_historico.py    # ERA5 histórico para condiciones_actuales
+│       ├── backfill_satelital.py          # SAR+MODIS+ERA5+S2 multi-región (idempotente)
+│       ├── backfill_estado_manto_gee.py   # MODIS LST + SAR para tabla estado_manto_gee
+│       └── actualizar_glo30_tagee_ae.py   # Actualización GLO-30 + TAGEE + AlphaEarth
 │
 ├── subagentes/
 │   ├── base_subagente.py              # Clase base: agentic loop, retries, logging
@@ -117,12 +124,12 @@ agentes/
 │   ├── subagente_topografico/         # S1: Análisis físico del terreno
 │   │   ├── agente.py
 │   │   └── tools/
-│   │       ├── tool_analizar_dem.py         # DEM GLO-30, pendiente, aspecto, morfología
-│   │       ├── tool_calcular_pinn.py        # Factor de seguridad + UQ Taylor + GLO-30 ajustes
-│   │       ├── tool_evaluar_estabilidad.py  # Score EAWS (very_poor → good)
-│   │       ├── tool_clasificar_riesgo.py    # Clasificación final nivel 1-5
-│   │       ├── tool_tagee_terreno.py        # Curvatura H/V, northness/eastness, convergencia
-│   │       └── tool_alphaearth.py           # Embeddings 64D AlphaEarth, drift interanual
+│   │       ├── tool_analizar_dem.py       # DEM GLO-30, pendiente, aspecto, morfología
+│   │       ├── tool_calcular_pinn.py      # Factor de seguridad Mohr-Coulomb + UQ Taylor
+│   │       ├── tool_estabilidad_manto.py  # Score EAWS de estabilidad del manto
+│   │       ├── tool_zonas_riesgo.py       # Clasificación de zonas de riesgo nivel 1-5
+│   │       ├── tool_tagee_terreno.py      # Curvatura H/V, northness/eastness, convergencia
+│   │       └── tool_alphaearth.py         # Embeddings 64D AlphaEarth, drift interanual
 │   │
 │   ├── subagente_satelital/           # S2: Análisis satelital multi-fuente
 │   │   ├── agente.py
@@ -130,55 +137,69 @@ agentes/
 │   │   ├── comparador/
 │   │   │   └── ab_runner.py           # ComparadorS2: A/B ViT vs Gemini → s2_comparaciones
 │   │   └── tools/
-│   │       ├── tool_analizar_sar.py         # Sentinel-1: humedad manto, wet/dry snow
-│   │       ├── tool_analizar_ndsi.py        # Sentinel-2/MODIS: NDSI, snowline, cobertura
-│   │       ├── tool_detectar_anomalias.py   # ViT: anomalia_score, patron_detectado
-│   │       └── tool_gemini_multispectral.py # Gemini 2.5 multispectral (flag S2_VIA)
+│   │       ├── tool_analizar_vit.py          # Vision Transformer: anomalia_score, patron
+│   │       ├── tool_procesar_ndsi.py         # Sentinel-2/MODIS: NDSI, cobertura nieve
+│   │       ├── tool_snowline.py              # Línea de nieve, cambios 24h/72h
+│   │       ├── tool_detectar_anomalias.py    # Detección de anomalías térmicas/nivales
+│   │       ├── tool_estado_manto.py          # MODIS LST + SAR humedad (REQ-02a/02b)
+│   │       └── tool_gemini_multispectral.py  # Gemini 2.5 multispectral (flag S2_VIA)
 │   │
 │   ├── subagente_meteorologico/       # S3: Meteorología multi-fuente
 │   │   ├── agente.py
 │   │   ├── fuentes/
-│   │   │   ├── base.py                # Interfaz FuenteMeteorologica + PronosticoMeteorologico
-│   │   │   ├── fuente_open_meteo.py   # Fuente primaria (siempre activa)
-│   │   │   ├── fuente_era5_land.py    # Reanálisis (siempre activa)
-│   │   │   ├── fuente_weathernext2.py # 64 miembros ensemble (flag USE_WEATHERNEXT2)
-│   │   │   └── consolidador.py        # ConsolidadorMeteorologico: fusión + detección divergencias
+│   │   │   ├── base.py                    # Interfaz FuenteMeteorologica + PronosticoMeteorologico
+│   │   │   ├── fuente_open_meteo.py       # Fuente primaria (siempre activa)
+│   │   │   ├── fuente_era5_land.py        # Reanálisis ERA5-Land (siempre activa)
+│   │   │   ├── fuente_weathernext2.py     # 64 miembros ensemble (flag USE_WEATHERNEXT2)
+│   │   │   ├── correccion_orografica.py   # Corrección ERA5 por altitud (calibrada para Andes)
+│   │   │   └── consolidador.py            # Fusión multi-fuente + detección divergencias >3°C/50%
 │   │   └── tools/
 │   │       ├── tool_condiciones_actuales.py
-│   │       ├── tool_pronostico.py
+│   │       ├── tool_pronostico_dias.py
+│   │       ├── tool_tendencia_72h.py
 │   │       ├── tool_ventanas_criticas.py
 │   │       └── tool_pronostico_ensemble.py  # Expone ConsolidadorMeteorologico al agente
 │   │
-│   ├── subagente_situational_briefing/ # S4: Situational briefing contextual
-│   │   ├── agente.py                  # AgenteSituationalBriefing (Qwen3-80B/Databricks)
-│   │   ├── schemas.py                 # SituationalBriefing, CondicionesRecientes, ContextoHistorico, CaracteristicasZona
+│   ├── subagente_situational_briefing/ # S4: Briefing situacional contextual
+│   │   ├── agente.py                   # AgenteSituationalBriefing (Qwen3-80B/Databricks)
+│   │   ├── schemas.py                  # SituationalBriefing, CondicionesRecientes, ContextoHistorico
 │   │   ├── prompts/
 │   │   │   └── system_prompt.md
 │   │   └── tools/
-│   │       ├── tool_clima_reciente.py       # Condiciones 72h desde BQ
-│   │       ├── tool_contexto_historico.py   # Época estacional + desviación vs promedio
-│   │       ├── tool_caracteristicas_zona.py # Topografía + constantes EAWS por zona
-│   │       └── tool_eventos_pasados.py      # Histórico de avalanchas documentadas
+│   │       ├── tool_clima_reciente.py        # Condiciones 72h desde condiciones_actuales
+│   │       ├── tool_contexto_historico.py    # Época estacional + desviación vs promedio ERA5
+│   │       ├── tool_caracteristicas_zona.py  # Constantes topográficas EAWS por zona
+│   │       └── tool_eventos_pasados.py       # Histórico de avalanchas documentadas
 │   │
-│   └── subagente_integrador/          # S5: Integración EAWS + redacción boletín
+│   └── subagente_integrador/          # S5: Matriz EAWS 2025 + boletín final
 │       ├── agente.py
 │       └── tools/
-│           ├── tool_clasificar_riesgo_eaws.py
-│           └── tool_generar_boletin.py
+│           ├── tool_clasificar_eaws.py       # Aplica Matriz EAWS 2025 (Müller, Techel & Mitterer)
+│           ├── tool_explicar_factores.py     # Justifica los 3 factores EAWS (estabilidad, frecuencia, tamaño)
+│           ├── tool_generar_boletin.py       # Redacta boletín EAWS 24h/48h/72h
+│           └── tool_historial_ubicacion.py   # Consulta boletines anteriores (REQ-01 persistencia)
 │
 ├── orquestador/
-│   └── agente_principal.py            # Coordina S1→S2→S3→S4→S5; manejo de degradación
+│   └── agente_principal.py            # Coordina S1→S2→S3→S4→S5; manejo de degradación graceful
+│
+├── prompts/
+│   └── registro_versiones.py          # Hashes SHA-256 de prompts + VERSION_GLOBAL (actualmente v4.0)
 │
 ├── salidas/
 │   ├── almacenador.py                 # DELETE+INSERT idempotente en BQ; upload GCS
 │   └── schema_boletines.json          # Schema 34 campos (particionado por fecha_emision)
 │
 ├── validacion/
-│   └── metricas_eaws.py               # F1-macro, Cohen's Kappa, QWK, Techel 2022
+│   ├── metricas_eaws.py               # F1-macro, Cohen's Kappa, QWK, Techel 2022
+│   └── mapeo_estaciones_slf.py        # Mapeo estación AndesAI → sector_id SLF (REQ-04)
+│
+├── diagnostico/
+│   └── revisar_datos.py               # Health check tablas BQ y disponibilidad de datos
 │
 ├── scripts/
 │   ├── generar_boletin.py             # CLI por ubicación individual
-│   └── generar_todos.py               # Genera boletines para preset de ubicaciones
+│   ├── generar_todos.py               # Genera boletines para preset de ubicaciones
+│   └── generar_boletines_invierno.py  # Genera serie histórica de invierno completa
 │
 ├── despliegue/
 │   ├── Dockerfile
@@ -188,12 +209,21 @@ agentes/
 │
 └── tests/
     ├── test_subagentes.py
-    ├── test_situational_briefing.py   # 20 tests — S4
-    ├── test_weathernext2.py           # 17 tests — S3 WeatherNext 2
-    ├── test_s1_glo30.py               # 23 tests — S1 GLO-30/TAGEE/AlphaEarth
-    ├── test_s2_earth_ai.py            # 15 tests — S2 Gemini multispectral
-    ├── test_req05_st_regionstats.py   # 19 tests — ST_REGIONSTATS
-    └── test_sistema_completo.py       # E2E (requiere credenciales)
+    ├── test_tools.py
+    ├── test_boletin_completo.py
+    ├── test_conexion.py
+    ├── test_fase0_datos.py
+    ├── test_situational_briefing.py          # 20 tests — S4
+    ├── test_weathernext2.py                  # 17 tests — S3 WeatherNext 2
+    ├── test_s1_glo30.py                      # 23 tests — S1 GLO-30/TAGEE/AlphaEarth
+    ├── test_s2_earth_ai.py                   # 15 tests — S2 Gemini multispectral
+    ├── test_req01_persistencia_temporal.py   # 12 tests — REQ-01 calma sostenida
+    ├── test_req02a_estado_manto_gee.py        # 10 tests — REQ-02a MODIS LST
+    ├── test_req02b_sar_humedad.py             # 10 tests — REQ-02b SAR humedad
+    ├── test_req03_correccion_orografica.py    # 15 tests — REQ-03 ERA5 orográfico
+    ├── test_req04_mapeo_slf.py                # 10 tests — REQ-04 mapeo SLF
+    ├── test_req05_st_regionstats.py           # 19 tests — ST_REGIONSTATS
+    └── test_sistema_completo.py               # E2E (requiere credenciales GCP)
 ```
 
 ## Subagentes — descripción técnica

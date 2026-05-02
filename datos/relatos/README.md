@@ -12,7 +12,9 @@ Ver instrucciones en `databricks/02_carga_relatos_bigquery.py` para el proceso d
 
 ## Uso
 
-El **SubagenteNLP** (S4 del sistema multi-agente) usa estos relatos para:
-- Búsqueda de experiencias históricas por ubicación
-- Extracción de patrones de riesgo en lenguaje natural
-- Validación contextual del análisis técnico
+El **AgenteSituationalBriefing** (S4 del sistema multi-agente) usa estos relatos a través del tool `tool_eventos_pasados` para:
+- Búsqueda de eventos históricos de avalancha por ubicación
+- Contextualización estacional del riesgo
+- Enriquecimiento del briefing situacional previo a la clasificación EAWS
+
+> El SubagenteNLP original fue reemplazado por AgenteSituationalBriefing (Qwen3-80B vía Databricks) en la versión v4.0.
