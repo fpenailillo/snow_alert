@@ -1,0 +1,48 @@
+{
+  "version": "v3.2",
+  "fecha": "2026-05-01",
+  "descripcion": "Línea base pre-REQs (REQ-01 a REQ-04 no implementados)",
+  "H1_H3_canton_modal": {
+    "n_pares": 24,
+    "f1_macro": 0.1913,
+    "accuracy_exacta": 0.25,
+    "accuracy_adj": 0.75,
+    "qwk": 0.1087,
+    "sesgo_medio": -0.54,
+    "mapeo": "canton_modal_legado"
+  },
+  "H1_H3_sector_preciso_REQ04": {
+    "n_pares": 24,
+    "f1_macro": 0.1607,
+    "accuracy_exacta": 0.2083,
+    "accuracy_adj": 0.75,
+    "qwk": 0.0156,
+    "sesgo_medio": -0.5,
+    "mapeo": "sector_preciso_REQ04",
+    "via_preciso": 16,
+    "via_fallback_canton": 8
+  },
+  "H4_snowlab": {
+    "n_pares": 87,
+    "mae": 2.103,
+    "sesgo": 1.989,
+    "qwk": -0.016,
+    "f1_macro": 0.104,
+    "distribucion_snowlab": {
+      "1": 60,
+      "2": 15,
+      "3": 8,
+      "4": 3,
+      "5": 1
+    },
+    "distribucion_andesai": {
+      "1": 1,
+      "2": 2,
+      "3": 44,
+      "4": 33,
+      "5": 7
+    },
+    "diagnostico": "piso_nivel_3_en_calma_sostenida"
+  },
+  "nota_metodologica": "REQ-01 (persistencia) diseñado para reducir piso H4. REQ-02a/b (MODIS/SAR) agregan señales positivas estabilidad. REQ-03 (ERA5 orogr.) reduce sobreestimacion precip. REQ-04 (SLF sector) ground truth más preciso → mayor varianza → QWK menor. Comparar estos valores con resultados Ronda 3 (v4.0) tras replay."
+}

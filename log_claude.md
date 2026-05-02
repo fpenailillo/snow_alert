@@ -1,5 +1,41 @@
 # Log de Progreso — snow_alert
 
+## Sesión 2026-05-02 — Validación Ronda 3 (v4.0) con replay retroactivo
+
+### Reprocesamiento retroactivo v4.0 ✅
+
+120 boletines regenerados con código v4.0 para fechas de validación históricas:
+- 30 Swiss (3 estaciones × 10 fechas 2023-12 a 2024-04)
+- 90 Snowlab (3 sectores La Parva × 30 fechas 2024-06 a 2025-09)
+
+Scripts: `reprocesar_retroactivo.py`, `registro_versiones.py v4.0`
+
+### H1/H3 Ronda 3 — Suiza SLF (sector preciso, n=24)
+
+| Métrica | v3.2 baseline | v4.0 Ronda 3 | Δ |
+|---------|--------------|--------------|---|
+| QWK | 0.016 | **0.162** | **+0.146** ↑ |
+| Accuracy ±1 | 0.750 | **0.792** | +0.042 ↑ |
+| Accuracy exacta | 0.208 | 0.250 | +0.042 ↑ |
+| F1-macro | 0.161 | 0.155 | −0.006 ≈ |
+| Sesgo | −0.50 | −0.92 | −0.42 ↓ |
+
+Mejora real: QWK +0.146. Sesgo más negativo porque REQ-03 (corrección ERA5) reduce precipitación — diseñada para Chile, contraproducente en Alpes. Documentar como limitación geográfica en tesis.
+
+### H4 Ronda 3 — SnowLab La Parva (n=87)
+
+| Métrica | v3.2 baseline | v4.0 Ronda 3 | Δ |
+|---------|--------------|--------------|---|
+| Sesgo | +1.989 | +2.023 | +0.034 ≈ sin cambio |
+| QWK | −0.016 | −0.006 | +0.010 ≈ sin cambio |
+| MAE | 2.103 | 2.138 | +0.035 ≈ sin cambio |
+
+H4 no mejora. Causa raíz identificada: REQ-01 (persistencia temporal) no puede activarse porque S1/S2/S3 upstream siguen generando nivel 3+ en condiciones calmas → la cadena de calma nunca se forma. El fix correcto requiere intervenir en S1 (PINN sobreestima riesgo topográfico en calma) o en S3 (señal meteo interpreta heladas nocturnas como riesgo cuando no lo es). REQ-01 es correcto en diseño pero está bloqueado por los subagentes upstream.
+
+Archivos: `notebooks_validacion/baseline_v32_ronda2.json`
+
+---
+
 ## Sesión 2026-05-01 — REQ-02b SAR humedad + REQ-04 SLF + REQ-03 ERA5 + REQ-02a MODIS
 
 ### REQ-02b: SAR Sentinel-1 índice humedad superficial en S2 ✅ — commit `c5a886e`

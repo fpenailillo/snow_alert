@@ -1,0 +1,258 @@
+{
+  "fecha_analisis": "2026-05-01T17:13:08.315789+00:00",
+  "modo_mapeo": "canton_modal",
+  "n_pares": 24,
+  "h1": {
+    "f1_macro": 0.1913,
+    "accuracy": 0.25,
+    "objetivo": 0.75,
+    "alcanzada": false
+  },
+  "h3": {
+    "qwk": 0.1087,
+    "objetivo_techel": 0.59,
+    "alcanzada": false
+  },
+  "detalles": [
+    {
+      "estacion": "Interlaken",
+      "canton": "Bern",
+      "sector_ref": 4113,
+      "via_mapeo": "canton_modal",
+      "fecha": "2023-12-01",
+      "nuestro": 1,
+      "slf": 4,
+      "diferencia": -3
+    },
+    {
+      "estacion": "Interlaken",
+      "canton": "Bern",
+      "sector_ref": 4113,
+      "via_mapeo": "canton_modal",
+      "fecha": "2023-12-15",
+      "nuestro": 2,
+      "slf": 3,
+      "diferencia": -1
+    },
+    {
+      "estacion": "Interlaken",
+      "canton": "Bern",
+      "sector_ref": 4113,
+      "via_mapeo": "canton_modal",
+      "fecha": "2024-01-01",
+      "nuestro": 2,
+      "slf": 2,
+      "diferencia": 0
+    },
+    {
+      "estacion": "Interlaken",
+      "canton": "Bern",
+      "sector_ref": 4113,
+      "via_mapeo": "canton_modal",
+      "fecha": "2024-01-15",
+      "nuestro": 3,
+      "slf": 3,
+      "diferencia": 0
+    },
+    {
+      "estacion": "Interlaken",
+      "canton": "Bern",
+      "sector_ref": 4113,
+      "via_mapeo": "canton_modal",
+      "fecha": "2024-02-01",
+      "nuestro": 2,
+      "slf": 2,
+      "diferencia": 0
+    },
+    {
+      "estacion": "Interlaken",
+      "canton": "Bern",
+      "sector_ref": 4113,
+      "via_mapeo": "canton_modal",
+      "fecha": "2024-02-15",
+      "nuestro": 1,
+      "slf": 2,
+      "diferencia": -1
+    },
+    {
+      "estacion": "Interlaken",
+      "canton": "Bern",
+      "sector_ref": 4113,
+      "via_mapeo": "canton_modal",
+      "fecha": "2024-03-01",
+      "nuestro": 1,
+      "slf": 3,
+      "diferencia": -2
+    },
+    {
+      "estacion": "Interlaken",
+      "canton": "Bern",
+      "sector_ref": 4113,
+      "via_mapeo": "canton_modal",
+      "fecha": "2024-03-15",
+      "nuestro": 2,
+      "slf": 2,
+      "diferencia": 0
+    },
+    {
+      "estacion": "Interlaken",
+      "canton": "Bern",
+      "sector_ref": 4113,
+      "via_mapeo": "canton_modal",
+      "fecha": "2024-04-01",
+      "nuestro": 3,
+      "slf": 4,
+      "diferencia": -1
+    },
+    {
+      "estacion": "Interlaken",
+      "canton": "Bern",
+      "sector_ref": 4113,
+      "via_mapeo": "canton_modal",
+      "fecha": "2024-04-15",
+      "nuestro": 1,
+      "slf": 1,
+      "diferencia": 0
+    },
+    {
+      "estacion": "Matterhorn Zermatt",
+      "canton": "Valais",
+      "sector_ref": 2223,
+      "via_mapeo": "canton_modal",
+      "fecha": "2023-12-01",
+      "nuestro": 1,
+      "slf": 3,
+      "diferencia": -2
+    },
+    {
+      "estacion": "Matterhorn Zermatt",
+      "canton": "Valais",
+      "sector_ref": 2223,
+      "via_mapeo": "canton_modal",
+      "fecha": "2024-01-01",
+      "nuestro": 1,
+      "slf": 2,
+      "diferencia": -1
+    },
+    {
+      "estacion": "Matterhorn Zermatt",
+      "canton": "Valais",
+      "sector_ref": 2223,
+      "via_mapeo": "canton_modal",
+      "fecha": "2024-02-01",
+      "nuestro": 4,
+      "slf": 2,
+      "diferencia": 2
+    },
+    {
+      "estacion": "Matterhorn Zermatt",
+      "canton": "Valais",
+      "sector_ref": 2223,
+      "via_mapeo": "canton_modal",
+      "fecha": "2024-02-15",
+      "nuestro": 2,
+      "slf": 2,
+      "diferencia": 0
+    },
+    {
+      "estacion": "Matterhorn Zermatt",
+      "canton": "Valais",
+      "sector_ref": 2223,
+      "via_mapeo": "canton_modal",
+      "fecha": "2024-03-01",
+      "nuestro": 1,
+      "slf": 2,
+      "diferencia": -1
+    },
+    {
+      "estacion": "Matterhorn Zermatt",
+      "canton": "Valais",
+      "sector_ref": 2223,
+      "via_mapeo": "canton_modal",
+      "fecha": "2024-03-15",
+      "nuestro": 1,
+      "slf": 2,
+      "diferencia": -1
+    },
+    {
+      "estacion": "Matterhorn Zermatt",
+      "canton": "Valais",
+      "sector_ref": 2223,
+      "via_mapeo": "canton_modal",
+      "fecha": "2024-04-01",
+      "nuestro": 3,
+      "slf": 4,
+      "diferencia": -1
+    },
+    {
+      "estacion": "St Moritz",
+      "canton": "Graub\u00fcnden",
+      "sector_ref": 6113,
+      "via_mapeo": "canton_modal",
+      "fecha": "2024-01-01",
+      "nuestro": 1,
+      "slf": 2,
+      "diferencia": -1
+    },
+    {
+      "estacion": "St Moritz",
+      "canton": "Graub\u00fcnden",
+      "sector_ref": 6113,
+      "via_mapeo": "canton_modal",
+      "fecha": "2024-01-15",
+      "nuestro": 1,
+      "slf": 2,
+      "diferencia": -1
+    },
+    {
+      "estacion": "St Moritz",
+      "canton": "Graub\u00fcnden",
+      "sector_ref": 6113,
+      "via_mapeo": "canton_modal",
+      "fecha": "2024-02-01",
+      "nuestro": 2,
+      "slf": 1,
+      "diferencia": 1
+    },
+    {
+      "estacion": "St Moritz",
+      "canton": "Graub\u00fcnden",
+      "sector_ref": 6113,
+      "via_mapeo": "canton_modal",
+      "fecha": "2024-02-15",
+      "nuestro": 3,
+      "slf": 2,
+      "diferencia": 1
+    },
+    {
+      "estacion": "St Moritz",
+      "canton": "Graub\u00fcnden",
+      "sector_ref": 6113,
+      "via_mapeo": "canton_modal",
+      "fecha": "2024-03-15",
+      "nuestro": 1,
+      "slf": 2,
+      "diferencia": -1
+    },
+    {
+      "estacion": "St Moritz",
+      "canton": "Graub\u00fcnden",
+      "sector_ref": 6113,
+      "via_mapeo": "canton_modal",
+      "fecha": "2024-04-01",
+      "nuestro": 2,
+      "slf": 4,
+      "diferencia": -2
+    },
+    {
+      "estacion": "St Moritz",
+      "canton": "Graub\u00fcnden",
+      "sector_ref": 6113,
+      "via_mapeo": "canton_modal",
+      "fecha": "2024-04-15",
+      "nuestro": 3,
+      "slf": 1,
+      "diferencia": 2
+    }
+  ]
+}
